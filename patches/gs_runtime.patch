@@ -1,0 +1,16 @@
+--- a/gs_runtime.py
++++ b/gs_runtime.py
+@@ -10,6 +10,13 @@
+ import sys
+ import time
+ import uuid
++
++# The generation child may be launched from a working directory outside the
++# Workshop mod folder. Ensure sibling modules are importable by absolute file
++# location rather than depending on cwd.
++_module_dir = os.path.dirname(os.path.abspath(__file__))
++if _module_dir not in sys.path:
++    sys.path.insert(0, _module_dir)
+ 
+ import gs_backend
+ import gs_core

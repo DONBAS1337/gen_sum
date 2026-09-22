@@ -1,0 +1,327 @@
+--- a/gs_backend.py
++++ b/gs_backend.py
+@@ -10,6 +10,7 @@
+ import base64
+ import binascii
+ import calendar
++import glob
+ import hashlib
+ import hmac
+ import io
+@@ -49,6 +50,7 @@
+ DEFAULT_MODEL = "gpt-6-astra"
+ DEFAULT_EFFORT = "low"
+ NETWORK_TIMEOUT = 60
++STREAM_TIMEOUT = 300
+ LOGIN_TIMEOUT = 300
+ GENERATION_TIMEOUT = 600
+ MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+@@ -157,14 +159,111 @@
+     return context
+ 
+ 
++
++def _curl_response_open(url, body, headers):
++    """Use Windows curl.exe for the long Codex SSE response.
++
++    Python's urllib/http.client path proved unreliable for long-lived SSE on
++    this backend even under modern Python, while the system curl transport
++    completes the same requests reliably.  curl is used only for /responses
++    and only inside the external Python 3 worker.
++    """
++    if os.name != "nt" or sys.version_info[0] < 3:
++        raise ClientError("curl transport доступен только во внешнем Python 3 на Windows.")
++
++    system_root = os.environ.get("SystemRoot", r"C:\Windows")
++    curl = os.path.join(system_root, "System32", "curl.exe")
++    if not os.path.isfile(curl):
++        curl = "curl.exe"
++
++    request_headers = dict(headers or {})
++    request_headers.update({
++        "User-Agent": "generative_summer/0.1 (codex-compatible)",
++        "originator": "generative_summer",
++    })
++
++    # Append the HTTP status after the SSE body so _authorized can keep its
++    # existing 401-refresh / HTTP error behaviour.
++    marker = b"\n__GS_HTTP_CODE__:"
++    args = [
++        curl,
++        "--http1.1",
++        "--no-buffer",
++        "--silent",
++        "--show-error",
++        "--connect-timeout", "30",
++        "--max-time", str(int(GENERATION_TIMEOUT + 30)),
++        "--request", "POST" if body is not None else "GET",
++        url,
++    ]
++    for key, value in request_headers.items():
++        args.extend(["--header", "%s: %s" % (key, value)])
++    if body is not None:
++        args.extend(["--data-binary", "@-"])
++    args.extend(["--write-out", "\n__GS_HTTP_CODE__:%{http_code}"])
++
++    options = {"creationflags": 0x08000000} if os.name == "nt" else {}
++    process = subprocess.Popen(
++        args,
++        stdin=subprocess.PIPE if body is not None else None,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.PIPE,
++        close_fds=os.name != "nt",
++        **options
++    )
++    output, errors = process.communicate(body if body is not None else None)
++
++    # Keep an upper bound even though curl has already buffered the response.
++    if len(output) > MAX_RESPONSE_BYTES + 1024:
++        raise ClientError("Сервис вернул слишком большой ответ.")
++
++    payload, sep, status_raw = output.rpartition(marker)
++    if not sep:
++        detail = errors.decode("utf-8", "replace").strip()
++        raise ClientError(
++            "curl завершился без HTTP-статуса." + ((" " + detail[-1200:]) if detail else "")
++        )
++
++    try:
++        status = int(status_raw.strip())
++    except (TypeError, ValueError):
++        raise ClientError("curl вернул некорректный HTTP-статус.")
++
++    if process.returncode != 0:
++        detail = errors.decode("utf-8", "replace").strip()
++        if process.returncode == 28:
++            raise ClientError("Истекло время ожидания ответа ChatGPT через curl.")
++        raise ClientError(
++            "curl прервал соединение с ChatGPT (код %s).%s" %
++            (process.returncode, (" " + detail[-1200:]) if detail else "")
++        )
++
++    if status >= 400:
++        raise HTTPError(url, status, "Codex request failed", {}, io.BytesIO(payload))
++
++    return io.BytesIO(payload)
++
+ def _http_open(url, body=None, headers=None):
+     if not url.startswith((ISSUER + "/", BACKEND + "/")):
+         raise ClientError("Недопустимый адрес сервиса.")
++
++    # Only the external modern-Python text worker uses curl.  OAuth, model
++    # listing and image requests keep the original urllib implementation.
++    if (url.startswith(BACKEND + "/responses")
++            and sys.version_info[0] >= 3
++            and os.name == "nt"):
++        return _curl_response_open(url, body, headers)
++
+     headers = dict(headers or {})
+     headers.update({"User-Agent": "generative_summer/0.1 (codex-compatible)",
+                     "originator": "generative_summer"})
+     opener = build_opener(_NoRedirect(), HTTPSHandler(context=_ssl_context()))
+-    timeout = GENERATION_TIMEOUT if url.startswith(BACKEND + "/images/") else NETWORK_TIMEOUT
++    if url.startswith(BACKEND + "/images/"):
++        timeout = GENERATION_TIMEOUT
++    elif url.startswith(BACKEND + "/responses"):
++        timeout = STREAM_TIMEOUT
++    else:
++        timeout = NETWORK_TIMEOUT
+     return opener.open(Request(url, data=body, headers=headers), timeout=timeout)
+ 
+ 
+@@ -332,6 +431,178 @@
+     raise ClientError("Соединение прервалось до завершения сцены. Повторите запрос.")
+ 
+ 
++def _external_python3():
++    """Find an optional modern Python for long-lived SSE requests."""
++    candidates = []
++    configured = os.environ.get("GS_PYTHON3")
++    if configured:
++        candidates.append(configured)
++
++    if os.name == "nt":
++        local = os.environ.get("LOCALAPPDATA", "")
++        if local:
++            candidates.extend(sorted(glob.glob(os.path.join(
++                local, "Microsoft", "WindowsApps",
++                "PythonSoftwareFoundation.PythonManager_*", "python.exe"
++            )), reverse=True))
++            candidates.extend(sorted(glob.glob(os.path.join(
++                local, "Programs", "Python", "Python3*", "python.exe"
++            )), reverse=True))
++
++        program_files = os.environ.get("ProgramFiles", "")
++        if program_files:
++            candidates.extend(sorted(glob.glob(os.path.join(
++                program_files, "Python3*", "python.exe"
++            )), reverse=True))
++
++    seen = set()
++    for path in candidates:
++        if not path or path in seen:
++            continue
++        seen.add(path)
++        if os.path.isfile(path) and os.path.abspath(path) != os.path.abspath(sys.executable):
++            return path
++    return None
++
++
++def _generate_via_python3(client, executable, instructions, prompt, model, effort,
++                          cancel, trace, fast_mode):
++    """Run only the long text SSE exchange in modern Python.
++
++    Ren'Py and the rest of the runtime stay on bundled Python 2.7, so pygame_sdl2
++    and generated-background handling remain unchanged.
++
++    The result is exchanged through a temporary file rather than stdout. This
++    avoids both Python 2 environment-type issues and Windows pipe deadlocks on
++    large traces/responses.
++    """
++    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gs_text_worker.py")
++    if not os.path.isfile(worker):
++        raise ClientError("Не найден gs_text_worker.py рядом с gs_backend.py.")
++
++    if not os.path.isdir(client.data_dir):
++        os.makedirs(client.data_dir)
++
++    fd, result_path = tempfile.mkstemp(
++        prefix=".gs-text-result-", suffix=".json", dir=client.data_dir
++    )
++    os.close(fd)
++
++    request = {
++        "data_dir": client.data_dir,
++        "instructions": instructions,
++        "prompt": prompt,
++        "model": model,
++        "effort": effort,
++        "fast_mode": bool(fast_mode),
++        "result_path": result_path,
++    }
++
++    options = {"creationflags": 0x08000000} if os.name == "nt" else {}
++
++    # Do not pass env= here. Ren'Py's Python 2 subprocess rejects unicode
++    # entries from its environment ("environment can only contain strings").
++    process = subprocess.Popen(
++        [executable, worker],
++        stdin=subprocess.PIPE,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.PIPE,
++        close_fds=os.name != "nt",
++        **options
++    )
++
++    hard_deadline = time.time() + GENERATION_TIMEOUT + 60
++    try:
++        process.stdin.write((json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8"))
++        process.stdin.flush()
++
++        while process.poll() is None:
++            if cancel is not None and cancel.is_set():
++                try:
++                    process.terminate()
++                except OSError:
++                    pass
++                raise ClientError("Генерация отменена.")
++            if time.time() > hard_deadline:
++                try:
++                    process.terminate()
++                except OSError:
++                    pass
++                raise ClientError("Генерация заняла слишком много времени. Повторите запрос.")
++            time.sleep(0.1)
++
++        # Worker intentionally writes only tiny diagnostics to stdio; the
++        # potentially large response/trace lives in result_path.
++        output = process.stdout.read(4096)
++        errors = process.stderr.read(64 * 1024)
++
++        try:
++            with open(result_path, "rb") as stream:
++                raw = stream.read(MAX_RESPONSE_BYTES + 1)
++        except IOError:
++            raw = b""
++
++        if len(raw) > MAX_RESPONSE_BYTES:
++            raise ClientError("Процесс Python 3 вернул слишком большой ответ.")
++
++        try:
++            result = json.loads(raw.decode("utf-8"))
++        except (ValueError, UnicodeError):
++            detail = errors.decode("utf-8", "replace").strip()
++            if not detail and output:
++                detail = output.decode("utf-8", "replace").strip()
++            if detail:
++                detail = detail[-1500:]
++            raise ClientError("Процесс Python 3 завершился без корректного результата." +
++                              ((" " + detail) if detail else ""))
++
++        worker_trace = result.get("trace")
++        if trace is not None and isinstance(worker_trace, dict):
++            trace.update(worker_trace)
++
++        client.effective_model = result.get("effective_model")
++        client.effective_effort = result.get("effective_effort")
++
++        # The worker may refresh OAuth and rewrite auth.json.
++        client._tokens = None
++        client._load()
++
++        if not result.get("ok"):
++            raise ClientError(result.get("error") or
++                              "Процесс Python 3 не завершил генерацию.")
++
++        text = result.get("text")
++        if not isinstance(text, text_type) or not text.strip():
++            raise ClientError("Процесс Python 3 вернул пустую сцену.")
++        return text
++    finally:
++        try:
++            process.stdin.close()
++        except Exception:
++            pass
++        try:
++            process.stdout.close()
++        except Exception:
++            pass
++        try:
++            process.stderr.close()
++        except Exception:
++            pass
++        if process.poll() is None:
++            try:
++                process.terminate()
++            except OSError:
++                pass
++        try:
++            process.wait()
++        except Exception:
++            pass
++        try:
++            os.unlink(result_path)
++        except OSError:
++            pass
++
++
+ class Client(object):
+     def __init__(self, data_dir):
+         self.data_dir = data_dir
+@@ -597,6 +868,16 @@
+             raise ClientError("Сервис вернул повреждённое изображение фона.")
+ 
+     def generate(self, instructions, prompt, model=None, effort=DEFAULT_EFFORT, cancel=None, trace=None, fast_mode=True):
++        # Ren'Py 7.4 / Python 2.7 is unreliable on the long Codex SSE stream.
++        # If a modern Python is installed, isolate only this text request there.
++        if sys.version_info[0] < 3 and not os.environ.get("GS_TEXT_WORKER"):
++            executable = _external_python3()
++            if executable:
++                return _generate_via_python3(
++                    self, executable, instructions, prompt, model, effort,
++                    cancel, trace, fast_mode
++                )
++
+         models = self._models or self.list_models()
+         selected = default_model(models, model)
+         metadata = next(m for m in models if m["slug"] == selected)
