@@ -571,7 +571,7 @@ def _query_terms(query):
     return expanded
 
 
-def query(index, text, route=None, day=None, characters=None, limit=8):
+def query(index, text, route=None, day=None, characters=None, limit=8, day_window=None):
     terms = _query_terms(text)
     chars = set(characters or [])
     docs = index.get("scenes", [])
@@ -597,6 +597,9 @@ def query(index, text, route=None, day=None, characters=None, limit=8):
         sr = scene.get("route")
         if route and sr not in ("common", route):
             continue
+        if day is not None and day_window is not None and scene.get("day") is not None:
+            if abs(int(day) - int(scene["day"])) > int(day_window):
+                continue
         score = 0.0
         raw = (scene.get("label", "") + " " + scene.get("story_text", "")).lower()
         for term in terms:
@@ -630,14 +633,22 @@ def route_seed(index, route):
     return [scene for scene in index.get("scenes", []) if scene.get("label") in labels]
 
 
-def render_context(index, hits, route=None, max_chars=30000):
+def render_context(index, hits, route=None, mode="anchored", current_day=None, max_chars=30000):
     """Render compact, non-executable source context for an LLM prompt."""
+    if mode not in ("anchored", "divergent", "post_source"):
+        mode = "anchored"
     parts = []
     if route:
         profile = index.get("profiles", {}).get(route, {})
         outline = index.get("outlines", {}).get(route, {})
         parts.append("ИСТОЧНИК: 7 ДНЕЙ ЛЕТА / %s" % profile.get("title", route))
         parts.append("Точка входа маршрута: %s" % outline.get("entry", profile.get("entry", "?")))
+        parts.append("Режим использования источника: %s; текущий день generated-истории: %s" %
+                     (mode, current_day if current_day is not None else "?"))
+        if mode == "divergent":
+            parts.append("ВАЖНО: route уже разошёлся с исходником. События ниже НЕ являются будущими событиями текущей истории; это только примеры речи, характеров, мира и ресурсов.")
+        elif mode == "post_source":
+            parts.append("ВАЖНО: generated-история уже вышла за пределы семидневной временной линии. События ниже относятся к ПРОШЛОМУ исходного мода и НЕ должны повторяться как новые; используй только характеры, речь, мир и ресурсы.")
         seeds = route_seed(index, route)
         if seeds:
             seed_lines = []
@@ -657,12 +668,26 @@ def render_context(index, hits, route=None, max_chars=30000):
 
     for hit in hits:
         scene = hit.get("scene", hit)
-        header = "[%s | day=%s | route=%s | %s:%s-%s]" % (
+        header_kind = "SOURCE SCENE" if mode == "anchored" else "REFERENCE ONLY"
+        header = "[%s | %s | day=%s | route=%s | %s:%s-%s]" % (
+            header_kind,
             scene.get("label"), scene.get("day"), scene.get("route"), scene.get("file"),
             scene.get("start_line"), scene.get("end_line"))
         body = scene.get("story_text", "").strip()
         if not body:
             continue
+        if mode in ("divergent", "post_source"):
+            # Reduce event leakage after the generated route leaves the source
+            # timeline. Dialogue is useful for voice/character consistency while
+            # narration often carries source-specific plot beats.
+            dialogue = []
+            for line in body.splitlines():
+                if re.match(r"^[A-Za-z_][A-Za-z0-9_]*:\s+", line):
+                    dialogue.append(line)
+            if dialogue:
+                body = "\n".join(dialogue[:90])
+            else:
+                body = body[:1800]
 
         hints = []
         resources = scene.get("resources", {})
@@ -724,13 +749,17 @@ def load_or_build(root, cache_dir):
     return index
 
 
-def source_context(root, cache_dir, route, query_text, max_chars=24000, limit=8):
+def source_context(root, cache_dir, route, query_text, mode="anchored", day=None, max_chars=24000, limit=8):
     """Return non-executable 7DL reference prose for one GS generation."""
     if route not in ROUTE_PROFILES:
         raise ValueError("Unknown 7DL route: %s" % route)
+    if mode not in ("anchored", "divergent", "post_source"):
+        mode = "anchored"
     index = load_or_build(root, cache_dir)
-    hits = query(index, query_text, route=route, characters=["mi"], limit=limit)
-    return render_context(index, hits, route=route, max_chars=max_chars)
+    query_day = day if mode == "anchored" else None
+    hits = query(index, query_text, route=route, day=query_day, characters=["mi"], limit=limit,
+                 day_window=1 if query_day is not None else None)
+    return render_context(index, hits, route=route, mode=mode, current_day=day, max_chars=max_chars)
 
 
 def _cli_build(args):
