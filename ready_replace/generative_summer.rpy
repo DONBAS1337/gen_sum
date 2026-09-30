@@ -170,6 +170,12 @@ init 1000 python:
                     catalog["background_references"].append("data:image/jpeg;base64," + base64.b64encode(reference.read()).decode("ascii"))
         gs_runtime.app = gs_runtime.Runtime(os.path.join(config.savedir, "generative_summer"), catalog)
 
+    # gs_runtime.app lives in the imported Python module and is deliberately not
+    # part of Ren'Py's save state. Recreate it when a save is loaded directly in
+    # the middle of a Generative Summer screen/label.
+    if gs_setup not in config.after_load_callbacks:
+        config.after_load_callbacks.append(gs_setup)
+
     def gs_effect(command):
         op = command["op"]
         if op == "scene":
@@ -601,7 +607,7 @@ screen gs_source_select():
             yalign 0.5
             spacing 24
             textbutton u"Оригинальное «Бесконечное лето»" style "gs_primary" xalign 0.5 action Return("vanilla")
-            if gs_runtime.app.catalog.get("source_roots", {}).get("7dl"):
+            if gs_detect_7dl_root():
                 text u"7 дней лета · Complete Edition · Мику" style "gs_meta" xalign 0.5
                 hbox:
                     xalign 0.5
