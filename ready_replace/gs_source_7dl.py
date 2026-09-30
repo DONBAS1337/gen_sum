@@ -413,6 +413,13 @@ def _background_name(filename):
     return "bg " + base
 
 
+def _cg_name(filename):
+    base = os.path.splitext(os.path.basename(filename))[0]
+    if base.startswith("cg_"):
+        base = base[3:]
+    return "cg " + base
+
+
 def _audio_key(group, filename):
     base = _strip_7dl_suffix(os.path.splitext(os.path.basename(filename))[0])
     prefix = {"ambience": "ambience_", "sounds": "sfx_", "music": "music_"}[group]
@@ -441,6 +448,14 @@ def asset_manifest(root):
     for directory in background_dirs:
         for path in _direct_files(directory, (".jpg", ".jpeg", ".png", ".webp")):
             assets["backgrounds"][_background_name(path)] = _rel(root, path)
+
+    cg_dirs = [
+        os.path.join(root, "scenario_alt", "Pics", "cg"),
+        os.path.join(root, "scenario_alt", "Pics", "CE", "cg"),
+    ]
+    for directory in cg_dirs:
+        for path in _direct_files(directory, (".jpg", ".jpeg", ".png", ".webp")):
+            assets["cgs"][_cg_name(path)] = _rel(root, path)
 
     sound_dirs = {
         "music": [
@@ -633,6 +648,41 @@ def route_seed(index, route):
     return [scene for scene in index.get("scenes", []) if scene.get("label") in labels]
 
 
+def clean_sprite_name(value):
+    value = _u(value).strip()
+    for marker in (" at ", " behind ", " zorder ", " with "):
+        value = value.split(marker, 1)[0].strip()
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?: [A-Za-z0-9_]+){1,4}$", value):
+        return None
+    tokens = value.split()
+    if any(token == "shade" or re.match(r"^tr[0-9]+$", token) for token in tokens):
+        return None
+    return value
+
+
+def route_sprite_names(index, route, allowed_tags=None):
+    """Sprite names actually referenced by the selected route/common days.
+
+    We do not execute 7DL's dynamic sprite generator. The Ren'Py side resolves
+    these safe names into body/clothes/expression/accessory layers at playback.
+    """
+    if route not in ROUTE_PROFILES:
+        raise ValueError("Unknown 7DL route: %s" % route)
+    allowed = set(allowed_tags or [])
+    result = set()
+    for scene in index.get("scenes", []):
+        if scene.get("kind") != "scenario" or scene.get("route") not in ("common", route):
+            continue
+        for raw in scene.get("resources", {}).get("sprites", []):
+            name = clean_sprite_name(raw)
+            if not name:
+                continue
+            if allowed and name.split()[0].rstrip("0123456789") not in allowed:
+                continue
+            result.add(name)
+    return sorted(result)
+
+
 def render_context(index, hits, route=None, mode="anchored", current_day=None, max_chars=30000):
     """Render compact, non-executable source context for an LLM prompt."""
     if mode not in ("anchored", "divergent", "post_source"):
@@ -693,7 +743,11 @@ def render_context(index, hits, route=None, mode="anchored", current_day=None, m
         resources = scene.get("resources", {})
         for name in resources.get("backgrounds", []):
             clean = name.split(" at ", 1)[0].strip()
-            if clean.startswith("bg "):
+            if clean.startswith(("bg ", "cg ")):
+                hints.append(clean)
+        for raw in resources.get("sprites", []):
+            clean = clean_sprite_name(raw)
+            if clean:
                 hints.append(clean)
         for group, pattern, prefix in resource_patterns:
             for raw in resources.get(group, []):
@@ -717,6 +771,9 @@ def render_context(index, hits, route=None, mode="anchored", current_day=None, m
         parts.append(chunk)
     return "\n\n".join(parts)
 
+_INDEX_CACHE = {}
+
+
 def load_or_build(root, cache_dir):
     """Load the cached narrative index, building it once when absent.
 
@@ -732,6 +789,9 @@ def load_or_build(root, cache_dir):
             if not os.path.isdir(cache_dir):
                 raise
     path = os.path.join(cache_dir, "7dl_index.json")
+    cached = _INDEX_CACHE.get(path)
+    if cached is not None:
+        return cached
     if os.path.isfile(path):
         try:
             index = load_index(path)
@@ -743,9 +803,11 @@ def load_or_build(root, cache_dir):
             if (index.get("format") == "generative_summer_7dl_index" and
                     index.get("version") == INDEX_VERSION and
                     os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
+                _INDEX_CACHE[path] = index
                 return index
     index = build_index(root, include_assets=False)
     save_index(index, path)
+    _INDEX_CACHE[path] = index
     return index
 
 
@@ -760,309 +822,6 @@ def source_context(root, cache_dir, route, query_text, mode="anchored", day=None
     hits = query(index, query_text, route=route, day=query_day, characters=["mi"], limit=limit,
                  day_window=1 if query_day is not None else None)
     return render_context(index, hits, route=route, mode=mode, current_day=day, max_chars=max_chars)
-
-
-def _cli_build(args):
-    source_map = discover_sources(args.root)
-    index = build_index(args.root, source_map, include_assets=not args.no_assets)
-    save_index(index, args.out)
-    print("saved: %s" % args.out)
-    print("scenes: %s" % len(index["scenes"]))
-    print("missing: %s" % (", ".join(index["missing"]) if index["missing"] else "none"))
-    for route in sorted(ROUTE_PROFILES):
-        print("route %s: %s" % (route, index["profiles"][route]["entry"]))
-
-
-def _cli_query(args):
-    index = load_index(args.index)
-    hits = query(index, args.text, route=args.route, day=args.day, characters=args.character, limit=args.limit)
-    print(render_context(index, hits, route=args.route, max_chars=args.max_chars))
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Safe 7DL source indexer for Generative Summer")
-    sub = parser.add_subparsers(dest="command")
-
-    build = sub.add_parser("build")
-    build.add_argument("--root", required=True)
-    build.add_argument("--out", required=True)
-    build.add_argument("--no-assets", action="store_true")
-    build.set_defaults(func=_cli_build)
-
-    ask = sub.add_parser("query")
-    ask.add_argument("--index", required=True)
-    ask.add_argument("--route", choices=sorted(ROUTE_PROFILES))
-    ask.add_argument("--day", type=int)
-    ask.add_argument("--character", action="append", default=[])
-    ask.add_argument("--limit", type=int, default=8)
-    ask.add_argument("--max-chars", type=int, default=30000)
-    ask.add_argument("--text", required=True)
-    ask.set_defaults(func=_cli_query)
-
-    args = parser.parse_args(argv)
-    if not hasattr(args, "func"):
-        parser.print_help()
-        return 2
-    args.func(args)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main()), raw)
-            if match:
-                hints.append("sdl_music_" + match.group(1))
-        for raw in scene.get("resources", {}).get("ambience", []):
-            match = re.match(r'^ambience_7dl\[["\']([^"\']+)["\']\]        if len("\n\n".join(parts + [chunk])) > max_chars:
-            remaining = max_chars - len("\n\n".join(parts)) - 4
-            if remaining > 500:
-                parts.append(chunk[:remaining])
-            break
-        parts.append(chunk)
-    return "\n\n".join(parts)
-
-
-def load_or_build(root, cache_dir):
-    """Load the cached narrative index, building it once when absent.
-
-    Cache invalidation is intentionally explicit in this first integration:
-    delete 7dl_index.json after updating 7DL to force a rebuild.
-    """
-    root = os.path.abspath(root)
-    cache_dir = os.path.abspath(cache_dir)
-    if not os.path.isdir(cache_dir):
-        try:
-            os.makedirs(cache_dir)
-        except OSError:
-            if not os.path.isdir(cache_dir):
-                raise
-    path = os.path.join(cache_dir, "7dl_index.json")
-    if os.path.isfile(path):
-        try:
-            index = load_index(path)
-        except (IOError, OSError, ValueError, TypeError):
-            # A previous interrupted/failed build may have left a partial cache.
-            index = None
-        if index is not None:
-            cached_root = index.get("root_hint") or ""
-            if (index.get("format") == "generative_summer_7dl_index" and
-                    index.get("version") == INDEX_VERSION and
-                    os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
-                return index
-    index = build_index(root, include_assets=False)
-    save_index(index, path)
-    return index
-
-
-def source_context(root, cache_dir, route, query_text, max_chars=24000, limit=8):
-    """Return non-executable 7DL reference prose for one GS generation."""
-    if route not in ROUTE_PROFILES:
-        raise ValueError("Unknown 7DL route: %s" % route)
-    index = load_or_build(root, cache_dir)
-    hits = query(index, query_text, route=route, characters=["mi"], limit=limit)
-    return render_context(index, hits, route=route, max_chars=max_chars)
-
-
-def _cli_build(args):
-    source_map = discover_sources(args.root)
-    index = build_index(args.root, source_map, include_assets=not args.no_assets)
-    save_index(index, args.out)
-    print("saved: %s" % args.out)
-    print("scenes: %s" % len(index["scenes"]))
-    print("missing: %s" % (", ".join(index["missing"]) if index["missing"] else "none"))
-    for route in sorted(ROUTE_PROFILES):
-        print("route %s: %s" % (route, index["profiles"][route]["entry"]))
-
-
-def _cli_query(args):
-    index = load_index(args.index)
-    hits = query(index, args.text, route=args.route, day=args.day, characters=args.character, limit=args.limit)
-    print(render_context(index, hits, route=args.route, max_chars=args.max_chars))
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Safe 7DL source indexer for Generative Summer")
-    sub = parser.add_subparsers(dest="command")
-
-    build = sub.add_parser("build")
-    build.add_argument("--root", required=True)
-    build.add_argument("--out", required=True)
-    build.add_argument("--no-assets", action="store_true")
-    build.set_defaults(func=_cli_build)
-
-    ask = sub.add_parser("query")
-    ask.add_argument("--index", required=True)
-    ask.add_argument("--route", choices=sorted(ROUTE_PROFILES))
-    ask.add_argument("--day", type=int)
-    ask.add_argument("--character", action="append", default=[])
-    ask.add_argument("--limit", type=int, default=8)
-    ask.add_argument("--max-chars", type=int, default=30000)
-    ask.add_argument("--text", required=True)
-    ask.set_defaults(func=_cli_query)
-
-    args = parser.parse_args(argv)
-    if not hasattr(args, "func"):
-        parser.print_help()
-        return 2
-    args.func(args)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main()), raw)
-            if match:
-                hints.append("sdl_ambience_" + match.group(1))
-        for raw in scene.get("resources", {}).get("sounds", []):
-            match = re.match(r'^sfx_7dl\[["\']([^"\']+)["\']\]        if len("\n\n".join(parts + [chunk])) > max_chars:
-            remaining = max_chars - len("\n\n".join(parts)) - 4
-            if remaining > 500:
-                parts.append(chunk[:remaining])
-            break
-        parts.append(chunk)
-    return "\n\n".join(parts)
-
-
-def load_or_build(root, cache_dir):
-    """Load the cached narrative index, building it once when absent.
-
-    Cache invalidation is intentionally explicit in this first integration:
-    delete 7dl_index.json after updating 7DL to force a rebuild.
-    """
-    root = os.path.abspath(root)
-    cache_dir = os.path.abspath(cache_dir)
-    if not os.path.isdir(cache_dir):
-        try:
-            os.makedirs(cache_dir)
-        except OSError:
-            if not os.path.isdir(cache_dir):
-                raise
-    path = os.path.join(cache_dir, "7dl_index.json")
-    if os.path.isfile(path):
-        try:
-            index = load_index(path)
-        except (IOError, OSError, ValueError, TypeError):
-            # A previous interrupted/failed build may have left a partial cache.
-            index = None
-        if index is not None:
-            cached_root = index.get("root_hint") or ""
-            if (index.get("format") == "generative_summer_7dl_index" and
-                    index.get("version") == INDEX_VERSION and
-                    os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
-                return index
-    index = build_index(root, include_assets=False)
-    save_index(index, path)
-    return index
-
-
-def source_context(root, cache_dir, route, query_text, max_chars=24000, limit=8):
-    """Return non-executable 7DL reference prose for one GS generation."""
-    if route not in ROUTE_PROFILES:
-        raise ValueError("Unknown 7DL route: %s" % route)
-    index = load_or_build(root, cache_dir)
-    hits = query(index, query_text, route=route, characters=["mi"], limit=limit)
-    return render_context(index, hits, route=route, max_chars=max_chars)
-
-
-def _cli_build(args):
-    source_map = discover_sources(args.root)
-    index = build_index(args.root, source_map, include_assets=not args.no_assets)
-    save_index(index, args.out)
-    print("saved: %s" % args.out)
-    print("scenes: %s" % len(index["scenes"]))
-    print("missing: %s" % (", ".join(index["missing"]) if index["missing"] else "none"))
-    for route in sorted(ROUTE_PROFILES):
-        print("route %s: %s" % (route, index["profiles"][route]["entry"]))
-
-
-def _cli_query(args):
-    index = load_index(args.index)
-    hits = query(index, args.text, route=args.route, day=args.day, characters=args.character, limit=args.limit)
-    print(render_context(index, hits, route=args.route, max_chars=args.max_chars))
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Safe 7DL source indexer for Generative Summer")
-    sub = parser.add_subparsers(dest="command")
-
-    build = sub.add_parser("build")
-    build.add_argument("--root", required=True)
-    build.add_argument("--out", required=True)
-    build.add_argument("--no-assets", action="store_true")
-    build.set_defaults(func=_cli_build)
-
-    ask = sub.add_parser("query")
-    ask.add_argument("--index", required=True)
-    ask.add_argument("--route", choices=sorted(ROUTE_PROFILES))
-    ask.add_argument("--day", type=int)
-    ask.add_argument("--character", action="append", default=[])
-    ask.add_argument("--limit", type=int, default=8)
-    ask.add_argument("--max-chars", type=int, default=30000)
-    ask.add_argument("--text", required=True)
-    ask.set_defaults(func=_cli_query)
-
-    args = parser.parse_args(argv)
-    if not hasattr(args, "func"):
-        parser.print_help()
-        return 2
-    args.func(args)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main()), raw)
-            if match:
-                hints.append("sdl_sfx_" + match.group(1))
-        resource_hint = ""
-        if hints:
-            resource_hint = "\nРесурсы исходной сцены (используй только если они есть в ДОСТУПНЫХ РЕСУРСАХ): " + ", ".join(sorted(set(hints))[:32])
-        chunk = header + resource_hint + "\n" + body
-        if len("\n\n".join(parts + [chunk])) > max_chars:
-            remaining = max_chars - len("\n\n".join(parts)) - 4
-            if remaining > 500:
-                parts.append(chunk[:remaining])
-            break
-        parts.append(chunk)
-    return "\n\n".join(parts)
-
-
-def load_or_build(root, cache_dir):
-    """Load the cached narrative index, building it once when absent.
-
-    Cache invalidation is intentionally explicit in this first integration:
-    delete 7dl_index.json after updating 7DL to force a rebuild.
-    """
-    root = os.path.abspath(root)
-    cache_dir = os.path.abspath(cache_dir)
-    if not os.path.isdir(cache_dir):
-        try:
-            os.makedirs(cache_dir)
-        except OSError:
-            if not os.path.isdir(cache_dir):
-                raise
-    path = os.path.join(cache_dir, "7dl_index.json")
-    if os.path.isfile(path):
-        try:
-            index = load_index(path)
-        except (IOError, OSError, ValueError, TypeError):
-            # A previous interrupted/failed build may have left a partial cache.
-            index = None
-        if index is not None:
-            cached_root = index.get("root_hint") or ""
-            if (index.get("format") == "generative_summer_7dl_index" and
-                    index.get("version") == INDEX_VERSION and
-                    os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
-                return index
-    index = build_index(root, include_assets=False)
-    save_index(index, path)
-    return index
-
-
-def source_context(root, cache_dir, route, query_text, max_chars=24000, limit=8):
-    """Return non-executable 7DL reference prose for one GS generation."""
-    if route not in ROUTE_PROFILES:
-        raise ValueError("Unknown 7DL route: %s" % route)
-    index = load_or_build(root, cache_dir)
-    hits = query(index, query_text, route=route, characters=["mi"], limit=limit)
-    return render_context(index, hits, route=route, max_chars=max_chars)
 
 
 def _cli_build(args):
