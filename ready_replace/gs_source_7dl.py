@@ -430,13 +430,55 @@ def _audio_key(group, filename):
     return {"music": "sdl_music_", "ambience": "sdl_ambience_", "sounds": "sdl_sfx_"}[group] + base
 
 
+SPRITE_LAYER_RE = re.compile(
+    r"^(?P<who>[A-Za-z_][A-Za-z0-9_]*)_(?P<pose>[0-9]+)_(?P<token>.+)\.(?:png|jpg|jpeg|webp)$",
+    re.IGNORECASE)
+
+
+def sprite_layer_manifest(root):
+    """Index actual 7DL sprite layers by distance/character/pose/token.
+
+    This mirrors the physical close/normal/far layout instead of treating
+    distance as a zoom. Custom displayables intentionally stay outside this
+    map because they are not interchangeable character layers.
+    """
+    result = {}
+    base = os.path.join(root, "scenario_alt", "Pics", "sprites")
+    for distance in ("normal", "far", "close"):
+        distance_dir = os.path.join(base, distance)
+        if not os.path.isdir(distance_dir):
+            continue
+        for who in sorted(os.listdir(distance_dir)):
+            who_dir = os.path.join(distance_dir, who)
+            if not os.path.isdir(who_dir):
+                continue
+            for filename in sorted(os.listdir(who_dir)):
+                path = os.path.join(who_dir, filename)
+                if not os.path.isfile(path):
+                    continue
+                match = SPRITE_LAYER_RE.match(filename)
+                if not match:
+                    continue
+                file_who = match.group("who")
+                pose = match.group("pose")
+                token = match.group("token")
+                # Normal 7DL layout keeps a character's layers in its own
+                # directory. Ignore foreign-prefixed files instead of risking
+                # accidental cross-character composition.
+                if file_who != who:
+                    continue
+                result.setdefault(distance, {}).setdefault(who, {}).setdefault(pose, {})[token] = _rel(root, path)
+    return result
+
+
 def asset_manifest(root):
     """Return direct 7DL backgrounds/audio without executing any Ren'Py code.
 
     Only active base + Complete Edition resource folders are scanned. Old_Road,
     fanfics and unreleased trees are deliberately ignored.
     """
-    assets = {"backgrounds": {}, "cgs": {}, "music": {}, "ambience": {}, "sounds": {}}
+    assets = {"backgrounds": {}, "cgs": {}, "music": {}, "ambience": {}, "sounds": {},
+              "sprite_layers": {}}
     if not root or not os.path.isdir(root):
         return assets
 
@@ -456,6 +498,8 @@ def asset_manifest(root):
     for directory in cg_dirs:
         for path in _direct_files(directory, (".jpg", ".jpeg", ".png", ".webp")):
             assets["cgs"][_cg_name(path)] = _rel(root, path)
+
+    assets["sprite_layers"] = sprite_layer_manifest(root)
 
     sound_dirs = {
         "music": [
