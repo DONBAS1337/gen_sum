@@ -16,6 +16,7 @@ init 1000 python:
     renpy.loader.archives.append((gs_archive_name, {"gs_original/" + path: entries
         for path, entries in gs_archive_index.items()}))
     gs_runtime.original_images = {}
+    gs_runtime.source_images = {}
 
     def gs_original_catalog(names):
         import ast
@@ -149,6 +150,83 @@ init 1000 python:
             return candidate
         return None
 
+    def gs_7dl_sprite_layer(dist, who, filename):
+        candidates = (
+            "scenario_alt/Pics/sprites/" + dist + "/" + who + "/" + filename,
+            "gs_original/images/sprites/" + dist + "/" + who + "/" + filename,
+        )
+        for path in candidates:
+            if renpy.loadable(path):
+                return path
+        return None
+
+    def gs_7dl_sprite_displayable(name):
+        cached = gs_runtime.source_images.get(name, "__missing__")
+        if cached != "__missing__":
+            return cached or None
+
+        parts = name.split()
+        if len(parts) < 3:
+            gs_runtime.source_images[name] = False
+            return None
+
+        distance = "normal"
+        if parts[-1] in ("far", "close"):
+            distance = parts.pop()
+        if len(parts) < 3 or len(parts) > 4:
+            gs_runtime.source_images[name] = False
+            return None
+
+        tag, emotion, clothes = parts[0], parts[1], parts[2]
+        accessory = parts[3] if len(parts) == 4 else None
+        match = re.match(r"^([A-Za-z_]+?)([0-9]?)$", tag)
+        if not match:
+            gs_runtime.source_images[name] = False
+            return None
+        who = match.group(1)
+        variant = match.group(2)
+        body_token = "body" + variant if variant else "body"
+        canvas = {"close": (1050, 1080), "normal": (900, 1080), "far": (630, 1080)}[distance]
+
+        for pose in ("1", "2", "3", "4", "5", "6"):
+            body = gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_" + body_token + ".png")
+            if not body and variant:
+                body = gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_body.png")
+            cloth = None
+            if clothes != "body":
+                for prefix in (tag, who):
+                    cloth = gs_7dl_sprite_layer(distance, who, prefix + "_" + pose + "_" + clothes + ".png")
+                    if cloth:
+                        break
+            emotion_path = gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_" + emotion + ".png")
+            accessory_path = (gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_" + accessory + ".png")
+                              if accessory else None)
+
+            if not emotion_path or (accessory and not accessory_path):
+                continue
+            layers = []
+            if body:
+                layers.append(body)
+            if clothes != "body":
+                if not cloth:
+                    continue
+                layers.append(cloth)
+            if not layers:
+                continue
+            layers.append(emotion_path)
+            if accessory_path:
+                layers.append(accessory_path)
+
+            args = []
+            for layer in layers:
+                args.extend(((0, 0), layer))
+            sprite = im.Composite(canvas, *args)
+            gs_runtime.source_images[name] = sprite
+            return sprite
+
+        gs_runtime.source_images[name] = False
+        return None
+
     def gs_setup():
         if gs_runtime.app is not None:
             return
@@ -194,6 +272,8 @@ init 1000 python:
                 external = None
                 for assets in source_assets.values():
                     external = (assets.get("backgrounds") or {}).get(command["image"])
+                    if not external:
+                        external = (assets.get("cgs") or {}).get(command["image"])
                     if external:
                         break
                 if external:
@@ -203,8 +283,11 @@ init 1000 python:
                     renpy.show(command["image"], what=gs_runtime.original_images.get(command["image"], gs_runtime.original_images["bg black"]))
         elif op == "show":
             position = command.get("position") or "center"
-            if command["image"] in gs_runtime.original_images:
-                renpy.show(command["image"], what=gs_runtime.original_images[command["image"]], at_list=[getattr(renpy.store, position)])
+            displayable = gs_runtime.original_images.get(command["image"])
+            if displayable is None:
+                displayable = gs_7dl_sprite_displayable(command["image"])
+            if displayable is not None:
+                renpy.show(command["image"], what=displayable, at_list=[getattr(renpy.store, position)])
         elif op == "hide":
             renpy.hide(command["tag"])
         elif op == "play":
