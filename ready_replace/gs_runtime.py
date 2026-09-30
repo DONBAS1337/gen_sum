@@ -194,7 +194,7 @@ class Runtime(object):
         self.active_model = gs_backend.default_model(self.models, preferred)
         self.set_status("Пишем следующую главу · " + self.active_model + "…")
         prompt = self.library.generation_prompt(story_id, parent_id, choice_index, custom_choice)
-        instructions = gs_core.instructions(self.catalog)
+        instructions = gs_core.instructions(self.library.story_catalog(story_id))
         request = prompt
         trace_enabled = os.path.isfile(os.path.join(self.library.root, "trace.enabled"))
         self.trace_error = None
