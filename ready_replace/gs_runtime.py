@@ -64,8 +64,12 @@ class Runtime(object):
             self.error = "Сценарий не прошёл проверку: " + text_type(exc)
         except (IOError, OSError):
             self.error = "Не удалось прочитать или сохранить данные мода. Проверьте доступ к папке сохранений и свободное место."
-        except Exception:
-            self.error = "Не удалось выполнить операцию. Данные истории сохранены; попробуйте ещё раз."
+        except Exception as exc:
+            logging.exception("Generative Summer operation failed")
+            detail = ("%s: %s" % (exc.__class__.__name__, text_type(exc))).strip()
+            self.error = "Не удалось выполнить операцию. Попробуйте ещё раз."
+            if detail:
+                self.error += " (" + detail[:600] + ")"
         finally:
             self.busy = False
 
@@ -83,8 +87,8 @@ class Runtime(object):
     def refresh_stories(self):
         self.stories = self.library.list_stories()
 
-    def create(self, premise):
-        self.result = self.library.create(premise)
+    def create(self, premise, source_profile_name="vanilla"):
+        self.result = self.library.create(premise, source_profile_name)
         return self.result
 
     def _save_trace(self, trace):
