@@ -159,9 +159,15 @@ init 1000 python:
         names = {key: value for key, value in names.items() if hasattr(renpy.store, key)}
         catalog = gs_original_catalog(names)
         catalog["source_roots"] = {}
+        catalog["source_assets"] = {}
         gs_7dl_root = gs_detect_7dl_root()
         if gs_7dl_root:
             catalog["source_roots"]["7dl"] = gs_7dl_root
+            # Make scenario_alt/... paths loadable without importing/executing 7DL.
+            if gs_7dl_root not in config.searchpath:
+                config.searchpath.append(gs_7dl_root)
+            import gs_source_7dl
+            catalog["source_assets"]["7dl"] = gs_source_7dl.asset_manifest(gs_7dl_root)
         import base64
         catalog["background_references"] = []
         for path in ("gs_original/images/bg/ext_square_day.jpg", "gs_original/images/bg/int_library_day.jpg"):
@@ -184,8 +190,17 @@ init 1000 python:
                 path = gs_runtime.app.library.background_path(gs_story_id, command["image"])
                 renpy.show(command["image"], what=Image(path))
             else:
-                # Ordinary Ren'Py saves may still contain commands from the old mixed catalog.
-                renpy.show(command["image"], what=gs_runtime.original_images.get(command["image"], gs_runtime.original_images["bg black"]))
+                source_assets = gs_runtime.app.catalog.get("source_assets", {})
+                external = None
+                for assets in source_assets.values():
+                    external = (assets.get("backgrounds") or {}).get(command["image"])
+                    if external:
+                        break
+                if external:
+                    renpy.show(command["image"], what=Image(external))
+                else:
+                    # Ordinary Ren'Py saves may still contain commands from the old mixed catalog.
+                    renpy.show(command["image"], what=gs_runtime.original_images.get(command["image"], gs_runtime.original_images["bg black"]))
         elif op == "show":
             position = command.get("position") or "center"
             if command["image"] in gs_runtime.original_images:
@@ -195,6 +210,11 @@ init 1000 python:
         elif op == "play":
             group = {"music": "music", "ambience": "ambience", "sound": "sounds"}[command["channel"]]
             path = gs_runtime.app.catalog[group].get(command["key"])
+            if not path:
+                for assets in gs_runtime.app.catalog.get("source_assets", {}).values():
+                    path = (assets.get(group) or {}).get(command["key"])
+                    if path:
+                        break
             if path:
                 renpy.music.play(path, channel=command["channel"])
             else:
