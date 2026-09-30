@@ -2,6 +2,7 @@
 
 init 1000 python:
     import os
+    import re
     import sys
     import time
     gs_module_dir = os.path.dirname(renpy.loader.transfn("mods/generative_summer/gs_runtime.py"))
