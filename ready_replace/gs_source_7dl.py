@@ -644,6 +644,13 @@ def render_context(index, hits, route=None, max_chars=30000):
                     seed_lines.append("%s = %s" % (mut["target"], mut["value"]))
             if seed_lines:
                 parts.append("Исходное состояние быстрого старта (справочно, не исполнять): " + "; ".join(seed_lines[:24]))
+
+    resource_patterns = (
+        ("music", re.compile(r"^music_7dl\[['\"]([^'\"]+)['\"]\]$"), "sdl_music_"),
+        ("ambience", re.compile(r"^ambience_7dl\[['\"]([^'\"]+)['\"]\]$"), "sdl_ambience_"),
+        ("sounds", re.compile(r"^sfx_7dl\[['\"]([^'\"]+)['\"]\]$"), "sdl_sfx_"),
+    )
+
     for hit in hits:
         scene = hit.get("scene", hit)
         header = "[%s | day=%s | route=%s | %s:%s-%s]" % (
@@ -652,20 +659,34 @@ def render_context(index, hits, route=None, max_chars=30000):
         body = scene.get("story_text", "").strip()
         if not body:
             continue
+
         hints = []
-        for name in scene.get("resources", {}).get("backgrounds", []):
+        resources = scene.get("resources", {})
+        for name in resources.get("backgrounds", []):
             clean = name.split(" at ", 1)[0].strip()
             if clean.startswith("bg "):
                 hints.append(clean)
-        for raw in scene.get("resources", {}).get("music", []):
-            match = re.match(r'^music_7dl\[["\']([^"\']+)["\']\]        if len("\n\n".join(parts + [chunk])) > max_chars:
+        for group, pattern, prefix in resource_patterns:
+            for raw in resources.get(group, []):
+                match = pattern.match(raw)
+                if match:
+                    hints.append(prefix + match.group(1))
+
+        resource_hint = ""
+        if hints:
+            resource_hint = (
+                "\nРесурсы исходной сцены (используй только если они есть в ДОСТУПНЫХ РЕСУРСАХ): "
+                + ", ".join(sorted(set(hints))[:32])
+            )
+        chunk = header + resource_hint + "\n" + body
+        combined = "\n\n".join(parts + [chunk])
+        if len(combined) > max_chars:
             remaining = max_chars - len("\n\n".join(parts)) - 4
             if remaining > 500:
                 parts.append(chunk[:remaining])
             break
         parts.append(chunk)
     return "\n\n".join(parts)
-
 
 def load_or_build(root, cache_dir):
     """Load the cached narrative index, building it once when absent.
