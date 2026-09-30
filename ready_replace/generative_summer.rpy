@@ -18,12 +18,30 @@ init 1000 python:
         for path, entries in gs_archive_index.items()}))
     gs_runtime.original_images = {}
     gs_runtime.source_images = {}
+    gs_runtime.original_sprite_layers = {}
 
     def gs_original_catalog(names):
         import ast
         import re
         catalog = {"backgrounds": [], "sprites": [], "characters": names,
                    "music": {}, "ambience": {}, "sounds": {}, "transitions": ["dissolve", "fade"]}
+        # Build a physical vanilla sprite-layer index from the private archive.
+        # This is separate from named Ren'Py images and keeps close/normal/far
+        # independent, just like 7DL does.
+        layer_re = re.compile(r"^images/sprites/(normal|far|close)/([^/]+)/([^/]+)$")
+        file_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)_([0-9]+)_(.+)\.(?:png|jpg|jpeg|webp)$", re.IGNORECASE)
+        for archive_path in gs_archive_index:
+            normalized = archive_path.replace("\\", "/")
+            layer_match = layer_re.match(normalized)
+            if not layer_match:
+                continue
+            distance, who, filename = layer_match.groups()
+            file_match = file_re.match(filename)
+            if not file_match or file_match.group(1) != who:
+                continue
+            pose, token = file_match.group(2), file_match.group(3)
+            gs_runtime.original_sprite_layers.setdefault(distance, {}).setdefault(who, {}).setdefault(pose, {})[token] = "gs_original/" + normalized
+
         # The game's compiled scripts retain their original image expressions and audio literals.
         # Do not discover resources through list_images(), music_list or the global store of mods.
         for node in renpy.game.script.namemap.values():
@@ -151,15 +169,28 @@ init 1000 python:
             return candidate
         return None
 
-    def gs_7dl_sprite_layer(dist, who, filename):
-        candidates = (
-            "scenario_alt/Pics/sprites/" + dist + "/" + who + "/" + filename,
-            "gs_original/images/sprites/" + dist + "/" + who + "/" + filename,
-        )
-        for path in candidates:
-            if renpy.loadable(path):
-                return path
-        return None
+    def gs_sprite_layer_map(source, distance, who):
+        return (((source or {}).get(distance) or {}).get(who) or {})
+
+    def gs_7dl_sprite_layer(distance, who, pose, token):
+        # 7DL overrides only the exact physical layer it supplies. Missing
+        # layers fall back to the vanilla archive at the SAME distance/pose.
+        source_assets = ((gs_runtime.app.catalog.get("source_assets") or {}).get("7dl") or {})
+        source_map = source_assets.get("sprite_layers") or {}
+        source_pose = gs_sprite_layer_map(source_map, distance, who).get(pose) or {}
+        if token in source_pose:
+            return source_pose[token]
+
+        vanilla_pose = gs_sprite_layer_map(gs_runtime.original_sprite_layers, distance, who).get(pose) or {}
+        return vanilla_pose.get(token)
+
+    def gs_7dl_sprite_poses(distance, who):
+        poses = set()
+        source_assets = ((gs_runtime.app.catalog.get("source_assets") or {}).get("7dl") or {})
+        source_map = source_assets.get("sprite_layers") or {}
+        poses.update(gs_sprite_layer_map(source_map, distance, who).keys())
+        poses.update(gs_sprite_layer_map(gs_runtime.original_sprite_layers, distance, who).keys())
+        return sorted(poses, key=lambda value: int(value) if value.isdigit() else 999)
 
     def gs_7dl_sprite_displayable(name):
         cached = gs_runtime.source_images.get(name, "__missing__")
@@ -189,31 +220,24 @@ init 1000 python:
         body_token = "body" + variant if variant else "body"
         canvas = {"close": (1050, 1080), "normal": (900, 1080), "far": (630, 1080)}[distance]
 
-        for pose in ("1", "2", "3", "4", "5", "6"):
-            body = gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_" + body_token + ".png")
-            if not body and variant:
-                body = gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_body.png")
-            cloth = None
-            if clothes != "body":
-                for prefix in (tag, who):
-                    cloth = gs_7dl_sprite_layer(distance, who, prefix + "_" + pose + "_" + clothes + ".png")
-                    if cloth:
-                        break
-            emotion_path = gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_" + emotion + ".png")
-            accessory_path = (gs_7dl_sprite_layer(distance, who, who + "_" + pose + "_" + accessory + ".png")
-                              if accessory else None)
+        # Do not probe arbitrary filenames or scale a normal sprite. Candidate
+        # poses come from the exact union of physical 7DL + vanilla layer maps.
+        for pose in gs_7dl_sprite_poses(distance, who):
+            body = gs_7dl_sprite_layer(distance, who, pose, body_token)
+            cloth = None if clothes == "body" else gs_7dl_sprite_layer(distance, who, pose, clothes)
+            emotion_path = gs_7dl_sprite_layer(distance, who, pose, emotion)
+            accessory_path = gs_7dl_sprite_layer(distance, who, pose, accessory) if accessory else None
 
-            if not emotion_path or (accessory and not accessory_path):
+            if not body or not emotion_path:
                 continue
-            layers = []
-            if body:
-                layers.append(body)
-            if clothes != "body":
-                if not cloth:
-                    continue
+            if clothes != "body" and not cloth:
+                continue
+            if accessory and not accessory_path:
+                continue
+
+            layers = [body]
+            if cloth:
                 layers.append(cloth)
-            if not layers:
-                continue
             layers.append(emotion_path)
             if accessory_path:
                 layers.append(accessory_path)
