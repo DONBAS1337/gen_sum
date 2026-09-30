@@ -388,12 +388,16 @@ def parse_defaults(path, root):
 
 
 def _direct_files(directory, extensions):
+    # The active resource roots are safe to traverse recursively (for example
+    # Sound/sfx/repl); Old_Road/fanfics are outside these roots.
     if not os.path.isdir(directory):
         return
-    for name in sorted(os.listdir(directory)):
-        path = os.path.join(directory, name)
-        if os.path.isfile(path) and os.path.splitext(name)[1].lower() in extensions:
-            yield path
+    for current, dirnames, filenames in os.walk(directory):
+        dirnames[:] = [d for d in dirnames if d.lower() not in ("__pycache__", "cache")]
+        for name in sorted(filenames):
+            path = os.path.join(current, name)
+            if os.path.splitext(name)[1].lower() in extensions:
+                yield path
 
 
 def _strip_7dl_suffix(value):
