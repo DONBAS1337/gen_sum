@@ -468,14 +468,31 @@ def build_index(root, source_map=None, include_assets=True):
 
 
 def save_index(index, path):
-    with io.open(path, "w", encoding="utf-8") as output:
-        json.dump(index, output, ensure_ascii=False, sort_keys=True, indent=2)
-        output.write("\n")
+    # Python 2's json.dump may emit a mixture of str and unicode chunks.
+    # codecs/io text writers then fail with:
+    #   TypeError: write() argument 1 must be unicode, not str
+    # Serialize once, normalize to unicode, and write UTF-8 bytes atomically.
+    payload = json.dumps(index, ensure_ascii=False, sort_keys=True, indent=2)
+    payload = _u(payload) + u"\n"
+    temporary = path + ".tmp"
+    with open(temporary, "wb") as output:
+        output.write(payload.encode("utf-8"))
+        output.flush()
+        try:
+            os.fsync(output.fileno())
+        except (AttributeError, OSError):
+            pass
+    if os.path.isfile(path):
+        os.remove(path)
+    os.rename(temporary, path)
 
 
 def load_index(path):
-    with io.open(path, "r", encoding="utf-8") as source:
-        return json.load(source)
+    with open(path, "rb") as source:
+        raw = source.read()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    return json.loads(raw.decode("utf-8", "replace"))
 
 
 def _query_terms(query):
@@ -612,12 +629,17 @@ def load_or_build(root, cache_dir):
                 raise
     path = os.path.join(cache_dir, "7dl_index.json")
     if os.path.isfile(path):
-        index = load_index(path)
-        cached_root = index.get("root_hint") or ""
-        if (index.get("format") == "generative_summer_7dl_index" and
-                index.get("version") == INDEX_VERSION and
-                os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
-            return index
+        try:
+            index = load_index(path)
+        except (IOError, OSError, ValueError, TypeError):
+            # A previous interrupted/failed build may have left a partial cache.
+            index = None
+        if index is not None:
+            cached_root = index.get("root_hint") or ""
+            if (index.get("format") == "generative_summer_7dl_index" and
+                    index.get("version") == INDEX_VERSION and
+                    os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
+                return index
     index = build_index(root, include_assets=False)
     save_index(index, path)
     return index
