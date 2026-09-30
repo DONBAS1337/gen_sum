@@ -121,8 +121,14 @@ def _u(value):
 
 
 def read_text(path):
-    with io.open(path, "r", encoding="utf-8-sig", errors="replace") as source:
-        return source.read()
+    # Ren'Py 7.4 / bundled Python 2.7 can lack the "utf-8-sig" codec alias.
+    # Read bytes, strip an optional UTF-8 BOM ourselves, then decode with the
+    # plain UTF-8 codec that is guaranteed to exist in the game runtime.
+    with open(path, "rb") as source:
+        raw = source.read()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    return raw.decode("utf-8", "replace")
 
 
 def _rel(root, path):
