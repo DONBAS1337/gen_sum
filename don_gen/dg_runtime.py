@@ -29,7 +29,7 @@ except NameError:
 
 
 def setup_diagnostics(directory):
-    """Rotating logs without prompt contents, access tokens or generated prose."""
+    """Bounded logs with action/error metadata, without full prompts or tokens."""
     logger = logging.getLogger("don_gen")
     if getattr(logger, "_don_gen_setup", False):
         return logger
@@ -39,22 +39,23 @@ def setup_diagnostics(directory):
         except OSError:
             if not os.path.isdir(directory):
                 raise
-    log_name = "don_gen_worker.log" if __name__ == "__main__" else "don_gen.log"
-    path = os.path.join(directory, log_name)
-    handler = RotatingFileHandler(path, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    name = "don_gen_worker.log" if __name__ == "__main__" else "don_gen.log"
+    handler = RotatingFileHandler(os.path.join(directory, name),
+                                  maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-    logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     logger.propagate = False
+    logger.addHandler(handler)
     logger._don_gen_setup = True
-    logger.info("DON-GEN process started (python=%s)", sys.version.split()[0])
+    logger.info("DON-GEN started: Python %s", sys.version.split()[0])
     return logger
 
 
 class Runtime(object):
     def __init__(self, directory, catalog):
         self.log = setup_diagnostics(directory)
-        self.log.info("Runtime ready, catalog backgrounds=%d sprites=%d", len(catalog.get("backgrounds", [])), len(catalog.get("sprites", [])))
+        self.log.info("Runtime initialized with %d backgrounds / %d sprites",
+                      len(catalog.get("backgrounds", [])), len(catalog.get("sprites", [])))
         self.client = dg_backend.Client(directory)
         self.library = dg_core.Store(directory, catalog)
         self.catalog = catalog
@@ -86,13 +87,13 @@ class Runtime(object):
         try:
             self.result = task(*args)
         except dg_backend.ClientError as exc:
-            self.log.warning("Network/API task failed: %s", text_type(exc)[:300])
+            self.log.warning("API/client error: %s", text_type(exc)[:300])
             self.error = text_type(exc)
         except dg_core.StoryError as exc:
-            self.log.warning("Generated scene validation: %s", text_type(exc)[:300])
+            self.log.warning("Story validation error: %s", text_type(exc)[:300])
             self.error = "Сценарий не прошёл проверку: " + text_type(exc)
         except (IOError, OSError):
-            self.log.exception("Save or disk I/O failed")
+            self.log.exception("Disk read/write error")
             self.error = "Не удалось прочитать или сохранить данные мода. Проверьте доступ к папке сохранений и свободное место."
         except Exception as exc:
             self.log.exception("DON-GEN task failed")
@@ -101,7 +102,7 @@ class Runtime(object):
             if detail:
                 self.error += " (" + detail[:600] + ")"
         finally:
-            self.log.info("Task finished: %s; error=%s", getattr(task, "__name__", "unknown"), bool(self.error))
+            self.log.info("Task finished: %s, error=%s", getattr(task, "__name__", "unknown"), bool(self.error))
             self.busy = False
 
     def login(self):
