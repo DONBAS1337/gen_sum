@@ -14,10 +14,12 @@ init 1001 python:
         state = dg_rpg.new_game(name, age, days, history, source, pronouns)
         dg_rpg.save(dg_rpg_root(), state)
         store.dg_rpg_state = state
+        logging.getLogger("don_gen").info("RPG created id=%s days=%s", state["id"], state["duration"])
         renpy.block_rollback()
 
     def dg_rpg_open(game_id):
         store.dg_rpg_state = dg_rpg.load(dg_rpg_root(), game_id)
+        logging.getLogger("don_gen").info("RPG opened id=%s", game_id)
         renpy.block_rollback()
 
     def dg_rpg_apply(action, arg=None):
@@ -32,6 +34,7 @@ init 1001 python:
             dg_rpg.activity(state, action)
         dg_rpg.save(dg_rpg_root(), state)
         store.dg_rpg_state = state
+        logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
 
     DG_RPG_SPRITE_HINTS = {
@@ -114,12 +117,14 @@ init 1001 python:
             u"Не выдумывай новые цифры характеристик, награды или местонахождение персонажей. "
             u"Верни только текст сцены без Markdown, программного кода и меню."
         )
+        logging.getLogger("don_gen").info("AI scene request npc=%s day=%d", who, state["day"])
         app.set_status(u"Создаём особую сцену…")
         story_text = app.client.generate(instructions, json.dumps(context, ensure_ascii=False),
                                          model=model, effort=dg_backend.DEFAULT_EFFORT,
                                          fast_mode=persistent.dg_fast_mode)
         dg_rpg.append_ai_scene(state, who, story_text)
         dg_rpg.save(dg_rpg_root(), state)
+        logging.getLogger("don_gen").info("AI scene committed npc=%s", who)
         return story_text
 
     def dg_rpg_art_generate(kind, key):
@@ -151,6 +156,7 @@ init 1001 python:
         else:
             raise ValueError("Unknown asset type")
         app = dg_runtime.app
+        logging.getLogger("don_gen").info("AI image request kind=%s key=%s", kind, key)
         app.set_status(u"Рисуем %s…" % (u"фон" if kind == "background" else u"спрайт"))
         data = app.client.generate_background(prompt,
                                               references=app.catalog.get("background_references") if kind == "background" else None,
@@ -294,6 +300,7 @@ screen dg_rpg_hub:
                 textbutton u"Заняться делом" style "dg_act" action Return(("activity", "practice"))
             textbutton u"Отдохнуть / пропустить время" style "dg_act" action Return(("activity", "rest"))
         textbutton u"Дневник, характеристики и руты" style "dg_act" action Return(("journal", None))
+        textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
         if not dg_rpg_state["finished"]:
             textbutton u"Создать фон локации (AI)" style "dg_act" action Return(("background", dg_rpg_state["place"]))
         textbutton u"Вернуться к выбору смены" style "dg_act" action Return(("exit", None))
@@ -432,6 +439,9 @@ label dg_rpg_loop:
         jump dg_rpg_picker_label
     if dg_rpg_cmd == "journal":
         call screen dg_rpg_journal
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "diag":
+        call screen dg_diagnostics
         jump dg_rpg_loop
     if dg_rpg_cmd == "map":
         call screen dg_rpg_map
