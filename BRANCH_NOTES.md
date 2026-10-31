@@ -1,31 +1,16 @@
-# gen-7dl-vanilla
+# DON-GEN (standalone)
 
-Экспериментальная ветка Generative Summer с выбором источника истории.
+This branch is now a **standalone game mod**, NOT a replacement patch for the Workshop Generative Summer mod.
 
-Сейчас работает:
+Install ONLY the `don_gen/` folder to `Everlasting Summer/game/mods/don_gen/`. This folder contains independent Ren'Py labels and Python module names prefixed `dg_`.
 
-- обычный vanilla-режим и старые истории;
-- профили `7dl:mi_7dl`, `7dl:mi_dj`, `7dl:mi_cl`;
-- автоматический поиск 7DL Complete Edition (`3266357374`) в той же Steam Workshop-библиотеке;
-- безопасный текстовый индексатор `.rpy`: код 7DL не исполняется;
-- релевантные сцены 7DL подмешиваются в prompt как справочный контекст;
-- прямые фоны 7DL из `Pics/bg` и `Pics/CE/bg`;
-- CG из `Pics/cg` и `Pics/CE/cg` (доступны как `scene cg ...`);
-- составные спрайты, реально используемые выбранным Miku-route: GS независимо собирает body + clothes + emotion + accessory из 7DL и vanilla-слоёв, не исполняя `7dl_sprites.rpy`;
-- музыка, ambience и sfx 7DL из активных `Sound` / `Sound/CE` каталогов;
-- существующая генерация новых фонов остаётся fallback-механизмом.
+Installation details: [README.md](README.md). RPG features: [RPG.md](RPG.md).
 
-Аудио 7DL получает отдельные ключи `sdl_music_*`, `sdl_ambience_*`, `sdl_sfx_*`, чтобы не конфликтовать с vanilla.
+- No `ready_replace/` or legacy `patches/` package remains in this branch.
+- Windows installer `install.ps1` copies the standalone folder, never overwrites other mods.
+- Unmodified vanilla `archive.rpa` provides base sprites/backgrounds; 7DL is optional.
+- RPG and AI generation data are isolated under `config.savedir/don_gen/`.
+- Logs: `don_gen.log`, `don_gen_worker.log`, optional `traces/*.json`.
+- Automatic Python checks run in GitHub Actions; in-game Ren'Py smoke testing is still necessary.
 
-Первый запуск 7DL-профиля строит локальный сюжетный индекс в `saves/generative_summer/_source_cache/7dl_index.json`.
-
-Также добавлены режимы source timeline:
-- `anchored` — generated-ветка ещё совместима с хронологией route, retrieval ограничивается соседними днями;
-- `divergent` — route уже изменён решениями игрока, исходные сцены используются как reference для речи/характеров/мира;
-- `post_source` — после 7-го дня исходная хронология больше не рассматривается как будущий сюжет.
-
-Состояние сохраняется в каждой generated-ноде как `source_state` (день + режим); старые 7DL-ноды мигрируют автоматически из текста memory.
-
-Следующий этап — smoke-test полного набора ресурсов в Ren'Py и точечные фиксы несовместимых/экзотических sprite/ATL случаев. Основные классы ресурсов (bg, CG, composite sprites, music, ambience, sfx) уже подключены.
-
-Sprite resolver теперь строит точную физическую карту слоёв отдельно для `normal`, `far` и `close` как `distance -> character -> pose -> token -> path`. Это не zoom одного спрайта: каждая дистанция использует собственные файлы. Для каждого конкретного слоя приоритет такой: точный слой 7DL на той же дистанции/позе -> точный vanilla-слой из приватного `gs_original` -> комбинация считается недоступной. Готовые vanilla image names по-прежнему имеют приоритет и не переопределяются 7DL.
+Base branch `gen-7dl-vanilla` is unchanged.
