@@ -49,6 +49,11 @@ NPCS = (
 )
 NPC_NAMES = dict((n[0], n[1]) for n in NPCS)
 MILESTONES = (10, 25, 45, 70)
+ROUTE_TITLES = { "sl": u"Общий труд", "dv": u"Вечер у сцены", "un": u"Тихая прогулка",
+                 "mi": u"Репетиция", "us": u"Спортивный спор", "mt": u"Серьёзный разговор",
+                 "cs": u"Визит в медпункт", "mz": u"Книжная находка", "el": u"Клубная идея",
+                 "sh": u"Эксперимент", "uv": u"Тайна леса" }
+QUESTS = (("friends", u"Знакомства", 3), ("help", u"Помощь лагерю", 3), ("explore", u"Исследователь", 5))
 ACTIONS = {
     "explore": (u"Осмотреться", 12, "curiosity", 2),
     "help": (u"Помочь в лагере", 17, "kindness", 3),
@@ -81,7 +86,8 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "place": "gate", "energy": 100, "stats": {"curiosity": 0, "kindness": 0, "skill": 0},
         "affinity": dict((npc[0], 0) for npc in NPCS),
         "met": [], "milestones": [], "journal": [], "event": u"Вы приехали в Совёнок. Впереди целая смена.",
-        "visits": {}, "finished": False, "ai_scenes": []
+        "visits": {}, "finished": False, "ai_scenes": [],
+        "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": []
     }
     return state
 
@@ -98,6 +104,9 @@ def validate(state):
         raise ValueError("Invalid camp day")
     if state["slot"] not in range(4):
         raise ValueError("Invalid time of day")
+    state.setdefault("activity_counts", {"help": 0, "explore": 0})
+    state.setdefault("quests_done", [])
+    state.setdefault("route_events_done", [])
     if len(state.get("journal", [])) > 500 or len(state.get("ai_scenes", [])) > 80:
         raise ValueError("Oversized save")
     return state
@@ -143,6 +152,57 @@ def _journal(state, message):
     state["journal"] = state["journal"][-250:]
 
 
+def quest_progress(state):
+    return [
+        ("friends", u"Знакомства", len(state["met"]), 3),
+        ("help", u"Помощь лагерю", state["activity_counts"].get("help", 0), 3),
+        ("explore", u"Исследовать места", len(state["visits"]), 5)
+    ]
+
+
+def _check_quests(state):
+    for key, title, done, goal in quest_progress(state):
+        if done >= goal and key not in state["quests_done"]:
+            state["quests_done"].append(key)
+            state["stats"]["kindness"] += 3
+            _journal(state, u"Задание выполнено: %s. Награда: +3 доброты." % title)
+
+
+def available_route_events(state, who):
+    if who not in NPC_NAMES:
+        return []
+    score = state["affinity"][who]
+    return [(level, ROUTE_TITLES[who]) for level in MILESTONES
+            if score >= level and who + ":" + str(level) not in state["route_events_done"]]
+
+
+def route_event(state, who, approach):
+    validate(state)
+    if state["finished"] or where_is(state, who) != state["place"]:
+        raise ValueError("Character not available")
+    options = available_route_events(state, who)
+    if not options or approach not in ("support", "honest", "leave"):
+        raise ValueError("No available route milestone")
+    if state["energy"] < 12:
+        _journal(state, u"Для личной встречи нужно немного сил. Отдохните.")
+        return state
+    level, title = options[0]
+    state["route_events_done"].append(who + ":" + str(level))
+    state["energy"] -= 12
+    if approach == "support":
+        state["affinity"][who] = min(100, state["affinity"][who] + 4)
+        conclusion = u"Вы поддержали собеседника."
+    elif approach == "honest":
+        state["stats"]["curiosity"] += 3
+        conclusion = u"Вы высказали свою позицию и узнали новое."
+    else:
+        conclusion = u"Вы предпочли сохранить дистанцию."
+    _journal(state, u"Рут %s, этап %d: %s. %s" %
+             (NPC_NAMES[who], level, title, conclusion))
+    _tick(state)
+    return state
+
+
 def _tick(state):
     state["slot"] += 1
     if state["slot"] >= 4:
@@ -162,6 +222,7 @@ def move(state, place):
         raise ValueError("Unknown destination")
     state["place"] = place
     state["visits"][place] = state["visits"].get(place, 0) + 1
+    _check_quests(state)
     _journal(state, u"Вы пришли: %s. Здесь сейчас: %s." %
              (PLACE_NAMES[place], u", ".join(n[1] for n in at_place(state)) or u"никого"))
     return state
@@ -192,6 +253,7 @@ def activity(state, action, who=None):
                 state["milestones"].append(key)
                 event += u" Открыта новая веха рута (%d очков)." % threshold
         _journal(state, event)
+        _check_quests(state)
         _tick(state)
         return state
     if action not in ACTIONS:
@@ -205,6 +267,9 @@ def activity(state, action, who=None):
     else:
         state["energy"] -= cost
         state["stats"][stat] += gain
+        if action in ("explore", "help"):
+            state["activity_counts"][action] = state["activity_counts"].get(action, 0) + 1
+    _check_quests(state)
     _journal(state, label + u" — " + PLACE_NAMES[state["place"]] + u".")
     _tick(state)
     return state
@@ -233,7 +298,9 @@ def summary_for_ai(state, who, intent):
         "speaker": NPC_NAMES[who], "affinity": state["affinity"][who],
         "relation": route_label(state["affinity"][who]), "player_action": intent,
         "recent_journal": state["journal"][-10:],
-        "recent_scenes": state["ai_scenes"][-3:]
+        "recent_scenes": state["ai_scenes"][-3:],
+        "route_milestones": available_route_events(state, who),
+        "completed_route_events": [v for v in state["route_events_done"] if v.startswith(who + ":")]
     }
 
 
