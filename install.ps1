@@ -24,9 +24,9 @@ New-Item -ItemType Directory -Path $Backup | Out-Null
 
 $targets = @(
     "gs_backend.py", "gs_runtime.py", "gs_text_worker.py", "gs_core.py",
-    "gs_source_7dl.py", "generative_summer.rpy",
+    "gs_source_7dl.py", "gs_rpg.py", "gs_rpg.rpy", "generative_summer.rpy",
     "gs_backend.pyo", "gs_runtime.pyo", "gs_core.pyo", "gs_source_7dl.pyo",
-    "generative_summer.rpyc"
+    "generative_summer.rpyc", "gs_rpg.pyo", "gs_rpg.rpyc"
 )
 
 foreach ($name in $targets) {
@@ -36,11 +36,11 @@ foreach ($name in $targets) {
     }
 }
 
-foreach ($name in @("gs_backend.py", "gs_runtime.py", "gs_text_worker.py", "gs_core.py", "gs_source_7dl.py", "generative_summer.rpy")) {
+foreach ($name in @("gs_backend.py", "gs_runtime.py", "gs_text_worker.py", "gs_core.py", "gs_source_7dl.py", "gs_rpg.py", "gs_rpg.rpy", "generative_summer.rpy")) {
     Copy-Item (Join-Path $Ready $name) (Join-Path $ModDir $name) -Force
 }
 
-foreach ($name in @("gs_backend.pyo", "gs_runtime.pyo", "gs_core.pyo", "gs_source_7dl.pyo", "generative_summer.rpyc")) {
+foreach ($name in @("gs_backend.pyo", "gs_runtime.pyo", "gs_core.pyo", "gs_source_7dl.pyo", "gs_rpg.pyo", "generative_summer.rpyc", "gs_rpg.rpyc")) {
     $path = Join-Path $ModDir $name
     if (Test-Path $path) {
         Remove-Item $path -Force
