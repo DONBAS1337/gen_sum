@@ -71,17 +71,19 @@ def _clean(value, maximum):
     return value
 
 
-def new_game(name, age, days, background=u"Обычный пионер", source="vanilla"):
+def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его"):
     name = _clean(name, 35)
     background = _clean(background, 120)
     age, days = int(age), int(days)
     if age < 14 or age > 80 or days < 1 or days > 120:
         raise ValueError("Age must be 14..80 and duration 1..120")
+    if pronouns not in (u"он/его", u"она/её", u"они/их"):
+        raise ValueError("Unknown pronouns")
     if source not in ("vanilla", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"):
         raise ValueError("Unknown world profile")
     state = {
         "version": 1, "id": uuid.uuid4().hex,
-        "hero": {"name": name, "age": age, "background": background},
+        "hero": {"name": name, "age": age, "background": background, "pronouns": pronouns},
         "source": source, "duration": days, "day": 1, "slot": 0,
         "place": "gate", "energy": 100, "stats": {"curiosity": 0, "kindness": 0, "skill": 0},
         "affinity": dict((npc[0], 0) for npc in NPCS),
@@ -98,6 +100,7 @@ def validate(state):
     if not re.match(r"^[a-f0-9]{32}$", state.get("id", "")):
         raise ValueError("Invalid save ID")
     _clean(state["hero"]["name"], 35)
+    state["hero"].setdefault("pronouns", u"он/его")
     if state["place"] not in PLACE_NAMES:
         raise ValueError("Invalid location")
     if not (1 <= int(state["day"]) <= int(state["duration"]) + 1):
