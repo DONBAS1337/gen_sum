@@ -302,3 +302,57 @@ def list_games(root):
         except (IOError, ValueError, KeyError, TypeError):
             continue
     return sorted(games, key=lambda g: g["id"])
+
+
+def asset_path(root, game_id, kind, key):
+    """Ren'Py-loadable path beneath the Generative Summer save search root."""
+    _path(root, game_id)
+    if kind == "background":
+        if key not in PLACE_NAMES:
+            raise ValueError("Unknown location")
+    elif kind == "sprite":
+        if key not in NPC_NAMES:
+            raise ValueError("Unknown character")
+    else:
+        raise ValueError("Unknown asset type")
+    return "_rpg/assets/%s/%s_%s.png" % (game_id, kind, key)
+
+
+def save_asset(root, game_id, kind, key, data):
+    """Publish a validated PNG; sprite assets need an alpha channel."""
+    import struct
+    relative = asset_path(root, game_id, kind, key)
+    if not isinstance(data, bytes) or len(data) < 100 or len(data) > 32 * 1024 * 1024:
+        raise ValueError("Invalid image data")
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        raise ValueError("Image service did not return PNG")
+    width, height = struct.unpack(">II", data[16:24])
+    if not (256 <= width <= 4096 and 256 <= height <= 4096):
+        raise ValueError("Unexpected image dimensions")
+    color_type = data[25] if isinstance(data[25], int) else ord(data[25])
+    if kind == "sprite" and color_type not in (4, 6):
+        raise ValueError("The sprite PNG has no alpha channel; retry generation")
+    target = os.path.join(root, *relative.split("/"))
+    folder = os.path.dirname(target)
+    if not os.path.isdir(folder):
+        try:
+            os.makedirs(folder)
+        except OSError:
+            if not os.path.isdir(folder):
+                raise
+    temporary = target + "." + uuid.uuid4().hex + ".tmp"
+    try:
+        with open(temporary, "wb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        if os.name == "nt":
+            import ctypes
+            if not ctypes.windll.kernel32.MoveFileExW(text_type(temporary), text_type(target), 9):
+                raise OSError("Could not publish generated image")
+        else:
+            os.rename(temporary, target)
+    finally:
+        if os.path.isfile(temporary):
+            os.unlink(temporary)
+    return relative
