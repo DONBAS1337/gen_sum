@@ -1120,6 +1120,20 @@ label dg_choose:
     jump dg_fetch
 
 init 1002 python:
+    def dg_trace_enabled():
+        return os.path.isfile(os.path.join(config.savedir, "don_gen", "trace.enabled"))
+
+    def dg_toggle_trace():
+        path = os.path.join(config.savedir, "don_gen", "trace.enabled")
+        if os.path.isfile(path):
+            os.remove(path)
+            dg_runtime.app.log.info("Detailed generation trace disabled")
+        else:
+            with open(path, "wb") as output:
+                output.write(b"enabled")
+            dg_runtime.app.log.warning("Detailed generation trace enabled; inspect for sensitive story text before sharing")
+        renpy.restart_interaction()
+
     def dg_diagnostics_paths():
         root = os.path.join(config.savedir, "don_gen")
         game = os.path.abspath(os.path.join(config.gamedir, ".."))
@@ -1138,7 +1152,8 @@ screen dg_diagnostics:
     add Solid("#0c1c28")
     use dg_chrome(u"ДИАГНОСТИКА", Return())
     text u"DON-GEN · диагностика" style "dg_title" xpos 120 ypos 135 size 68
-    text u"Автоматические логи действий и ошибок; расширенная трассировка генерации отключена по умолчанию." style "dg_sub" xpos 120 ypos 237 size 26
+    text u"Автоматические логи действий и ошибок; расширенные трейсы — по желанию." style "dg_sub" xpos 120 ypos 237 size 26
+    textbutton (u"Подробный трейс генерации: ВКЛ" if dg_trace_enabled() else u"Подробный трейс генерации: ВЫКЛ") style "dg_act" xpos 930 ypos 225 action Function(dg_toggle_trace)
     frame:
         background DG_PAPER
         padding (40, 30)
