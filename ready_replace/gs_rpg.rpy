@@ -9,8 +9,8 @@ init 1001 python:
     def gs_rpg_root():
         return gs_runtime.app.library.root
 
-    def gs_rpg_start(name, age, days, history, source):
-        state = gs_rpg.new_game(name, age, days, history, source)
+    def gs_rpg_start(name, age, days, history, source, pronouns):
+        state = gs_rpg.new_game(name, age, days, history, source, pronouns)
         gs_rpg.save(gs_rpg_root(), state)
         store.gs_rpg_state = state
         renpy.block_rollback()
@@ -180,7 +180,7 @@ screen gs_rpg_picker:
                     vbox:
                         spacing 12
                         for game in gs_rpg.list_games(gs_rpg_root()):
-                            textbutton (u"%s · день %d/%d%s" % (game["name"], game["day"], game["duration"], u" · завершена" if game["finished"] else u"")) style "gs_row" action Return(("load", game["id"]))
+                            textbutton gs_literal(u"%s · день %d/%d%s" % (game["name"], game["day"], game["duration"], u" · завершена" if game["finished"] else u"")) style "gs_row" action Return(("load", game["id"]))
             vbox:
                 spacing 20
                 textbutton u"Создать персонажа" style "gs_primary" action Return(("new", None))
@@ -193,6 +193,7 @@ screen gs_rpg_setup:
     default days = "14"
     default history = u"Новичок в лагере"
     default source = "vanilla"
+    default pronouns = u"он/его"
     add Solid("#152c34")
     use gs_chrome(u"СОЗДАНИЕ ПЕРСОНАЖА", Return(None))
     text u"Ваша история начинается здесь" style "gs_title" xpos 120 ypos 135 size 68
@@ -223,12 +224,19 @@ screen gs_rpg_setup:
                     textbutton u"Оригинальный Совёнок" style "gs_ink_act" action SetScreenVariable("source", "vanilla") selected source == "vanilla"
                     if gs_detect_7dl_root():
                         textbutton u"7ДЛ · Мику" style "gs_ink_act" action SetScreenVariable("source", "7dl:mi_7dl") selected source == "7dl:mi_7dl"
+                        textbutton u"7ДЛ · DJ" style "gs_ink_act" action SetScreenVariable("source", "7dl:mi_dj") selected source == "7dl:mi_dj"
+                        textbutton u"7ДЛ · Классика" style "gs_ink_act" action SetScreenVariable("source", "7dl:mi_cl") selected source == "7dl:mi_cl"
+            text u"ОБРАЩЕНИЕ" style "gs_ink_label"
+            hbox:
+                spacing 26
+                for choice in (u"он/его", u"она/её", u"они/их"):
+                    textbutton choice style "gs_ink_act" selected pronouns == choice action SetScreenVariable("pronouns", choice)
             null height 6
             text u"В этом режиме возраст и имя задаются игроком. Персонажи остаются в рамках своего характера, а сюжетная генерация доступна отдельно." style "gs_ink_small" size 22
             $ valid = bool(name.strip() and history.strip() and age.isdigit() and days.isdigit() and 14 <= int(age) <= 80 and 1 <= int(days) <= 120)
             hbox:
                 spacing 34
-                textbutton u"Начать смену" style "gs_ink_act" sensitive valid action Return((name.strip(), age, days, history.strip(), source))
+                textbutton u"Начать смену" style "gs_ink_act" sensitive valid action Return((name.strip(), age, days, history.strip(), source, pronouns))
                 textbutton u"Отмена" style "gs_ink_act" action Return(None)
 
 screen gs_rpg_map:
@@ -265,7 +273,7 @@ screen gs_rpg_hub:
     vbox:
         xpos 100 ypos 135 spacing 12 xsize 920
         text gs_rpg.camp_time(gs_rpg_state) style "gs_title" size 59
-        text (u"%s, %d лет · %s" % (gs_rpg_state["hero"]["name"], gs_rpg_state["hero"]["age"], gs_rpg_state["hero"]["background"])) style "gs_sub" size 28
+        text gs_literal(u"%s, %d лет · %s" % (gs_rpg_state["hero"]["name"], gs_rpg_state["hero"]["age"], gs_rpg_state["hero"]["background"])) style "gs_sub" size 28
         text (u"Энергия: %d/100   ·   Любознательность: %d   ·   Доброта: %d   ·   Навык: %d" %
               (gs_rpg_state["energy"], gs_rpg_state["stats"]["curiosity"], gs_rpg_state["stats"]["kindness"], gs_rpg_state["stats"]["skill"])) style "gs_small"
         null height 5
@@ -410,8 +418,8 @@ label gs_rpg_picker_label:
         call screen gs_rpg_setup
         if not _return:
             jump gs_rpg_picker_label
-        $ gs_rpg_name, gs_rpg_age, gs_rpg_days, gs_rpg_history, gs_rpg_source = _return
-        $ gs_rpg_start(gs_rpg_name, gs_rpg_age, gs_rpg_days, gs_rpg_history, gs_rpg_source)
+        $ gs_rpg_name, gs_rpg_age, gs_rpg_days, gs_rpg_history, gs_rpg_source, gs_rpg_pronouns = _return
+        $ gs_rpg_start(gs_rpg_name, gs_rpg_age, gs_rpg_days, gs_rpg_history, gs_rpg_source, gs_rpg_pronouns)
     else:
         $ gs_rpg_open(gs_rpg_value)
     jump gs_rpg_loop
