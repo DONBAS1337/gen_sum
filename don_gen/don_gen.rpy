@@ -162,16 +162,14 @@ init 1000 python:
         return u"ПРОШЛО  %d:%02d" % divmod(seconds, 60)
 
     def dg_detect_7dl_root():
-        # Optional 7DL: standalone DON-GEN works with vanilla archive.rpa alone.
-        # The Workshop profile is resolved relative to the game's steamapps tree,
-        # or overridden explicitly when 7DL lives on another library drive.
-        game_root = os.path.abspath(config.gamedir)
-        steamapps = os.path.abspath(os.path.join(game_root, "..", "..", ".."))
+        # DON-GEN uses the vanilla archive, 7DL is an optional external source.
+        game_dir = os.path.abspath(config.gamedir)
+        steamapps = os.path.abspath(os.path.join(game_dir, "..", "..", ".."))
         candidates = [
             os.environ.get("DON_GEN_7DL_ROOT"),
             os.path.join(steamapps, "workshop", "content", "331470", "3266357374"),
-            os.path.join(game_root, "mods", "7dl"),
-            os.path.join(game_root, "mods", "7dl_ce")
+            os.path.join(game_dir, "mods", "7dl"),
+            os.path.join(game_dir, "mods", "7dl_ce")
         ]
         for candidate in candidates:
             if candidate and os.path.isdir(os.path.join(candidate, "scenario_alt")):
@@ -669,6 +667,7 @@ screen dg_home():
                 textbutton u"Открытый мир · RPG" style "dg_act" action Return(("rpg", None))
                 null height 14
                 textbutton u"Настройки" style "dg_act" action Return(("settings", None))
+                textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diagnostics", None))
                 textbutton u"Сохранения игры" style "dg_act" action ShowMenu("load")
                 textbutton u"Выйти" style "dg_act" action Return(("exit", None))
     if dg_runtime.app.library.list_warnings:
@@ -1010,8 +1009,11 @@ label dg_menu:
         return
     if dg_action == "rpg":
         jump dg_rpg_main
+    if dg_action == "diagnostics":
+        call screen dg_diagnostics
+        jump dg_menu
     if dg_action == "settings":
-        jump dg_settindg_label
+        jump dg_settings_label
     if dg_action == "new":
         if not dg_runtime.app.client.authenticated():
             call dg_connect
@@ -1040,7 +1042,7 @@ label dg_menu:
     stop ambience
     jump dg_fetch
 
-label dg_settindg_label:
+label dg_settings_label:
     $ dg_place("hall")
     if dg_runtime.app.client.authenticated() and not dg_runtime.app.models:
         $ dg_run("quick", dg_runtime.app.refresh_models)
@@ -1049,18 +1051,18 @@ label dg_settindg_label:
     call screen dg_settings
     if _return == "login":
         call dg_connect
-        jump dg_settindg_label
+        jump dg_settings_label
     if _return == "logout":
         $ dg_run("quick", dg_runtime.app.client.logout)
         $ dg_runtime.app.models = []
         if dg_runtime.app.error:
             call screen dg_error
-        jump dg_settindg_label
+        jump dg_settings_label
     if _return == "refresh":
         $ dg_run("quick", dg_runtime.app.refresh_models)
         if dg_runtime.app.error:
             call screen dg_error
-        jump dg_settindg_label
+        jump dg_settings_label
     jump dg_menu
 
 label dg_fetch:
@@ -1116,3 +1118,40 @@ label dg_choose:
         $ dg_choice_index = None
     $ dg_parent_id = dg_node["id"]
     jump dg_fetch
+
+init 1002 python:
+    def dg_diagnostics_paths():
+        root = os.path.join(config.savedir, "don_gen")
+        game = os.path.abspath(os.path.join(config.gamedir, ".."))
+        return [
+            (u"Логи и сохранения DON-GEN", root),
+            (u"Журнал запуска / действий", os.path.join(root, "don_gen.log")),
+            (u"Журнал генератора", os.path.join(root, "don_gen_worker.log")),
+            (u"RPG-сохранения", os.path.join(root, "_rpg")),
+            (u"Расширенные трассы глав (при включении)", os.path.join(root, "traces")),
+            (u"Ren'Py traceback.txt (возможный путь)", os.path.join(game, "traceback.txt")),
+            (u"Ren'Py log.txt (возможный путь)", os.path.join(game, "log.txt")),
+        ]
+
+screen dg_diagnostics:
+    modal True
+    add Solid("#0c1c28")
+    use dg_chrome(u"ДИАГНОСТИКА", Return())
+    text u"DON-GEN · диагностика" style "dg_title" xpos 120 ypos 135 size 68
+    text u"Автоматические логи действий и ошибок; расширенная трассировка генерации отключена по умолчанию." style "dg_sub" xpos 120 ypos 237 size 26
+    frame:
+        background DG_PAPER
+        padding (40, 30)
+        xpos 110 ypos 305 xsize 1700 ysize 575
+        viewport:
+            mousewheel True
+            scrollbars "vertical"
+            ysize 495
+            vbox:
+                spacing 11
+                for label, path in dg_diagnostics_paths():
+                    text label style "dg_ink_label"
+                    text dg_literal(path) style "dg_ink_small" size 24 xmaximum 1540
+                null height 10
+                text (u"Последняя ошибка: " + dg_literal(dg_runtime.app.error or u"нет")) style "dg_ink_small" size 24
+    text u"При краше: traceback.txt + don_gen.log. При ошибках генерации: don_gen_worker.log." style "dg_small" xpos 140 ypos 915
