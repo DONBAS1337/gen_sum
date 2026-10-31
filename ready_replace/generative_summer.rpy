@@ -605,6 +605,7 @@ screen gs_login():
         textbutton u"Войти через ChatGPT" style "gs_primary" xalign 0.5 action Return("login")
         if gs_runtime.app.stories:
             textbutton u"Читать сохранённые истории" style "gs_act" xalign 0.5 action Return("offline")
+        textbutton u"Открыть RPG без входа" style "gs_act" xalign 0.5 action Return("offline")
         null height 6
         text u"Вход откроется в браузере. Завязка и текст истории отправляются в ChatGPT и расходуют лимиты вашего аккаунта." style "gs_small" xmaximum 860 text_align 0.5 xalign 0.5
     use gs_narrator(u"Чтобы начать, подключите аккаунт ChatGPT. Отдельный ключ API и другие программы не нужны.")
