@@ -1,0 +1,21 @@
+name: RPG engine tests
+on:
+  push:
+    branches: [feature/camp-sandbox-rpg]
+  pull_request:
+    paths:
+      - "ready_replace/gs_rpg.py"
+      - "tests/**"
+      - ".github/workflows/rpg-tests.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile Python modules
+        run: python -m compileall -q ready_replace
+      - name: Offline RPG state and image tests
+        run: python -m unittest discover -s tests -v
