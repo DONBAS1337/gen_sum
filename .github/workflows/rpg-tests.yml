@@ -1,11 +1,12 @@
-name: RPG engine tests
+name: DON-GEN standalone mod checks
 on:
   push:
     branches: [feature/camp-sandbox-rpg]
   pull_request:
     paths:
-      - "ready_replace/gs_rpg.py"
+      - "don_gen/**"
       - "tests/**"
+      - "install.ps1"
       - ".github/workflows/rpg-tests.yml"
 jobs:
   test:
@@ -15,7 +16,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Compile Python modules
-        run: python -m compileall -q ready_replace
-      - name: Offline RPG state and image tests
-        run: python -m unittest discover -s tests -v
+      - name: Compile all standalone Python modules
+        run: python -m compileall -q don_gen
+      - name: Test DON-GEN core and standalone layout
+        run: python -m unittest discover -s tests -p 'test_don_gen.py' -v
+      - name: Verify no legacy imports in standalone package
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for path in Path("don_gen").glob("*"):
+              if path.suffix not in (".py", ".rpy"):
+                  continue
+              content = path.read_text(encoding="utf-8")
+              for forbidden in (r"\bgs_", r"\bGS_", "mods/generative_summer", "ready_replace"):
+                  assert not re.search(forbidden, content), (path, forbidden)
+          print("Standalone namespace / dependencies: OK")
+          PY
