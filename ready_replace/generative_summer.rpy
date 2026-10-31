@@ -656,6 +656,7 @@ screen gs_home():
                 xsize 552
                 spacing 18
                 textbutton u"Начать новую историю" style "gs_primary" action Return(("new", None))
+                textbutton u"Открытый мир · RPG" style "gs_act" action Return(("rpg", None))
                 null height 14
                 textbutton u"Настройки" style "gs_act" action Return(("settings", None))
                 textbutton u"Сохранения игры" style "gs_act" action ShowMenu("load")
@@ -997,6 +998,8 @@ label gs_menu:
         hide screen gs_scene
         $ gs_current = None
         return
+    if gs_action == "rpg":
+        jump gs_rpg_main
     if gs_action == "settings":
         jump gs_settings_label
     if gs_action == "new":
