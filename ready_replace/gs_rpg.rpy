@@ -24,6 +24,8 @@ init 1001 python:
             gs_rpg.move(state, arg)
         elif action == "talk":
             gs_rpg.activity(state, "talk", arg)
+        elif action == "route":
+            gs_rpg.route_event(state, arg[0], arg[1])
         else:
             gs_rpg.activity(state, action)
         gs_rpg.save(gs_rpg_root(), state)
@@ -225,6 +227,11 @@ screen gs_rpg_hub:
     modal True
     add gs_rpg_bg()
     add Solid("#051014b0")
+    $ nearby_sprites = gs_rpg.at_place(gs_rpg_state)
+    if nearby_sprites:
+        $ portrait = gs_rpg_sprite(nearby_sprites[0][0])
+        if portrait is not None:
+            add portrait at gs_rpg_portrait_transform xpos 1000 ypos 160
     use gs_chrome(gs_rpg.PLACE_NAMES[gs_rpg_state["place"]])
     vbox:
         xpos 100 ypos 135 spacing 12 xsize 920
@@ -275,6 +282,8 @@ screen gs_rpg_hub:
                                 textbutton u"Поговорить" style "gs_navlink" action Return(("talk", who)) sensitive not gs_rpg_state["finished"]
                                 textbutton u"AI-сцена" style "gs_navlink" action Return(("ai", who)) sensitive not gs_rpg_state["finished"]
                                 textbutton u"Спрайт" style "gs_navlink" action Return(("sprite", who)) sensitive not gs_rpg_state["finished"]
+                            if gs_rpg.available_route_events(gs_rpg_state, who) and not gs_rpg_state["finished"]:
+                                textbutton u"Сюжетный этап рута" style "gs_navlink" action Return(("route", who))
             text u"Разговоры и активности меняют время и отношения локально. AI-сцены вызываются только вручную." style "gs_small" size 23
 
 screen gs_rpg_journal:
@@ -305,6 +314,30 @@ screen gs_rpg_journal:
                     spacing 13
                     for who, name in sorted(gs_rpg.NPC_NAMES.items()):
                         text (u"%s: %d/100 · %s" % (name, gs_rpg_state["affinity"][who], gs_rpg.route_label(gs_rpg_state["affinity"][who]))) style "gs_text" size 26
+                    null height 25
+                    text u"ЗАДАНИЯ" style "gs_meta"
+                    for key, title, progress, goal in gs_rpg.quest_progress(gs_rpg_state):
+                        text (u"%s: %d/%d%s" % (title, min(progress, goal), goal, u" ✓" if key in gs_rpg_state["quests_done"] else u"")) style "gs_text" size 25
+
+screen gs_rpg_route_choice(who):
+    modal True
+    add Solid("#0c1823ed")
+    frame:
+        background GS_PAPER padding (55, 45)
+        align (0.5, 0.5) xsize 1100
+        vbox:
+            spacing 24
+            text (u"Сюжетный этап: " + gs_rpg.NPC_NAMES[who]) style "gs_ink_title"
+            $ stage = gs_rpg.available_route_events(gs_rpg_state, who)[0]
+            text (u"%s · порог %d очков" % (stage[1], stage[0])) style "gs_ink_small"
+            textbutton u"Поддержать персонажа" style "gs_ink_act" action Return("support")
+            textbutton u"Высказать свою точку зрения" style "gs_ink_act" action Return("honest")
+            textbutton u"Сохранить дистанцию" style "gs_ink_act" action Return("leave")
+            textbutton u"Не сейчас" style "gs_ink_act" action Return(None)
+
+transform gs_rpg_portrait_transform:
+    zoom 0.56
+    alpha 0.7
 
 screen gs_rpg_ai_input(who):
     modal True
@@ -372,6 +405,12 @@ label gs_rpg_loop:
         jump gs_rpg_loop
     if gs_rpg_cmd == "talk":
         $ gs_rpg_apply("talk", gs_rpg_value)
+        jump gs_rpg_loop
+    if gs_rpg_cmd == "route":
+        $ gs_rpg_focus = gs_rpg_value
+        call screen gs_rpg_route_choice(gs_rpg_focus)
+        if _return:
+            $ gs_rpg_apply("route", (gs_rpg_focus, _return))
         jump gs_rpg_loop
     if gs_rpg_cmd == "ai":
         if not gs_runtime.app.client.authenticated():
