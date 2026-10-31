@@ -375,7 +375,7 @@ def list_games(root):
 
 
 def asset_path(root, game_id, kind, key):
-    """Ren'Py-loadable path beneath the Generative Summer save search root."""
+    """Ren'Py-loadable path beneath the DON-GEN save search root."""
     _path(root, game_id)
     if kind == "background":
         if key not in PLACE_NAMES:
