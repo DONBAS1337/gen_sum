@@ -2,6 +2,7 @@
 # RPG sandbox. Loaded alongside generative_summer.rpy; does not change classic stories.
 init 1001 python:
     import json
+    import os
     import gs_rpg
     import gs_backend
 
@@ -31,6 +32,20 @@ init 1001 python:
         gs_rpg.save(gs_rpg_root(), state)
         store.gs_rpg_state = state
         renpy.block_rollback()
+
+    GS_RPG_SPRITE_HINTS = {
+        "sl": u"blonde girl, long braids, blue eyes, red pioneer neckerchief",
+        "dv": u"red-haired girl, short unruly hair, amber eyes, mischievous expression",
+        "un": u"shy violet-haired girl, thoughtful expression",
+        "mi": u"Japanese girl, very long turquoise twin tails, gentle smile",
+        "us": u"short red-haired energetic girl",
+        "mt": u"adult counselor, long brown hair, confident expression",
+        "cs": u"adult nurse, short violet hair, white medical coat",
+        "mz": u"short dark hair, glasses, reserved expression",
+        "el": u"light-haired boy with glasses, cheerful expression",
+        "sh": u"dark-haired boy with glasses, curious expression",
+        "uv": u"mysterious cat-eared girl, long lilac hair"
+    }
 
     GS_RPG_BG = {
         "square": "bg ext_square_day",
@@ -73,6 +88,19 @@ init 1001 python:
         state = gs_rpg.load(gs_rpg_root(), gs_rpg_state["id"])
         context = gs_rpg.summary_for_ai(state, who, intent)
         app = gs_runtime.app
+        if state["source"].startswith("7dl:"):
+            root = (app.catalog.get("source_roots") or {}).get("7dl")
+            if root and os.path.isdir(root):
+                try:
+                    import gs_source_7dl
+                    context["source_reference"] = gs_source_7dl.source_context(
+                        root, os.path.join(gs_rpg_root(), "_source_cache"),
+                        state["source"].split(":", 1)[1],
+                        gs_rpg.NPC_NAMES[who] + u" " + intent,
+                        mode="divergent", day=min(state["day"], 7),
+                        limit=3, max_chars=7000)
+                except (IOError, OSError, ValueError, TypeError):
+                    pass
         if not app.models:
             app.refresh_models()
         model = gs_backend.default_model(app.models, persistent.gs_model)
@@ -113,6 +141,7 @@ init 1001 python:
             prompt = (
                 u"FULL BODY character sprite for a 2D anime visual novel in the hand-drawn "
                 u"Everlasting Summer summer camp style. Character: " + label + u". "
+                u"Appearance: " + GS_RPG_SPRITE_HINTS.get(key, u"expressive anime features") + u". "
                 u"Recognizable consistent hair, face and pioneer outfit, neutral standing pose, "
                 u"single centered character, clear outline, fully visible head and feet, "
                 u"NO scenery, NO props, NO text, transparent alpha background."
