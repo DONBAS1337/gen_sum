@@ -835,10 +835,10 @@ class Client(object):
                 raise ClientError("Аккаунт не вернул доступных моделей Codex.")
             return self._models
 
-    def generate_background(self, prompt, references=None, trace=None):
+    def generate_background(self, prompt, references=None, trace=None, transparent=False):
         """Same subscription/auth as Codex's standalone Images client, no API key."""
-        body = {"model": IMAGE_MODEL, "prompt": prompt, "size": "2048x1152",
-                "quality": "medium", "background": "opaque", "n": 1}
+        body = {"model": IMAGE_MODEL, "prompt": prompt, "size": "1024x1536" if transparent else "2048x1152",
+                "quality": "medium", "background": "transparent" if transparent else "opaque", "n": 1}
         path = "/images/edits" if references else "/images/generations"
         if references:
             body["images"] = [{"image_url": value} for value in references]
