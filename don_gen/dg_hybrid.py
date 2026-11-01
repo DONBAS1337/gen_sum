@@ -129,6 +129,13 @@ def _simulate(state, action, mode, who):
         return shadow, result
     if mode == "npc":
         return shadow, _neutral_talk(shadow, action, who)
+    # Obvious fantasy/physics-breaking actions must not silently succeed in
+    # the grounded summer-camp simulation.
+    if any(part in action.lower() for part in
+           (u"телепорт",u"портал в другой мир",u"магией создать",u"полететь на луну")):
+        return shadow, {"status":"unknown",
+                        "text":u"Такое действие невозможно в рамках текущего лагеря. "
+                               u"Опиши реальный поступок или реплику."}
     result=dg_rpg.free_action(shadow,action)
     # If the local parser doesn't understand the verb, let the player speak,
     # gesture, observe or roleplay safely with no artificial state benefits.
