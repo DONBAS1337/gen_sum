@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import threading
 import json
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 import subprocess
 import sys
@@ -28,8 +27,47 @@ except NameError:
     text_type = str
 
 
+class _DgSafeRotatingHandler(logging.Handler):
+    """Tiny UTF-8 rolling file handler that needs NO logging.handlers package.
+
+    Ren'Py 7.4.11 / Everlasting Summer may ship a stripped logging package.
+    Open per message so it works with the game Python and child Python 3.
+    """
+
+    def __init__(self, filename, max_bytes=2 * 1024 * 1024, backups=3):
+        logging.Handler.__init__(self)
+        self.filename = filename
+        self.max_bytes = max_bytes
+        self.backups = backups
+
+    def _rotate(self):
+        oldest = self.filename + "." + str(self.backups)
+        if os.path.isfile(oldest):
+            os.remove(oldest)
+        for number in range(self.backups - 1, 0, -1):
+            source = self.filename + "." + str(number)
+            if os.path.isfile(source):
+                os.rename(source, self.filename + "." + str(number + 1))
+        if os.path.isfile(self.filename):
+            os.rename(self.filename, self.filename + ".1")
+
+    def emit(self, record):
+        try:
+            message = self.format(record)
+            if not isinstance(message, text_type):
+                message = message.decode("utf-8", "replace")
+            encoded = (message + u"\n").encode("utf-8", "replace")
+            if os.path.isfile(self.filename) and (
+                    os.path.getsize(self.filename) + len(encoded) > self.max_bytes):
+                self._rotate()
+            with open(self.filename, "ab") as output:
+                output.write(encoded)
+        except (IOError, OSError, UnicodeError, ValueError):
+            self.handleError(record)
+
+
 def setup_diagnostics(directory):
-    """Bounded logs with action/error metadata, without full prompts or tokens."""
+    """Bounded action/error logs without dumping entire prompts or access tokens."""
     logger = logging.getLogger("don_gen")
     if getattr(logger, "_don_gen_setup", False):
         return logger
@@ -40,8 +78,7 @@ def setup_diagnostics(directory):
             if not os.path.isdir(directory):
                 raise
     name = "don_gen_worker.log" if __name__ == "__main__" else "don_gen.log"
-    handler = RotatingFileHandler(os.path.join(directory, name),
-                                  maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    handler = _DgSafeRotatingHandler(os.path.join(directory, name))
     handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -49,7 +86,6 @@ def setup_diagnostics(directory):
     logger._don_gen_setup = True
     logger.info("DON-GEN started: Python %s", sys.version.split()[0])
     return logger
-
 
 class Runtime(object):
     def __init__(self, directory, catalog):
