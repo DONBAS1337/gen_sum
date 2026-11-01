@@ -1833,8 +1833,7 @@ label dg_rpg_cg_label:
         if not dg_art.marker(dg_rpg_state,dg_cg_plan):
             jump dg_rpg_loop
         if dg_cg_plan["kind"] == "cg18" and getattr(persistent,"dg_rpg_art_provider","cloud") != "comfy":
-            $ dg_runtime.app.error = u"CG 18+ можно создавать только локально через ComfyUI."
-            call screen dg_error
+            call screen dg_rpg_artist_settings
             jump dg_rpg_cg_label
         if getattr(persistent,"dg_rpg_art_provider","cloud") != "comfy":
             if not dg_runtime.app.client.authenticated():
