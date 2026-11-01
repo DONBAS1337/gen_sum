@@ -172,6 +172,22 @@ def unicode_value(value):
         return str(value)
 
 
+
+WEATHER = (
+    ("sun", u"Ясное утро", u"Солнечный свет лежит на дорожках лагеря."),
+    ("sun", u"Тёплый день", u"На площадке шумно, в тени слышны голоса ребят."),
+    ("breeze", u"Ветер с озера", u"Ветер шелестит листьями и мешает репетициям под открытым небом."),
+    ("rain", u"Летний дождь", u"Внезапный дождь загоняет ребят под крыши, планы на прогулки меняются."),
+    ("heat", u"Жара", u"Солнце сильно греет: многие выбирают пляж вместо спортплощадки."),
+    ("cloud", u"Облачный день", u"Лагерь на время затихает, но воздух остаётся тёплым."),
+    ("sun", u"Спокойное лето", u"После шумного утра лагерь живёт привычной жизнью."),
+)
+
+
+def weather(state):
+    return WEATHER[_seed(state["id"], state["day"], "weather") % len(WEATHER)]
+
+
 def ensure(state):
     world = state.setdefault("world", {})
     for name in ("morale", "knowledge", "freedom", "resources"):
@@ -278,7 +294,7 @@ def make_event(state):
             hero["name"], hero["age"], hero["background"])
     if state.get("source", "vanilla").startswith("7dl:"):
         hero_intro += u" В этой смене отношения с Мику развиваются в варианте 7ДЛ."
-    event["story"] = hero_intro + u"\n\n" + event["story"]
+    event["story"] = hero_intro + u"\n\nПогода: " + weather(state)[1] + u". " + weather(state)[2] + u"\n\n" + event["story"]
     # Player skills unlock a fourth way to resolve world events.
     if state["stats"]["skill"] >= 12 or state["stats"]["curiosity"] >= 12:
         event["choices"].append({"key": "specialist", "text": u"Использовать свои навыки и найти компромисс",
@@ -425,6 +441,7 @@ def story_status(state, arc):
 def world_report(state):
     world = ensure(state)
     return {
+        "weather": weather(state)[1],
         "morale": world["morale"], "knowledge": world["knowledge"],
         "freedom": world["freedom"], "resources": world["resources"],
         "tracks": [(PLOTS[key]["name"], story_status(state, key)) for key in PLOT_ORDER],
