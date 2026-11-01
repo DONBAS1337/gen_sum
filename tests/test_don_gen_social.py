@@ -32,6 +32,18 @@ class SocialSandboxTests(unittest.TestCase):
             self.assertGreater(len(data["text"]),55)
             self.assertEqual(len(data["choices"]),3)
 
+    def test_personal_story_and_dialogue_remember_previous_choice(self):
+        import dg_dialogue
+        st=self.state
+        st["affinity"]["mi"]=55
+        first=dg_social.personal_scene(st,"mi")
+        self.assertNotIn(u"Твои прежние",first["text"])
+        dg_social.resolve_personal(st,"mi","question")
+        second=dg_social.personal_scene(st,"mi")
+        self.assertIn(u"прежние прямые вопросы",second["text"])
+        common=dg_dialogue.opening(st,"mi")
+        self.assertIn(u"вопрос не выходил из головы",common["text"])
+
     def test_personal_arc_works_through_rpg_and_unlocks_plots(self):
         self.state["social"]["incident"]["status"]="resolved"
         st=self.state
