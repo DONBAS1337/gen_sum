@@ -319,7 +319,7 @@ def parse(text):
             text = text.decode("utf-8")
         except (AttributeError, UnicodeError):
             return None
-    text = text.strip()[:180]
+    text = text.strip()[:4000]
     if len(text) < 5:
         return None
     lowered = text.lower()
