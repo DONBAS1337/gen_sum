@@ -123,7 +123,11 @@ init 1001 python:
         try:
             plan = dg_hybrid.preview(current, action, mode, who, topic)
         except (ValueError, TypeError, UnicodeError) as exc:
-            plan = {"status":"unknown","mode":mode,"message":unicode(exc),
+            try:
+                readable_error = unicode(exc)
+            except UnicodeError:
+                readable_error = u"Невозможно обработать ввод. Попробуй другую формулировку."
+            plan = {"status":"unknown","mode":mode,"message":readable_error,
                     "action":u"","who":who,"topic":topic}
         # Always publish a preview, including rejections. Follow-up screens
         # must never access an undefined store variable after invalid input.
@@ -537,12 +541,12 @@ screen dg_rpg_edit_field(field, current):
     add Solid("#07131cf5")
     frame:
         background Solid("#183744fc")
-        padding (46, 34)
+        padding (42, 24)
         align (0.5, 0.5)
         xsize 1440
-        ysize (880 if field == "history" else 680)
+        ysize (945 if field == "history" else 680)
         vbox:
-            spacing 19
+            spacing 13
             text u"DON-GEN  /  РЕДАКТОР ПЕРСОНАЖА" style "dg_meta" size 24
             text title style "dg_title" size 58 color "#ffe3aa"
             text tip style "dg_text" size 27 xmaximum 1280
@@ -586,11 +590,11 @@ screen dg_rpg_edit_field(field, current):
                 frame:
                     background Solid("#081e29")
                     padding (22, 19)
-                    xsize 1310 ysize (dg_rpg_preview_height(editor_text, 195, 365, 155, 55, 26))
+                    xsize 1310 ysize (dg_rpg_preview_height(editor_text, 175, 300, 150, 55, 24))
                     viewport:
                         mousewheel True
                         scrollbars "vertical"
-                        ysize (dg_rpg_preview_height(editor_text, 155, 325, 115, 55, 26))
+                        ysize (dg_rpg_preview_height(editor_text, 135, 260, 110, 55, 24))
                         text dg_literal(editor_text if editor_text else u"Начни вводить историю — здесь появится читаемый перенос текста.") style "dg_text" size 29 xmaximum 1195
             else:
                 text (u"Введено символов: %d" % len(editor_text)) style "dg_text" size 23
@@ -1824,7 +1828,7 @@ label dg_rpg_loop:
                 $ dg_rpg_apply("move", dg_contract_id)
         jump dg_rpg_loop
     if dg_rpg_cmd == "incident":
-        if dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"]):
+        if dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"]) and dg_rpg_state["energy"] >= 9:
             $ dg_incident_current = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
             $ dg_rpg_incident_choices = list(dg_social.INCIDENT_CHOICES) + [("__cancel__", u"Не вмешиваться сейчас")]
             call dg_rpg_vn_choice(dg_incident_current["text"], dg_rpg_incident_choices)
@@ -1839,7 +1843,7 @@ label dg_rpg_loop:
         jump dg_rpg_loop
     if dg_rpg_cmd == "personal":
         $ dg_rpg_focus = dg_rpg_value
-        if dg_social.personal_scene(dg_rpg_state, dg_rpg_focus):
+        if dg_social.personal_scene(dg_rpg_state, dg_rpg_focus) and dg_rpg_state["energy"] >= 12:
             $ dg_personal_current = dg_social.personal_scene(dg_rpg_state,dg_rpg_focus)
             $ dg_personal_choices = list(dg_personal_current["choices"]) + [("__cancel__", u"Вернуться позже")]
             call dg_rpg_vn_choice(dg_personal_current["text"], dg_personal_choices, dg_rpg_focus)
@@ -1878,6 +1882,8 @@ label dg_rpg_loop:
         call dg_rpg_vn_dialogue(dg_rpg_focus, "result", dg_rpg_talk_topic, dg_rpg_talk_stance)
         jump dg_rpg_loop
     if dg_rpg_cmd == "route":
+        if dg_rpg_state["energy"] < 12:
+            jump dg_rpg_loop
         $ dg_rpg_focus = dg_rpg_value
         $ dg_rpg_route_level = dg_rpg.available_route_events(dg_rpg_state, dg_rpg_focus)[0][0]
         $ dg_route_intro = dg_dialogue.route_intro(dg_rpg_state, dg_rpg_focus, dg_rpg_route_level)
@@ -1926,6 +1932,9 @@ label dg_rpg_loop:
 
 label dg_rpg_world_label:
     if dg_rpg_state["finished"]:
+        jump dg_rpg_loop
+    if dg_rpg_state["energy"] < 8:
+        call dg_rpg_vn_text(u"Сейчас не хватает сил вмешаться в это событие. Отдохни, а потом возвращайся.")
         jump dg_rpg_loop
     if not dg_world.event_at(dg_rpg_state, dg_rpg_state["place"]):
         jump dg_rpg_loop
