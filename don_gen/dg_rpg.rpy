@@ -157,6 +157,23 @@ init 1001 python:
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         instructions, prompt = dg_hybrid.build_request(current, plan)
         app = dg_runtime.app
+        # The 7DL source is read-only reference context, never executed.
+        if current["source"].startswith("7dl:") and plan.get("who") == "mi":
+            root=(app.catalog.get("source_roots") or {}).get("7dl")
+            if root and os.path.isdir(root):
+                try:
+                    import dg_source_7dl
+                    raw=dg_source_7dl.source_context(
+                        root,os.path.join(dg_rpg_root(),"_source_cache"),
+                        current["source"].split(":",1)[1],
+                        u"Мику "+plan["action"][:190],mode="divergent",
+                        day=(current["day"] if current["day"]<=7 else 7),
+                        limit=3,max_chars=5200)
+                    context=json.loads(prompt)
+                    context["reference_7dl_source"]=raw
+                    prompt=json.dumps(context,ensure_ascii=False,sort_keys=True)
+                except (IOError,OSError,ValueError,TypeError):
+                    logging.getLogger("don_gen").warning("7DL hybrid context unavailable",exc_info=True)
         if not app.models:
             app.refresh_models()
         model = dg_backend.default_model(app.models, persistent.dg_model)
@@ -991,7 +1008,7 @@ screen dg_rpg_hub:
             textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
             textbutton u"ГАЛЕРЕЯ CG · иллюстрации смены" style "dg_act" action Return(("cg_gallery", None))
             textbutton (u"Режим истории: 18+ AU" if dg_adult.enabled(dg_rpg_state) else u"Режим истории: обычный") style "dg_act" action Return(("adult", None))
-            textbutton (u"Автосцены NPC: AI" if getattr(persistent,"dg_auto_narrate",True) else u"Автосцены NPC: без AI") style "dg_act" action Return(("narrator",None))
+            textbutton (u"Живые сцены: AI при входе в диалог" if getattr(persistent,"dg_auto_narrate",True) else u"Живые сцены: локальный режим") style "dg_act" action Return(("narrator",None))
             textbutton (u"Художник: ComfyUI локально" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Художник: облачный") style "dg_act" action Return(("artist", None))
             textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
             if not dg_rpg_state["finished"]:
