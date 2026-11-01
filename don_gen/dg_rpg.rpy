@@ -14,6 +14,7 @@ init 1001 python:
     import dg_adult
     import dg_art
     import dg_narrative
+    import dg_visual
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -369,12 +370,14 @@ init 1001 python:
                        "stage","beach","lake","forest","infirmary","sports")
 
     def dg_rpg_bg_native(place):
-        # The 12 stock scene locations have their own verified vanilla BG.
-        # Other 58 locations reuse a generic fallback, not a dedicated asset.
+        # Prefer the actual location AND matching time of day when available.
+        # Only exact 12 canonical locations block manual BG generation.
         if place not in DG_RPG_EXACT_BG:
             return None
-        name = DG_RPG_BG.get(place)
-        return name if name in dg_runtime.original_images else None
+        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_state["slot"]):
+            if name in dg_runtime.original_images:
+                return name
+        return None
 
     def dg_rpg_bg_status():
         place = dg_rpg_state["place"]
@@ -391,22 +394,54 @@ init 1001 python:
         if available["status"] == "builtin":
             return dg_runtime.original_images[available["path"]]
         # Fallback scenery is shown while specific visual art is absent.
-        name = DG_RPG_BG.get(place)
-        if name in dg_runtime.original_images:
-            return dg_runtime.original_images[name]
+        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_state["slot"]):
+            if name in dg_runtime.original_images:
+                return dg_runtime.original_images[name]
         return Solid("#173039")
 
-    def dg_rpg_sprite(who):
-        # Read legacy saved sprite PNGs; never submit new sprite synthesis jobs.
+    def dg_rpg_sprite(who, emotion="normal", distance="normal"):
+        # Original game registered sprites first; physical 7DL/vanilla layer
+        # composition when the exact named pose is missing. No image generation.
+        if who not in dg_rpg.NPC_NAMES:
+            return None
         custom = dg_rpg.asset_path(dg_rpg_root(),dg_rpg_state["id"],"sprite",who)
-        if custom and renpy.loadable(custom):
+        if renpy.loadable(custom):
             return Image(custom)
-        candidates = [name for name in dg_runtime.original_images
-                      if name.startswith(who + " ") and " pioneer " in (" " + name + " ")]
-        if not candidates:
-            candidates = [name for name in dg_runtime.original_images if name.startswith(who + " ")]
-        candidates.sort()
-        return dg_runtime.original_images[candidates[0]] if candidates else None
+        known = dg_visual.sprite_names(who,emotion,distance,
+                                        dg_runtime.original_images.keys())
+        exact=[name for name in known if
+               (name.endswith(" "+distance) if distance!="normal"
+                else not name.endswith((" far"," close")))]
+        # For the specific 7DL route, layer-aware image composition may supply
+        # a more expressive pose that doesn't have a registered vanilla name.
+        use_7dl=dg_rpg_state["source"].startswith("7dl:")
+        if use_7dl:
+            for name in dg_visual.sprite_queries(who,emotion,distance):
+                sprite=dg_7dl_sprite_displayable(name)
+                if sprite is not None:
+                    return sprite
+        if exact:
+            return dg_runtime.original_images[exact[0]]
+        # Only after trying genuine close/far poses do we accept an existing
+        # normal-distance sprite. Never scale a normal pose as if it were close.
+        if known:
+            return dg_runtime.original_images[known[0]]
+        for name in dg_visual.sprite_queries(who,emotion,distance):
+            sprite=dg_7dl_sprite_displayable(name)
+            if sprite is not None:
+                return sprite
+        logging.getLogger("don_gen").warning("No original sprite found for npc=%s emotion=%s distance=%s",
+                                             who,emotion,distance)
+        return None
+
+    def dg_rpg_vn_secondary(who, text):
+        # Only actual nearby NPCs whose names are referenced are shown.
+        if who is None:
+            return None
+        for code,name in dg_rpg.at_place(dg_rpg_state):
+            if code != who and name in text:
+                return code
+        return None
 
     def dg_rpg_cg_builtin(plan):
         index_path = os.path.join(renpy.config.gamedir,"mods","don_gen",
