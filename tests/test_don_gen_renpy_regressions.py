@@ -49,10 +49,12 @@ class ReportedTracebacks(unittest.TestCase):
     def test_python2_str_accepted_even_if_text_type_is_distinct(self):
         class PretendUnicode(str):
             pass
+        plan=dg_art.scene_plan(self.state,"world",u"День",u"В этот день ребята отправляются на прогулку и спорят о музыкальном концерте в лагере.","mi")
         original=dg_rpg.text_type
         try:
+            # Simulate the Python 2 str/unicode type distinction only at the
+            # CG key check, without disrupting unrelated name/save validators.
             dg_rpg.text_type=PretendUnicode
-            plan=dg_art.scene_plan(self.state,"world",u"День",u"В этот день ребята отправляются на прогулку и спорят о музыкальном концерте в лагере.","mi")
             self.assertIn("/cg_",dg_art.asset_location(self.root,self.state["id"],"cg",plan["key"]))
         finally:
             dg_rpg.text_type=original
