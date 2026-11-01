@@ -323,11 +323,15 @@ def parse(text):
     if re.search(u"(?<!\\w)не\\s+(?:хочу|буду|стану|могу)\\b", lowered, re.UNICODE):
         return None
     selected = None
-    # A word stem must start at a word boundary to avoid false partial matches.
+    earliest = len(lowered) + 1
+    # Choose the FIRST actual action verb, not the first category in a fixed list.
+    # "Помочь организаторам" means help, not "organize" due to the noun.
     for key, stems in VERBS:
-        if any(re.search(r"(?<!\w)" + re.escape(stem), lowered, re.UNICODE) for stem in stems):
-            selected = key
-            break
+        for stem in stems:
+            match = re.search(r"(?<!\w)" + re.escape(stem), lowered, re.UNICODE)
+            if match is not None and match.start() < earliest:
+                selected = key
+                earliest = match.start()
     if selected is None:
         return None
     targets = [who for who, stems in STEMS.items()
