@@ -56,7 +56,7 @@ def scene_plan(state, source, title, description, who=None, adult_requested=Fals
     kind="cg18" if adult_requested else "cg"
     stable=u"|".join([text_type(state["id"]),source,text_type(state["day"]),
                      text_type(state["place"]),text_type(who or ""),
-                     text_type(title),description[:1200],kind])
+                     text_type(title),description,kind])
     return {"key":_digest(stable),"kind":kind,"title":title[:170],
             "description":description[:2500],"who":who,"source":source,
             "day":state["day"],"place":state["place"]}
