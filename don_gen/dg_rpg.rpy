@@ -1173,8 +1173,10 @@ label dg_rpg_loop:
         jump dg_rpg_loop
     if dg_rpg_cmd == "map":
         call screen dg_rpg_map
-        if _return:
-            $ dg_rpg_apply("move", _return)
+        # A Ren'Py context/splashscreen sentinel is NOT a valid location ID.
+        # Only an explicit ("go", known_place) result authorizes movement.
+        if isinstance(_return, tuple) and len(_return) == 2 and _return[0] == "go" and _return[1] in dg_rpg.PLACE_NAMES:
+            $ dg_rpg_apply("move", _return[1])
             if dg_world.event_at(dg_rpg_state, dg_rpg_state["place"]):
                 jump dg_rpg_world_label
         jump dg_rpg_loop
