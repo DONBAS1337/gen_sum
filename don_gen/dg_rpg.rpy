@@ -371,7 +371,7 @@ screen dg_rpg_hub:
                             text (person + u" · %d/100 · %s" % (dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 30
                             hbox:
                                 spacing 16
-                                textbutton u"Диалог · выборы" style "dg_navlink" action Return(("talk", who)) sensitive not dg_rpg_state["finished"]
+                                textbutton u"Диалог · выборы" style "dg_navlink" action Return(("talk", who)) sensitive (not dg_rpg_state["finished"] and dg_rpg_state["energy"] >= 8)
                                 textbutton u"AI-сцена" style "dg_navlink" action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"Спрайт" style "dg_navlink" action Return(("sprite", who)) sensitive not dg_rpg_state["finished"]
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
@@ -398,7 +398,7 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
         xpos 530 ypos 115 xsize 1320 ysize 860
         padding (43, 35)
         vbox:
-            spacing 17
+            spacing 11
             hbox:
                 spacing 32
                 text speaking style "dg_title" size 50 color "#ffe19b"
@@ -407,12 +407,12 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
             frame:
                 background Solid("#061824b7")
                 padding (24, 18)
-                xsize 1212 ysize 406
+                xsize 1212 ysize 310
                 viewport:
                     mousewheel True
                     scrollbars "vertical"
-                    ysize 363
-                    text dg_literal(scene["text"]) style "dg_text" size 30 xmaximum 1145
+                    ysize 270
+                    text dg_literal(scene["text"]) style "dg_text" size 29 xmaximum 1145
             if phase == "topics":
                 text u"О ЧЁМ ПОГОВОРИТЬ?" style "dg_meta" size 23
             elif phase == "choice":
@@ -573,7 +573,6 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "talk":
         $ dg_rpg_focus = dg_rpg_value
         if dg_rpg_state["energy"] < 8:
-            $ dg_rpg_apply("rest")
             jump dg_rpg_loop
         call screen dg_rpg_dialogue(dg_rpg_focus, "topics")
         if _return is None:
