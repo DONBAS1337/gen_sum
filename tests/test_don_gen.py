@@ -27,6 +27,21 @@ class DONGENTests(unittest.TestCase):
         self.assertNotIn('ready_replace', installer)
         self.assertNotIn('community_fix_backup_', installer)
 
+    def test_character_fields_have_explicit_edit_actions(self):
+        root = os.path.join(os.path.dirname(__file__), "..")
+        with open(os.path.join(root, "don_gen", "dg_rpg.rpy"), "rb") as stream:
+            script = stream.read().decode("utf-8")
+        for field in ("name", "age", "days", "history"):
+            self.assertIn('Return(("edit", "' + field + '"))', script)
+        self.assertIn('label dg_rpg_create_loop:', script)
+        self.assertIn('renpy.input(u"Имя персонажа:"', script)
+        self.assertIn('renpy.input(u"Возраст персонажа (14–80):"', script)
+        self.assertIn('renpy.input(u"Продолжительность смены (1–120 дней):"', script)
+        self.assertIn('allow="0123456789"', script)
+        self.assertIn('sensitive dg_valid', script)
+        self.assertNotIn('ScreenVariableInputValue("age")', script)
+        self.assertNotIn('ScreenVariableInputValue("days")', script)
+
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="gs-rpg-")
         self.state = dg_rpg.new_game("Новый герой", 23, 14, "Музыкант")
