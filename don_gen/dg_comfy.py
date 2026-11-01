@@ -11,6 +11,7 @@ import json
 import os
 import time
 import uuid
+import sys
 
 try:
     from urllib.request import Request, urlopen
@@ -90,6 +91,13 @@ def prepare_workflow(document, prompt, negative_prompt="", seed=None):
             pass
         return value
     payload=replace(payload)
+    # Anima KSampler uses a NUMBER seed. No text placeholder is required.
+    # Patch numeric fields only, preserving other model/graph inputs.
+    for node in payload.values():
+        if node.get("class_type") in ("KSampler", "KSamplerAdvanced"):
+            previous = node["inputs"].get("seed")
+            if isinstance(previous, (int, long)) if sys.version_info[0] < 3 else isinstance(previous, int):
+                node["inputs"]["seed"] = int(seed)
     if count[0] == 0:
         # Avoid corrupting multi-encoder/subgraph workflows.
         candidates=[node for node in payload.values()
@@ -107,7 +115,7 @@ def probe(base_url="http://127.0.0.1:8188"):
 
 def generate(workflow_path,prompt,kind,base_url="http://127.0.0.1:8188",
              negative_prompt="",timeout_seconds=300,poll_seconds=1):
-    if kind not in ("background","sprite"):
+    if kind not in ("background","cg","cg18"):
         raise ComfyError("Unsupported asset kind")
     if not isinstance(timeout_seconds,int) or not 10<=timeout_seconds<=900:
         raise ComfyError("Timeout must be 10..900 seconds")
