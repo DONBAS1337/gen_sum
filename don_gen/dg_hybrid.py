@@ -91,6 +91,25 @@ def _neutral_talk(state, action, who):
     return {"status":"done","text":text,"who":who,"kind":"custom_npc",
             "affinity_gain":0}
 
+def _neutral_free_action(state, action, mode):
+    """A freeform action that isn't one of the recognised skill commands.
+
+    It still exists in the story, but never grants fabricated achievements,
+    starts quests or resolves a plot the local engine couldn't understand.
+    """
+    import dg_rpg
+    if state["energy"] < 4:
+        return {"status":"unknown","text":u"Для продолжения действия нужно хотя бы 4 энергии."}
+    state["energy"] -= 4
+    description=(u"Ты высказываешь или предпринимаешь то, что задумал: «%s». "
+                 u"Лагерь реагирует на твою инициативу, но сейчас нельзя "
+                 u"надёжно определить дополнительные игровые награды. "
+                 u"Время идёт дальше, а сюжет остаётся открытым.") % action
+    dg_rpg._journal(state,u"Свободное действие: "+action[:125])
+    dg_rpg._tick(state)
+    return {"status":"done","kind":"unclassified_"+mode,"text":description,
+            "intent":"express","impact":0}
+
 def _simulate(state, action, mode, who):
     import dg_rpg
     shadow = copy.deepcopy(state)
@@ -100,7 +119,9 @@ def _simulate(state, action, mode, who):
     if mode == "world":
         choice, error = _world_choice(shadow, action)
         if choice is None:
-            return shadow, {"status":"unknown","text":error}
+            # Player's speech/idea can happen without pretending a major
+            # conflict has been resolved. The world event remains open.
+            return shadow, _neutral_free_action(shadow,action,"world")
         result = dg_rpg.story_choice(shadow, choice)
         result["status"] = "done"
         result["kind"] = "world"
@@ -108,7 +129,12 @@ def _simulate(state, action, mode, who):
         return shadow, result
     if mode == "npc":
         return shadow, _neutral_talk(shadow, action, who)
-    return shadow, dg_rpg.free_action(shadow, action)
+    result=dg_rpg.free_action(shadow,action)
+    # If the local parser doesn't understand the verb, let the player speak,
+    # gesture, observe or roleplay safely with no artificial state benefits.
+    if result["status"] != "done" and dg_social.parse(action) is None:
+        result=_neutral_free_action(shadow,action,"free")
+    return shadow,result
 
 def _effects(before, after):
     changes = []
