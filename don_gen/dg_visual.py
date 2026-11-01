@@ -74,7 +74,7 @@ def sprite_names(who, emotion="normal", distance_name="normal", known=()):
         distance_rank=0 if actual_distance==distance_name else (
              1 if actual_distance=="normal" else 2)
         costume_rank=0 if "pioneer" in parts else 1
-        return distance_rank,face_rank,costume_rank,name
+        return distance_rank,costume_rank,face_rank,name
     return sorted(names,key=rank)
 
 def sprite_queries(who, emotion="normal", distance_name="normal"):
