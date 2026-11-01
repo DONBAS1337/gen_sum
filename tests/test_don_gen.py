@@ -55,11 +55,12 @@ class DONGENTests(unittest.TestCase):
         self.assertEqual(self.state["hero"]["name"], "Новый герой")
         self.assertEqual(self.state["hero"]["age"], 23)
         self.assertEqual(self.state["duration"], 14)
-        for age, days in ((13, 7), (81, 7), (18, 0), (18, 121)):
+        for age, days in ((0, 7), (1000000000, 7), (18, 0), (18, 121)):
             with self.assertRaises(ValueError):
                 dg_rpg.new_game("Герой", age, days)
         with self.assertRaises(ValueError):
             dg_rpg.new_game("../escape", 18, 7, "bad\nhistory")
+        self.assertEqual(dg_rpg.new_game("Герой", 250, 7)["hero"]["age"], 250)
 
     def test_free_travel_does_not_call_ai_or_pass_time(self):
         self.state["social"]["incident"]["status"] = "resolved"
