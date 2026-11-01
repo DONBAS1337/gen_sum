@@ -39,6 +39,10 @@ def scene_plan(state, source, title, description, who=None, adult_requested=Fals
     """Attach a deterministic illustration ID to a REAL completed event."""
     import dg_rpg
     dg_rpg.validate(state)
+    if isinstance(description, bytes):
+        description=description.decode("utf-8")
+    if isinstance(title, bytes):
+        title=title.decode("utf-8")
     if source not in CG_SOURCES or not isinstance(description,text_type):
         return None
     description=description.strip()
