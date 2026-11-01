@@ -691,28 +691,36 @@ screen dg_rpg_hybrid_input(mode, who=None):
     add Solid("#041622ee")
     frame:
         background Solid("#142f3df8")
-        align (0.5, 0.5) xsize 1430 ysize 790
-        padding (53, 43)
+        align (0.5, 0.5) xsize 1490 ysize 940
+        padding (50, 32)
         vbox:
-            spacing 26
-            text (u"СВОЯ РЕПЛИКА" if mode == "npc" else u"СВОЙ ПОСТУПОК В СЮЖЕТЕ" if mode == "world" else u"СВОБОДНОЕ ДЕЙСТВИЕ + AI") style "dg_title" size 54 color "#ffe0a2"
-            text (u"Что именно ты говоришь собеседнику? Модель напишет реакцию, а движок потратит только время и энергию." if mode == "npc"
-                  else u"Опиши свой вариант решения события. Движок определит допустимый результат до запроса к AI." if mode == "world"
-                  else u"Опиши действие героя своими словами. Сначала увидишь его реальные последствия, и лишь затем можно вызвать AI.") style "dg_text" size 28 xmaximum 1275
+            spacing 16
+            text (u"СВОЯ РЕПЛИКА" if mode == "npc" else u"СВОЙ ПОСТУПОК В СЮЖЕТЕ" if mode == "world" else u"СВОБОДНОЕ ДЕЙСТВИЕ + AI") style "dg_title" size 53 color "#ffe0a2"
+            text (u"Напиши, что говоришь собеседнику. Модель создаст реакцию без вымышленных наград." if mode == "npc"
+                  else u"Свой вариант решения события. Движок определит допустимый исход до AI." if mode == "world"
+                  else u"Опиши своё действие. Последствия рассчитываются до генерации сцены.") style "dg_text" size 27 xmaximum 1345
             frame:
                 background Solid("#081b27")
-                padding (23, 22)
-                xsize 1290 ysize 125
+                padding (24, 22)
+                xsize 1370 ysize 145
                 input:
                     value ScreenVariableInputValue("action_text")
                     style "dg_rpg_edit_input"
-                    length 320
-                    xmaximum 1200
+                    length 4000
+                    xmaximum 1290
                     default_focus True
-            text u"Сначала локальный движок проверит действие. AI НЕ сможет назначить награды, изменить день, NPC или историю вместо движка." style "dg_text" size 25 xmaximum 1260
-            text u"Если команда непонятна, она не тратит время и не отправляется модели. Для обычных действий AI можно вообще не вызывать." style "dg_text" size 24 color "#b9d4d6" xmaximum 1260
+            text (u"ПРЕДПРОСМОТР ТВОЕГО ТЕКСТА · %d / 4000" % len(action_text)) style "dg_meta" size 22
+            frame:
+                background Solid("#071e29")
+                padding (21, 18)
+                xsize 1370 ysize (min(310, max(140, 140 + len(action_text) // 80 * 24)))
+                viewport:
+                    mousewheel True scrollbars "vertical"
+                    ysize (min(270, max(100, 100 + len(action_text) // 80 * 24)))
+                    text dg_literal(action_text if action_text else u"Текст здесь будет переноситься автоматически, чтобы даже длинная реплика оставалась читаемой.") style "dg_text" size 27 xmaximum 1280
+            text u"Любые игровые награды и изменения рассчитывает локальный движок. Модель отвечает только за повествование." style "dg_text" size 24 xmaximum 1310
             hbox:
-                spacing 40
+                spacing 38
                 textbutton u"ПРОВЕРИТЬ ПОСЛЕДСТВИЯ" style "dg_primary" sensitive bool(action_text.strip()) action Return(action_text.strip())
                 textbutton u"ОТМЕНА" style "dg_act" action Return(None)
     key "K_ESCAPE" action Return(None)
@@ -795,50 +803,37 @@ screen dg_rpg_free_input:
     add Solid("#041725ee")
     frame:
         background Solid("#143240fa")
-        align (0.5, 0.5) xsize 1350 ysize 720
-        padding (56, 41)
+        align (0.5, 0.5) xsize 1480 ysize 900
+        padding (54, 36)
         vbox:
-            spacing 26
+            spacing 21
             text u"СВОБОДНОЕ ДЕЙСТВИЕ" style "dg_title" size 56 color "#ffe5a0"
-            text u"Опиши СВОИМИ словами, что герой делает сейчас. Без списка готовых реплик." style "dg_text" size 29 xmaximum 1180
+            text u"Опиши, что делает герой. Правила проверят присутствие персонажей, локацию, энергию и смысл действия." style "dg_text" size 27 xmaximum 1340
             frame:
                 background Solid("#071b25")
-                padding (25, 22)
-                xsize 1220 ysize 125
+                padding (24, 20)
+                xsize 1350 ysize 146
                 input:
                     value ScreenVariableInputValue("action_text")
                     style "dg_rpg_edit_input"
-                    length 180
-                    xmaximum 1150
+                    length 4000
+                    xmaximum 1290
                     default_focus True
-            text u"Примеры: «Помочь Мику с репетицией», «Исследовать старые записи», «Договориться с Алисой», «Организовать игру на площади»." style "dg_text" size 26 xmaximum 1175
-            text u"Локальная система понимает практические действия, учитывает место и NPC. Если намерение не распознано, ход не расходуется. Для произвольной прозы есть отдельная AI-сцена." style "dg_text" size 23 color "#b9d4d6" xmaximum 1175
+            text (u"ПРЕДПРОСМОТР · %d / 4000" % len(action_text)) style "dg_meta" size 23
+            frame:
+                background Solid("#09242e")
+                padding (20, 15) xsize 1350
+                ysize (min(300, max(140, 140 + len(action_text) // 80 * 24)))
+                viewport:
+                    mousewheel True scrollbars "vertical"
+                    ysize (min(260, max(100, 100 + len(action_text) // 80 * 24)))
+                    text dg_literal(action_text if action_text else u"Здесь будет показана длинная реплика с переносом строк.") style "dg_text" size 28 xmaximum 1260
+            text u"Например: «Помочь Мику с репетицией». Неизвестное действие не расходует ход. Можно выбрать гибридную AI-сцену отдельно." style "dg_text" size 23 color "#b9d4d6" xmaximum 1290
             hbox:
                 spacing 45
                 textbutton u"СОВЕРШИТЬ ПОСТУПОК" style "dg_primary" sensitive bool(action_text.strip()) action Return(action_text.strip())
                 textbutton u"ОТМЕНА" style "dg_act" action Return(None)
     key "K_ESCAPE" action Return(None)
-
-screen dg_rpg_action_result(result):
-    modal True
-    add dg_rpg_bg()
-    add Solid("#081c27f0")
-    frame:
-        background Solid("#13323a")
-        align (0.5, 0.5)
-        xsize 1380 ysize 810
-        padding (48, 39)
-        vbox:
-            spacing 22
-            text dg_literal(result.get("title", u"ТВОЙ ПОСТУПОК")) style "dg_title" size 49 color "#ffe5a0"
-            frame:
-                background Solid("#071a25")
-                padding (22, 18)
-                xsize 1265 ysize 535
-                viewport:
-                    mousewheel True scrollbars "vertical" ysize 490
-                    text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
-            textbutton u"Вернуться в лагерь" style "dg_primary" action Return(None)
 
 screen dg_rpg_npc_incident:
     modal True
