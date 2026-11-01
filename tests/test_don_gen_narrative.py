@@ -82,10 +82,18 @@ class NarrativeDirector(unittest.TestCase):
         self.assertIn(u"таин",dg_narrative.PERSONA["uv"][1])
     def test_spontaneous_npc_encounter_does_not_mutate_rules(self):
         st=self.state()
-        st["place"]="stage"
-        st["slot"]=0
-        # Real NPC schedules are authoritative; choose a present actor.
-        current=dg_rpg.at_place(st)
+        # Pick an actually occupied place in this randomized save. A fixed
+        # stage location can legitimately be empty depending on the day.
+        current=[]
+        for slot in range(4):
+            if current:
+                break
+            st["slot"]=slot
+            for place in dg_rpg.PLACE_NAMES:
+                st["place"]=place
+                current=dg_rpg.at_place(st)
+                if current:
+                    break
         self.assertTrue(current)
         who=current[0][0]
         snapshot=copy.deepcopy(st)
