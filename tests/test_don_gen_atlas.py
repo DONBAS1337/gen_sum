@@ -107,7 +107,7 @@ class AtlasAndHiddenNPC(unittest.TestCase):
             script=file.read().decode("utf-8")
         self.assertIn('length 8000',script)
         self.assertIn('length 4000',script)
-        self.assertIn('dg_rpg_preview_height(editor_text, 195, 365, 155, 55, 26)',script)
+        self.assertIn('dg_rpg_preview_height(editor_text, 175, 300, 150, 55, 24)',script)
         self.assertIn('screen dg_rpg_cabins(region):',script)
 
 if __name__=="__main__":
