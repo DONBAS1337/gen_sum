@@ -1238,28 +1238,32 @@ screen dg_rpg_cg_art(plan):
             add im.Scale(resource["path"],1920,1080)
     else:
         add dg_rpg_bg()
-        add Solid("#071827dd")
+        add Solid("#071725a0")
+        if plan.get("who") is not None:
+            $ dg_cg_preview_sprite = dg_rpg_sprite(plan["who"], "normal", "normal")
+            if dg_cg_preview_sprite is not None:
+                add dg_cg_preview_sprite at dg_rpg_portrait_transform xpos 1130 ypos 100
         frame:
-            background Solid("#102b37f8")
-            align (0.5,0.5) xsize 1400 ysize 685 padding (52,40)
+            background Solid("#0d2734e8")
+            xpos 115 ypos 470 xsize 1640 ysize 490 padding (43,30)
             vbox:
-                spacing 25
-                text u"ИЛЛЮСТРАЦИЯ СЦЕНЫ · CG" style "dg_title" size 49 color "#ffe4a6"
-                text dg_literal(plan["title"]) style "dg_text" size 31 xmaximum 1220
-                text u"Для этого события иллюстрация пока не найдена. Можно продолжить чтение без генерации или создать CG вручную." style "dg_text" size 29 xmaximum 1210
-                text (u"ID сцены: " + plan["key"]) style "dg_text" size 19 color "#b8d3d9"
-                text (u"Отдельный взрослый CG (только 18+ AU)" if plan["kind"]=="cg18" else u"Обычный CG, широкий кадр 16:9") style "dg_text" size 25 color "#e3c691"
-                textbutton u"СОЗДАТЬ CG ВЫБРАННЫМ ГЕНЕРАТОРОМ" style "dg_primary" action Return("generate")
+                spacing 22
+                text u"ИЛЛЮСТРАЦИЯ · CG" style "dg_title" size 43 color "#ffe4a6"
+                text dg_literal(plan["title"]) style "dg_text" size 34 xmaximum 1520
+                text u"Готовой картинки для этого эпизода пока нет. Сцену можно оставить текстовой или сгенерировать изображение отдельно." style "dg_text" size 27 xmaximum 1480
+                text (u"Взрослый CG · локальный ComfyUI" if plan["kind"]=="cg18" else u"Обычный CG · широкий кадр 16:9") style "dg_small" size 24 color "#e3c691"
+                textbutton u"СОЗДАТЬ CG" style "dg_primary" action Return("generate")
+                text (u"ID эпизода: " + plan["key"]) style "dg_small" size 19 color "#afc6cc"
     frame:
-        background Solid("#0b2332e6")
-        xpos 55 ypos 30 xsize 1130 ysize 115 padding (24,14)
+        background Solid("#082432db")
+        xpos 45 ypos 24 xsize 1390 ysize 92 padding (24,14)
         hbox:
-            spacing 18
+            spacing 19
             text u"DON-GEN · CG" style "dg_meta" size 28 color "#ffe7aa"
-            text dg_literal(plan["title"]) style "dg_text" size 25 xmaximum 830
+            text dg_literal(plan["title"]) style "dg_text" size 24 xmaximum 1000
     if resource["status"] in ("generated","builtin"):
-        textbutton u"ПЕРЕГЕНЕРИРОВАТЬ ВРУЧНУЮ" style "dg_map_pin" xpos 1290 ypos 32 action Return("generate")
-    textbutton u"ПРОДОЛЖИТЬ БЕЗ ГЕНЕРАЦИИ" style "dg_map_pin" xpos 1330 ypos 971 action Return(None)
+        textbutton u"ПЕРЕРИСОВАТЬ" style "dg_map_pin" xpos 1375 ypos 30 action Return("generate")
+    textbutton u"НАЗАД К ИСТОРИИ" style "dg_map_pin" xpos 1500 ypos 990 action Return(None)
 
 screen dg_rpg_hybrid_read(entry):
     modal True
