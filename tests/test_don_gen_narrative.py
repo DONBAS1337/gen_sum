@@ -80,6 +80,54 @@ class NarrativeDirector(unittest.TestCase):
                 c=dg_narrative.context(st,"npc_choice",code,"story")
                 self.assertTrue(c["character_hook"])
         self.assertIn(u"таин",dg_narrative.PERSONA["uv"][1])
+    def test_spontaneous_npc_encounter_does_not_mutate_rules(self):
+        st=self.state()
+        st["place"]="stage"
+        st["slot"]=0
+        # Real NPC schedules are authoritative; choose a present actor.
+        current=dg_rpg.at_place(st)
+        self.assertTrue(current)
+        who=current[0][0]
+        snapshot=copy.deepcopy(st)
+        first=dg_narrative.spontaneous(st,who)
+        self.assertEqual(first,dg_narrative.spontaneous(st,who))
+        self.assertEqual(snapshot,st)
+        self.assertEqual(first["who"],who)
+        self.assertIn("narrative",first)
+        st["surprise_counts"]={"%d:%d:%s:%s" %(st["day"],st["slot"],st["place"],who):1}
+        second=dg_narrative.spontaneous(st,who)
+        self.assertNotEqual(first["id"],second["id"])
+        self.assertNotEqual(first["narrative"]["scene_id"],second["narrative"]["scene_id"])
+    def test_location_spontaneous_without_npc(self):
+        st=self.state()
+        scene=dg_narrative.spontaneous(st,None)
+        self.assertIsNone(scene["who"])
+        self.assertIn(dg_rpg.PLACE_NAMES[st["place"]],scene["text"])
+    def test_cache_keeps_last_fresh_scene_even_on_same_day(self):
+        st=self.state()
+        for n in range(54):
+            key="%064x"%(10000-n)
+            dg_narrative.remember_scene(st,key,u"Мику и герой продолжают новый разговор, наблюдая за лагерем. "*3)
+        self.assertEqual(len(st["narrative_cache"]),48)
+        self.assertIn("%064x"%(10000-53),st["narrative_cache"])
+        self.assertEqual(len(st["narrative_order"]),48)
+    def test_world_ending_changes_text_without_overwriting_consequences(self):
+        st=self.state()
+        ev=dg_world.current(st)
+        st["place"]=ev["place"]
+        before=st["world"]["morale"]
+        outcome=dg_world.choose(st,"support")
+        self.assertEqual(outcome["choice"],"support")
+        self.assertIn("после",outcome["text"].lower())
+        self.assertNotEqual(before,st["world"]["morale"])
+    def test_spontaneous_and_7dl_integration_visible(self):
+        with open(os.path.join(ROOT,"don_gen","dg_rpg.rpy"),"rb") as f:
+            script=f.read().decode("utf-8")
+        for code in ('dg_narrative.spontaneous(dg_rpg_state,dg_rpg_focus)',
+                     'Return(("surprise", who))','Return(("surprise", None))',
+                     'dg_rpg_apply("spontaneous",dg_rpg_focus)',
+                     'reference_7dl_source'):
+            self.assertIn(code,script)
     def test_py2_compatibility_and_scene_narration_control_wiring(self):
         with open(os.path.join(ROOT,"don_gen","dg_rpg.rpy"),"rb") as f:
             script=f.read().decode("utf-8")
