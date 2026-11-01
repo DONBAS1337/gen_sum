@@ -14,6 +14,7 @@ import shutil
 import uuid
 import dg_dialogue
 import dg_world
+import dg_social
 
 try:
     text_type = unicode
@@ -95,6 +96,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "dialogue_history": [], "dialogue_counts": {}
     }
     dg_world.prepare(state)
+    dg_social.ensure(state)
     return state
 
 
@@ -117,6 +119,7 @@ def validate(state):
     state.setdefault("dialogue_history", [])
     state.setdefault("dialogue_counts", {})
     dg_world.ensure(state)
+    dg_social.ensure(state)
     if len(state.get("journal", [])) > 500 or len(state.get("ai_scenes", [])) > 80 or len(state["dialogue_history"]) > 100:
         raise ValueError("Oversized save")
     return state
@@ -239,6 +242,12 @@ def _tick(state):
             state["finished"] = True
             _journal(state, u"Смена закончилась. Все встречи и достижения сохранились в дневнике.")
         else:
+            # World ticks happen on turn advance, not during screen redraw.
+            interaction = dg_social.npc_daily(state)
+            if interaction:
+                _journal(state, interaction)
+            for notice in dg_social.expire_quests(state):
+                _journal(state, notice)
             dg_world.prepare(state)
 
 
@@ -373,6 +382,54 @@ def story_choice(state, key):
     return outcome
 
 
+
+def free_action(state, requested):
+    """Player types a concrete Russian action. No AI / no false success."""
+    validate(state)
+    if state["finished"]:
+        return {"status":"unknown","text":u"Смена уже завершена."}
+    nearby=[who for who, name in at_place(state)]
+    result=dg_social.action(state, requested, nearby)
+    if result["status"] != "done":
+        return result
+    _journal(state, result["text"])
+    for who, score in state["affinity"].items():
+        for threshold in MILESTONES:
+            token = who + ":" + str(threshold)
+            if score >= threshold and token not in state["milestones"]:
+                state["milestones"].append(token)
+    if result["intent"] == "help":
+        state["activity_counts"]["help"] = state["activity_counts"].get("help", 0) + 1
+    if result["intent"] == "search":
+        state["activity_counts"]["explore"] = state["activity_counts"].get("explore", 0) + 1
+    _check_quests(state)
+    _tick(state)
+    return result
+
+
+def personal_choice(state, who, stance):
+    validate(state)
+    if state["finished"] or where_is(state,who)!=state["place"]:
+        raise ValueError("Character not at this location")
+    result=dg_social.resolve_personal(state,who,stance)
+    _journal(state, u"Личная история %s: %s. %s" % (
+        NPC_NAMES[who],result["title"],result["text"][-350:]))
+    for threshold in MILESTONES:
+        token = who + ":" + str(threshold)
+        if state["affinity"][who] >= threshold and token not in state["milestones"]:
+            state["milestones"].append(token)
+    _check_quests(state)
+    _tick(state)
+    return result
+
+
+def accept_contract(state, ident):
+    validate(state)
+    result=dg_social.accept(state,ident)
+    _journal(state,result)
+    return result
+
+
 def append_ai_scene(state, who, text):
     if who not in NPC_NAMES:
         raise ValueError("Unknown character")
@@ -400,6 +457,7 @@ def summary_for_ai(state, who, intent):
         "recent_dialogue": state["dialogue_history"][-6:],
         "world_state": dg_world.world_report(state),
         "recent_world_decisions": state["world"]["decisions"][-7:],
+        "social_world": dg_social.report(state),
         "route_milestones": available_route_events(state, who),
         "completed_route_events": [v for v in state["route_events_done"] if v.startswith(who + ":")]
     }
