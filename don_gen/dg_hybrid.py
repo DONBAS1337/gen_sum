@@ -50,8 +50,8 @@ def _world_choice(state, action):
     parsed = dg_social.parse(action)
     if not parsed or parsed["ambiguous"]:
         return None, u"Не удалось определить, как именно это решает ситуацию. Опиши помощь, исследование, подготовку или самостоятельную инициативу."
-    if parsed["target"] and parsed["target"] not in (current["npc"],) and parsed["target"] not in [x["npc"] for x in [current]]:
-        return None, u"Названный персонаж не является участником этого события. Уточни действие для текущей сцены."
+    if parsed["target"] and parsed["target"] != current["npc"]:
+        return None, u"Названный персонаж не является главным участником этого события. Уточни действие для текущей сцены."
     mapping = {"help":"support", "mediate":"support", "search":"investigate",
                "create":"independent", "practice":"independent"}
     key = mapping.get(parsed["intent"])
@@ -73,7 +73,7 @@ def _neutral_talk(state, action, who):
     state["energy"] -= 6
     if who not in state["met"]:
         state["met"].append(who)
-    text = u"Ты обращаешься к %s: «%s». Ответ персонажа появится в сцене после генерации." % (
+    text = u"Ты обращаешься к %s: «%s». Собеседник внимательно слушает; подробнее разговор раскроется, если заказать AI-сцену." % (
         dg_rpg.NPC_NAMES[who], action)
     state.setdefault("dialogue_history", []).append({
         "day":state["day"],"slot":state["slot"],"who":who,
