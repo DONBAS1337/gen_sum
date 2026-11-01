@@ -15,6 +15,7 @@ import uuid
 import dg_dialogue
 import dg_world
 import dg_social
+import dg_adult
 
 try:
     text_type = unicode
@@ -124,6 +125,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "met": [], "milestones": [], "journal": [], "event": u"Вы приехали в Совёнок. Впереди целая смена.",
         "visits": {}, "finished": False, "ai_scenes": [],
         "mystery": {"yulia_discovered": False},
+        "adult_mode": {"enabled": False, "confirmed": False, "setting": "adult_alternate_universe"},
         "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": [],
         "dialogue_history": [], "dialogue_counts": {}
     }
@@ -137,6 +139,9 @@ def validate(state):
     if not isinstance(state, dict) or state.get("version") != 1:
         raise ValueError("Unsupported save format")
     state.setdefault("mystery", {"yulia_discovered": False})
+    dg_adult.ensure(state)
+    if state["adult_mode"].get("enabled") and int(state["hero"]["age"]) < 18:
+        raise ValueError("Adult mode requires age 18+")
     if not re.match(r"^[a-f0-9]{32}$", state.get("id", "")):
         raise ValueError("Invalid save ID")
     _clean(state["hero"]["name"], 100)
