@@ -81,7 +81,7 @@ class ReportedTracebacks(unittest.TestCase):
                          'renpy.display_menu',
                          'call dg_rpg_vn_dialogue(dg_rpg_focus, "topics")',
                          'call dg_rpg_vn_scene(dg_runtime.app.result, True, dg_rpg_focus)',
-                         'call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"])',
+                         'call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"], "outcome:"+dg_world_active["id"]+":"+dg_rpg_world_stance)',
                          'call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])'):
             self.assertIn(expected,SCRIPT)
         self.assertIn('show expression dg_rpg_sprite(who) as dg_vn_character at right',SCRIPT)
