@@ -142,3 +142,47 @@ def marker(state, plan):
                                      plan.get("who") not in dg_adult.ADULT_AU_AGES):
         return None
     return plan["key"]
+
+
+def freeze_scene_request(plan):
+    """Snapshot the CG request before the Ren'Py worker-thread handoff."""
+    if not isinstance(plan, dict):
+        raise ValueError("CG scene is not a dictionary")
+    return json.dumps(plan, ensure_ascii=False, sort_keys=True)
+
+
+def validate_scene_request(state, kind, payload):
+    """Decode a frozen request and guard against stale/mismatched CG plans."""
+    import dg_rpg
+    dg_rpg.validate(state)
+    if isinstance(payload, bytes):
+        payload = payload.decode("utf-8")
+    if isinstance(payload, text_type):
+        try:
+            plan = json.loads(payload)
+        except (TypeError, ValueError):
+            raise ValueError("CG request could not be decoded")
+    else:
+        plan = payload  # compatibility with older caller, not used by new UI
+    if not isinstance(plan, dict):
+        raise ValueError("CG request must be a dictionary")
+    if kind not in ("cg", "cg18") or plan.get("kind") != kind:
+        raise ValueError("CG type changed while preparing the image")
+    if plan.get("source") not in CG_SOURCES:
+        raise ValueError("Unknown cinematic scene source")
+    who = plan.get("who")
+    if who is not None and who not in dg_rpg.NPC_NAMES:
+        raise ValueError("Unknown CG character")
+    if plan.get("day") != state["day"] or plan.get("place") != state["place"]:
+        raise ValueError("CG belongs to an earlier moment of the shift")
+    key = plan.get("key")
+    if not isinstance(key, (str, text_type)) or not re.match(r"^[a-f0-9]{40}$", key):
+        raise ValueError("Invalid CG cache identifier")
+    title, desc = plan.get("title"), plan.get("description")
+    if not isinstance(title, (str, text_type)) or not isinstance(desc, (str, text_type)):
+        raise ValueError("CG lacks its scene text")
+    if len(title) > 170 or not (55 <= len(desc) <= 2500):
+        raise ValueError("CG scene text length is invalid")
+    if marker(state, plan) is None:
+        raise ValueError("CG disabled for this character or adult setting")
+    return plan
