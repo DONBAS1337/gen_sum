@@ -41,6 +41,8 @@ init 1001 python:
             store.dg_rpg_last_action = dg_rpg.free_action(state, arg)
         elif action == "personal":
             store.dg_rpg_last_personal = dg_rpg.personal_choice(state, arg[0], arg[1])
+        elif action == "incident":
+            store.dg_rpg_last_incident = dg_rpg.social_encounter(state, arg)
         elif action == "contract":
             store.dg_rpg_last_contract = dg_rpg.accept_contract(state, arg)
         else:
@@ -370,6 +372,7 @@ screen dg_rpg_map:
         $ loc_name = dg_rpg.PLACE_NAMES[slug]
         $ story_here = dg_world.event_at(dg_rpg_state, slug)
         $ quest_here = dg_social.quest_at(dg_rpg_state, slug)
+        $ incident_here = dg_social.incident_at(dg_rpg_state, slug)
         $ others = dg_rpg.at_place(dg_rpg_state, slug)
         vbox:
             xpos px
@@ -380,6 +383,8 @@ screen dg_rpg_map:
                 textbutton u"★ СЮЖЕТ" style "dg_map_pin" text_color "#ffdd88" action Return(slug)
             if quest_here:
                 text u"▣ ПОРУЧЕНИЕ" style "dg_text" size 18 color "#aaffc2"
+            if incident_here:
+                text u"⚑ ВСТРЕЧА NPC" style "dg_text" size 18 color "#fbe6ad"
             if others:
                 frame:
                     background Solid("#10252dc9")
@@ -392,7 +397,7 @@ screen dg_rpg_map:
             xpos 30 ypos 14 spacing 30
             text u"● Выберите место: переход не расходует время" style "dg_text" size 22
             text u"◆ — ваше местоположение" style "dg_text" size 22 color "#ffe8a1"
-            text u"★ Сюжет · ▣ Задание · выбери локацию" style "dg_text" size 22 color "#ffe19b"
+            text u"★ Сюжет · ▣ Поручение · ⚑ NPC-встреча" style "dg_text" size 21 color "#ffe19b"
 
 screen dg_rpg_hub:
     modal True
@@ -439,6 +444,16 @@ screen dg_rpg_hub:
                 textbutton u"ИТОГИ МОЕЙ СМЕНЫ" style "dg_primary" action Return(("finale", None))
             else:
                 textbutton u"Открыть карту" style "dg_primary" action Return(("map", None))
+            $ active_incident = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
+            if active_incident:
+                frame:
+                    background Solid("#39412be8")
+                    padding (18, 13)
+                    xsize 855
+                    vbox:
+                        spacing 7
+                        text (u"⚑ СИТУАЦИЯ МЕЖДУ NPC: " + active_incident["title"]) style "dg_text" size 28 color "#ffe5a0"
+                        textbutton u"ВМЕШАТЬСЯ В СОБЫТИЕ" style "dg_navlink" action Return(("incident", None)) sensitive dg_rpg_state["energy"] >= 9
             if not dg_rpg_state["finished"]:
                 text u"ПОВСЕДНЕВНЫЕ ЗАНЯТИЯ" style "dg_meta"
                 hbox:
@@ -537,6 +552,36 @@ screen dg_rpg_action_result(result):
                     mousewheel True scrollbars "vertical" ysize 490
                     text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
             textbutton u"Вернуться в лагерь" style "dg_primary" action Return(None)
+
+screen dg_rpg_npc_incident:
+    modal True
+    add dg_rpg_bg()
+    add Solid("#061924e8")
+    $ event = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
+    if event:
+        frame:
+            background Solid("#12333bf6")
+            align (0.5, 0.5)
+            xsize 1380 ysize 810
+            padding (49, 40)
+            vbox:
+                spacing 23
+                text u"⚑ СОБЫТИЕ МЕЖДУ ПЕРСОНАЖАМИ" style "dg_meta" size 25 color "#ffe5a0"
+                text dg_literal(event["title"]) style "dg_title" size 51
+                frame:
+                    background Solid("#071a24")
+                    padding (25, 20)
+                    xsize 1260 ysize 270
+                    viewport:
+                        mousewheel True scrollbars "vertical" ysize 225
+                        text dg_literal(event["text"]) style "dg_text" size 31 xmaximum 1185
+                text (u"Их отношение сейчас: " + str(dg_social.bond(dg_rpg_state, event["pair"][0], event["pair"][1]))) style "dg_text" size 26 color "#ffe5a0"
+                for code, title in dg_social.INCIDENT_CHOICES:
+                    textbutton title style "dg_navlink" text_size 28 sensitive dg_rpg_state["energy"] >= 9 action Return(code)
+                textbutton u"Не вмешиваться сейчас" style "dg_navlink" text_size 26 action Return(None)
+    else:
+        text u"Участники уже разошлись. Сегодня эта встреча закончилась." style "dg_text" xpos 360 ypos 500
+        textbutton u"Закрыть" style "dg_primary" xpos 850 ypos 800 action Return(None)
 
 screen dg_rpg_personal(who):
     modal True
@@ -1023,6 +1068,15 @@ label dg_rpg_loop:
                 call screen dg_rpg_action_result(dg_rpg_contract_result)
             elif dg_contract_cmd == "travel":
                 $ dg_rpg_apply("move", dg_contract_id)
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "incident":
+        if dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"]):
+            call screen dg_rpg_npc_incident
+            if _return:
+                $ dg_rpg_incident_choice = _return
+                $ dg_rpg_apply("incident", dg_rpg_incident_choice)
+                $ dg_rpg_incident_result = {"title":dg_rpg_last_incident["title"],"text":dg_rpg_last_incident["text"]}
+                call screen dg_rpg_action_result(dg_rpg_incident_result)
         jump dg_rpg_loop
     if dg_rpg_cmd == "personal":
         $ dg_rpg_focus = dg_rpg_value
