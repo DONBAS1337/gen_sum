@@ -268,30 +268,62 @@ default dg_rpg_focus = None
 
 screen dg_rpg_picker:
     modal True
-    add Solid("#11262c")
-    use dg_chrome(u"ОТКРЫТЫЙ МИР", Return(("back", None)))
-    text u"Совёнок · свободная смена" style "dg_title" xpos 120 ypos 145 size 65
-    text u"Передвижение, распорядок, очки отношений и занятия без обязательных AI-запросов." style "dg_sub" xpos 120 ypos 230 size 31
+    if renpy.loadable(DG_MAP_ATLAS):
+        add im.Scale(DG_MAP_ATLAS, 1920, 1080)
+    else:
+        add Solid("#182f34")
+    add Solid("#06141dce")
+    use dg_chrome(u"РЕЖИМ ПЕСОЧНИЦЫ", Return(("back", None)))
     frame:
-        style "dg_box"
-        xpos 120 ypos 325 xsize 1680 ysize 570
+        background Solid("#102b37e8")
+        xpos 85 ypos 130 xsize 1750 ysize 830
+        padding (50, 39)
         hbox:
-            spacing 65
+            spacing 52
             vbox:
-                xsize 1000 spacing 14
-                text u"СОХРАНЁННЫЕ СМЕНЫ" style "dg_meta"
-                viewport:
-                    mousewheel True
-                    scrollbars "vertical"
-                    ysize 400
+                xsize 895 spacing 20
+                text u"СОВЁНОК БЕЗ ГРАНИЦ" style "dg_title" size 61 color "#ffe4aa"
+                text u"Создай героя, выбирай события, пиши свои действия и наблюдай, как другие пионеры меняют лагерь даже без тебя." style "dg_text" size 30 xmaximum 835
+                frame:
+                    background Solid("#082330dd")
+                    padding (26, 22) xsize 860
                     vbox:
-                        spacing 12
-                        for game in dg_rpg.list_games(dg_rpg_root()):
-                            textbutton dg_literal(u"%s · день %d/%d%s" % (game["name"], game["day"], game["duration"], u" · завершена" if game["finished"] else u"")) style "dg_row" action Return(("load", game["id"]))
+                        spacing 15
+                        text u"Новая смена" style "dg_meta" size 26 color "#ffdfaa"
+                        text u"Свободная карта, персонажи и их истории, задания, локальные правила и необязательные AI-диалоги." style "dg_text" size 25 xmaximum 790
+                        textbutton u"СОЗДАТЬ ПЕРСОНАЖА" style "dg_primary" action Return(("new", None))
+                frame:
+                    background Solid("#082330c8")
+                    padding (26, 17) xsize 860
+                    vbox:
+                        spacing 10
+                        text u"НЕ ТЕРЯЙ СВОЙ ПРОГРЕСС" style "dg_meta" size 24
+                        text u"Смены хранятся отдельно от обычных сохранений БЛ. Можно вернуться в любой игровой день." style "dg_text" size 23 xmaximum 780
+                textbutton u"ВЕРНУТЬСЯ В МЕНЮ" style "dg_act" action Return(("back", None))
             vbox:
-                spacing 20
-                textbutton u"Создать персонажа" style "dg_primary" action Return(("new", None))
-                textbutton u"Назад" style "dg_act" action Return(("back", None))
+                xsize 690 spacing 19
+                text u"ПРОДОЛЖИТЬ ИСТОРИЮ" style "dg_title" size 45
+                frame:
+                    background Solid("#081f2ae6")
+                    padding (22, 22) xsize 685 ysize 635
+                    viewport:
+                        scrollbars "vertical" mousewheel True ysize 585
+                        vbox:
+                            spacing 14
+                            $ saved = dg_rpg.list_games(dg_rpg_root())
+                            if not saved:
+                                text u"Пока нет сохранённых смен. Создай первого персонажа." style "dg_text" size 27 xmaximum 600
+                            for game in saved:
+                                frame:
+                                    background Solid("#22404d")
+                                    padding (19, 17)
+                                    xsize 600
+                                    vbox:
+                                        spacing 8
+                                        text dg_literal(game["name"]) style "dg_text" size 34 color "#ffe5b5"
+                                        text (u"День %d / %d  ·  %s" % (game["day"], game["duration"],
+                                              u"Смена окончена" if game["finished"] else u"В лагере")) style "dg_text" size 25
+                                        textbutton u"ПРОДОЛЖИТЬ" style "dg_navlink" action Return(("load", game["id"]))
 
 # Contrast-focused modal editor; avoids the tiny global Ren'Py input overlay.
 style dg_rpg_edit_input is dg_ink_input:
@@ -304,55 +336,79 @@ screen dg_rpg_edit_field(field, current):
     modal True
     default editor_text = current
     $ title = {"name": u"Имя героя", "age": u"Возраст героя", "days": u"Дней в смене", "history": u"Предыстория героя"}[field]
-    $ tip = {"name": u"Как к тебе будут обращаться другие пионеры?",
-             "age": u"Укажи число от 14 до 80.",
-             "days": u"Укажи длину смены от 1 до 120 дней.",
-             "history": u"Кто ты и как оказался в лагере? Эти сведения используются в сюжетных сценах."}[field]
+    $ tip = {"name": u"Как к тебе будут обращаться другие пионеры? До 100 символов.",
+             "age": u"Произвольный возраст от 1 до 999 999 999 лет. Игра не навязывает стандартные 14–80.",
+             "days": u"Продолжительность от 1 до 120 дней (ограничение симуляции и расписаний).",
+             "history": u"Расскажи подробную биографию, цели, вещи, характер и причину попадания в лагерь. До 8000 символов."}[field]
     $ valid_edit = bool(editor_text.strip()) and (
-        ((editor_text.isdigit() and 14 <= int(editor_text) <= 80) if field == "age"
-         else (editor_text.isdigit() and 1 <= int(editor_text) <= 120) if field == "days"
-         else True))
-    add Solid("#061522f5")
+        ((editor_text.isdigit() and 1 <= int(editor_text) <= 999999999) if field == "age"
+          else (editor_text.isdigit() and 1 <= int(editor_text) <= 120) if field == "days"
+          else (len(editor_text) <= 100) if field == "name"
+          else (len(editor_text) <= 8000)))
+    add Solid("#07131cf5")
     frame:
-        background Solid("#18343ff8")
-        padding (45, 37)
+        background Solid("#183744fc")
+        padding (46, 34)
         align (0.5, 0.5)
-        xsize 1110 ysize 510
+        xsize 1440
+        ysize (880 if field == "history" else 680)
         vbox:
-            spacing 18
-            text u"DON-GEN · НАСТРОЙКА ПЕРСОНАЖА" style "dg_meta" size 23
-            text title style "dg_title" size 55
-            text tip style "dg_text" size 28 xmaximum 995
-            null height 11
+            spacing 19
+            text u"DON-GEN  /  РЕДАКТОР ПЕРСОНАЖА" style "dg_meta" size 24
+            text title style "dg_title" size 58 color "#ffe3aa"
+            text tip style "dg_text" size 27 xmaximum 1280
             frame:
                 background Solid("#071b25")
-                padding (24, 19)
-                xsize 1000 ysize 102
-                if field == "age" or field == "days":
+                padding (25, 22)
+                xsize 1310
+                ysize (160 if field == "history" else 128)
+                if field == "age":
+                    input:
+                        value ScreenVariableInputValue("editor_text")
+                        allow "0123456789"
+                        length 9
+                        xmaximum 1220
+                        style "dg_rpg_edit_input"
+                        default_focus True
+                elif field == "days":
                     input:
                         value ScreenVariableInputValue("editor_text")
                         allow "0123456789"
                         length 3
-                        xmaximum 925
+                        xmaximum 1220
                         style "dg_rpg_edit_input"
                         default_focus True
                 elif field == "name":
                     input:
                         value ScreenVariableInputValue("editor_text")
-                        length 35
-                        xmaximum 925
+                        length 100
+                        xmaximum 1220
                         style "dg_rpg_edit_input"
                         default_focus True
                 else:
                     input:
                         value ScreenVariableInputValue("editor_text")
-                        length 120
-                        xmaximum 925
+                        length 8000
+                        xmaximum 1220
                         style "dg_rpg_edit_input"
                         default_focus True
-            text u"Нажми на светлый текст в поле и введи значение. Применить — только после проверки." style "dg_text" size 22 color "#c9e0d7"
+            if field == "history":
+                text u"ПРЕДПРОСМОТР · текст автоматически переносится по ширине окна" style "dg_meta" size 23
+                frame:
+                    background Solid("#081e29")
+                    padding (22, 19)
+                    xsize 1310 ysize (min(365, max(195, 155 + len(editor_text) // 55 * 26)))
+                    viewport:
+                        mousewheel True
+                        scrollbars "vertical"
+                        ysize (min(325, max(155, 115 + len(editor_text) // 55 * 26)))
+                        text dg_literal(editor_text if editor_text else u"Начни вводить историю — здесь появится читаемый перенос текста.") style "dg_text" size 29 xmaximum 1195
+            else:
+                text (u"Введено символов: %d" % len(editor_text)) style "dg_text" size 23
+            text (u"Использовано: %d / 8000 символов" % len(editor_text) if field == "history"
+                  else u"Ввод проверяется перед сохранением") style "dg_text" size 22 color "#b8d9d6"
             hbox:
-                spacing 48
+                spacing 42
                 textbutton u"ПРИМЕНИТЬ" style "dg_primary" sensitive valid_edit action Return(("save", editor_text.strip()))
                 textbutton u"ОТМЕНА" style "dg_act" action Return(("cancel", None))
     key "K_ESCAPE" action Return(("cancel", None))
@@ -374,9 +430,9 @@ screen dg_rpg_setup:
                     xsize 520
                     spacing 9
                     text u"ИМЯ" style "dg_ink_label"
-                    textbutton (dg_literal(dg_create_name) + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "name"))
+                    textbutton (dg_literal(dg_create_name[:65]) + (u"…" if len(dg_create_name) > 65 else u"") + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "name"))
                     null height 11
-                    text u"ВОЗРАСТ (14–80)" style "dg_ink_label"
+                    text u"ВОЗРАСТ ГЕРОЯ" style "dg_ink_label"
                     textbutton (dg_create_age + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "age"))
                     null height 11
                     text u"ДНЕЙ В СМЕНЕ (1–120)" style "dg_ink_label"
@@ -387,7 +443,7 @@ screen dg_rpg_setup:
                     xsize 590
                     spacing 10
                     text u"ПРЕДЫСТОРИЯ" style "dg_ink_label"
-                    textbutton (dg_literal(dg_create_history) + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "history")) xmaximum 565
+                    textbutton (dg_literal(dg_create_history[:105]) + (u"…" if len(dg_create_history) > 105 else u"") + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "history")) xmaximum 565
                     null height 9
                     text u"МИР И ХАРАКТЕРЫ" style "dg_ink_label"
                     textbutton u"Оригинальный Совёнок" style "dg_ink_act" action SetVariable("dg_create_source", "vanilla") selected dg_create_source == "vanilla"
@@ -402,13 +458,13 @@ screen dg_rpg_setup:
                     textbutton choice style "dg_ink_act" selected dg_create_pronouns == choice action SetVariable("dg_create_pronouns", choice)
             null height 8
             text u"Имя, возраст и длительность можно изменить до начала смены. Режим RPG работает и без генерации." style "dg_ink_small" size 22
-            $ dg_valid = bool(dg_create_name.strip() and dg_create_history.strip() and dg_create_age.isdigit() and dg_create_days.isdigit() and 14 <= int(dg_create_age) <= 80 and 1 <= int(dg_create_days) <= 120)
+            $ dg_valid = bool(dg_create_name.strip() and dg_create_history.strip() and dg_create_age.isdigit() and dg_create_days.isdigit() and 1 <= int(dg_create_age) <= 999999999 and 1 <= int(dg_create_days) <= 120)
             hbox:
                 spacing 44
                 textbutton u"Начать смену" style "dg_ink_act" sensitive dg_valid action Return(("start",))
                 textbutton u"Отмена" style "dg_ink_act" action Return(("cancel",))
             if not dg_valid:
-                text u"Заполните имя/предысторию, возраст 14–80, смена 1–120 дней." style "dg_ink_small" size 20 color "#b22e1f"
+                text u"Заполните имя/предысторию, возраст от 1, смена 1–120 дней." style "dg_ink_small" size 20 color "#b22e1f"
 
 # Map pins are drawn over the actual user-provided camp plan when installed.
 # This layout also works without the PNG: the legend remains navigable.
