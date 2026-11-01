@@ -785,29 +785,35 @@ screen dg_rpg_map:
     textbutton u"ЗАКРЫТЬ" style "dg_map_pin" xpos 1690 ypos 19 action Return(("close", None))
     frame:
         background Solid("#102632ed")
-        xpos 32 ypos 940 xsize 890 ysize 117
-        padding (25, 12)
+        xpos 12 ypos 920 xsize 565 ysize 92
+        padding (18, 10)
         vbox:
             spacing 8
             if dg_map_hover in dg_rpg.PLACE_NAMES:
-                text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_text" size 32 color "#ffe2aa"
+                text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_text" size 25 color "#ffe2aa"
                 $ hover_people = dg_rpg.at_place(dg_rpg_state, dg_map_hover)
-                text (u"Здесь: " + u", ".join(name for code, name in hover_people) if hover_people else u"Никого из знакомых поблизости") style "dg_text" size 23
+                text (u"Здесь: " + u", ".join(name for code, name in hover_people) if hover_people else u"Никого из знакомых поблизости") style "dg_text" size 20
             else:
-                text u"НАВЕДИ НА МАРКЕР · нажми для перехода" style "dg_meta" size 26 color "#ffe2aa"
-                text u"Карта доступна свободно: путешествие не тратит время." style "dg_text" size 23
+                text u"НАВЕДИ НА ЗДАНИЕ ИЛИ ЗНАЧОК" style "dg_meta" size 23 color "#ffe2aa"
+                text u"Переход между местами не расходует время." style "dg_text" size 21
     frame:
         background Solid("#102632ed")
-        xpos 1020 ypos 950 xsize 850 ysize 102
-        padding (24, 10)
-        hbox:
-            spacing 14
-            add DG_MAP_BADGE_STORY
-            text u"История" style "dg_text" size 20
-            add DG_MAP_BADGE_QUEST
-            text u"Поручение" style "dg_text" size 20
-            add DG_MAP_BADGE_MEET
-            text u"Встреча" style "dg_text" size 20
+        xpos 1560 ypos 108 xsize 338 ysize 170
+        padding (19, 13)
+        vbox:
+            spacing 5
+            hbox:
+                spacing 10
+                add DG_MAP_BADGE_STORY
+                text u"История" style "dg_text" size 20
+            hbox:
+                spacing 10
+                add DG_MAP_BADGE_QUEST
+                text u"Поручение" style "dg_text" size 20
+            hbox:
+                spacing 10
+                add DG_MAP_BADGE_MEET
+                text u"Встреча" style "dg_text" size 20
 
 screen dg_rpg_places:
     modal True
@@ -865,17 +871,17 @@ screen dg_rpg_hub:
     if nearby_sprites:
         $ portrait = dg_rpg_sprite(nearby_sprites[0][0])
         if portrait is not None:
-            add portrait at dg_rpg_portrait_transform xpos 1000 ypos 160
+            add portrait at dg_rpg_portrait_transform xpos 1080 ypos 160
     use dg_chrome(dg_rpg.PLACE_NAMES[dg_rpg_state["place"]])
     viewport:
-        xpos 96 ypos 132 xsize 960 ysize 815
+        xpos 82 ypos 125 xsize 820 ysize 820
         mousewheel True
         scrollbars "vertical"
         vbox:
             spacing 12
-            xsize 895
+            xsize 770
             text dg_rpg.camp_time(dg_rpg_state) style "dg_title" size 59
-            text dg_literal(u"%s, %d лет · %s" % (dg_rpg_state["hero"]["name"], dg_rpg_state["hero"]["age"], dg_rpg_state["hero"]["background"])) style "dg_sub" size 28
+            text dg_literal(u"%s, %d лет · %s" % (dg_rpg_state["hero"]["name"], dg_rpg_state["hero"]["age"], (dg_rpg_state["hero"]["background"][:155] + (u"…" if len(dg_rpg_state["hero"]["background"]) > 155 else u"")))) style "dg_sub" size 26
             text (u"Энергия: %d/100   ·   Любознательность: %d   ·   Доброта: %d   ·   Навык: %d" %
                   (dg_rpg_state["energy"], dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["skill"])) style "dg_small"
             text (u"Погода: " + dg_world.weather(dg_rpg_state)[1] + u" · Встречи и прогулки зависят от погоды") style "dg_small" size 23 color "#ffe3ae"
@@ -884,7 +890,7 @@ screen dg_rpg_hub:
                 frame:
                     background Solid("#1e3240ef")
                     padding (22, 14)
-                    xsize 855
+                    xsize 765
                     vbox:
                         spacing 8
                         text (u"СЕГОДНЯ: " + day_event["title"]) style "dg_text" size 29 color "#ffe5a0"
@@ -895,7 +901,7 @@ screen dg_rpg_hub:
                 frame:
                     background Solid("#172b32df")
                     padding (20, 15)
-                    xsize 855
+                    xsize 765
                     text (u"Событие дня завершено. Можно исследовать лагерь и общаться с ребятами." if not dg_rpg_state["finished"] else u"Смена завершена. Итоги приключений доступны в хронике.") style "dg_text" size 25
             text dg_literal(dg_rpg_state["event"]) style "dg_small" size 22 xmaximum 850
             if dg_rpg_state["finished"]:
@@ -907,7 +913,7 @@ screen dg_rpg_hub:
                 frame:
                     background Solid("#39412be8")
                     padding (18, 13)
-                    xsize 855
+                    xsize 765
                     vbox:
                         spacing 7
                         text (u"ВСТРЕЧА МЕЖДУ NPC: " + active_incident["title"]) style "dg_text" size 28 color "#ffe5a0"
@@ -938,8 +944,8 @@ screen dg_rpg_hub:
             textbutton u"Вернуться к выбору смены" style "dg_act" action Return(("exit", None))
     frame:
         background Solid("#11232ce0")
-        padding (30, 24)
-        xpos 1090 ypos 155 xsize 730 ysize 790
+        padding (28, 23)
+        xpos 938 ypos 135 xsize 888 ysize 805
         vbox:
             spacing 16
             text u"КТО СЕЙЧАС РЯДОМ" style "dg_meta"
@@ -947,19 +953,22 @@ screen dg_rpg_hub:
             if not inhabitants:
                 text u"Пока никого. Посмотрите карту или дождитесь другого времени." style "dg_text" size 26
             viewport:
-                ysize 570 mousewheel True scrollbars "vertical"
+                xsize 809 ysize 545 mousewheel True scrollbars "vertical"
                 vbox:
-                    spacing 17
+                    xsize 770
+                    spacing 19
                     for who, person in inhabitants:
                         vbox:
-                            spacing 5
-                            text (person + u" · %d/100 · %s" % (dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 30
+                            spacing 8
+                            xsize 760
+                            text (person + u" · %d/100 · %s" % (dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 29
                             hbox:
-                                spacing 16
-                                textbutton u"Диалог · выборы" style "dg_navlink" action Return(("talk", who)) sensitive (not dg_rpg_state["finished"] and dg_rpg_state["energy"] >= 8)
-                                textbutton u"AI-сцена" style "dg_navlink" action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
-                                textbutton u"Своя реплика + AI" style "dg_navlink" text_size 23 action Return(("hybrid_npc", who)) sensitive not dg_rpg_state["finished"]
-                                text u"Спрайт: из ресурсов игры" style "dg_small" size 20
+                                spacing 26
+                                textbutton u"Диалог / выборы" style "dg_navlink" text_size 23 action Return(("talk", who)) sensitive (not dg_rpg_state["finished"] and dg_rpg_state["energy"] >= 8)
+                                textbutton u"Своя реплика" style "dg_navlink" text_size 23 action Return(("hybrid_npc", who)) sensitive not dg_rpg_state["finished"]
+                            hbox:
+                                spacing 26
+                                textbutton u"Особая AI-сцена" style "dg_navlink" text_size 23 action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
                             if dg_social.personal_scene(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
