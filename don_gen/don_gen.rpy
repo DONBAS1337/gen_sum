@@ -573,7 +573,7 @@ screen dg_chrome(place_name, back=None):
         xpos 120
         ypos 64
         spacing 16
-        text u"ГЕНЕРАТИВНОЕ ЛЕТО" style "dg_label"
+        text u"DON-GEN" style "dg_label"
         text u"·" style "dg_label"
         text place_name style "dg_label" color "#ffdd7d"
     if back is not None:
