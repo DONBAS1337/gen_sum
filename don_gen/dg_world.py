@@ -158,6 +158,7 @@ def ensure(state):
     world.setdefault("tracks", {})
     world.setdefault("chronicle", [])
     world.setdefault("resolved", [])
+    world.setdefault("closed_days", [])
     world.setdefault("decisions", [])
     world.setdefault("event", None)
     for plot in PLOT_ORDER:
@@ -259,7 +260,7 @@ def make_event(state):
 def prepare(state):
     world = ensure(state)
     event = world["event"]
-    if state.get("finished"):
+    if state.get("finished") or state["day"] in world["closed_days"]:
         world["event"] = None
         return None
     if event is None or event.get("day") != state["day"]:
@@ -312,6 +313,8 @@ def choose(state, choice_key):
     world["decisions"].append(decision)
     world["decisions"] = world["decisions"][-130:]
     world["resolved"].append(event["id"])
+    world["closed_days"].append(state["day"])
+    world["closed_days"] = world["closed_days"][-140:]
     world["resolved"] = world["resolved"][-130:]
     world["event"] = None
     conclusion = _conclusion(state, event, choice_key, selected)
@@ -364,6 +367,8 @@ def missed(state):
                                 "text": text, "arc": event["arc"], "status": "missed"})
     world["chronicle"] = world["chronicle"][-150:]
     world["event"] = None
+    world["closed_days"].append(state["day"])
+    world["closed_days"] = world["closed_days"][-140:]
     return text
 
 
