@@ -464,19 +464,49 @@ screen dg_rpg_journal:
 
 screen dg_rpg_route_choice(who):
     modal True
-    add Solid("#0c1823ed")
+    add dg_rpg_bg()
+    add Solid("#071520e7")
+    $ portrait = dg_rpg_sprite(who)
+    if portrait is not None:
+        add portrait at dg_rpg_portrait_transform xpos 65 ypos 125
+    $ stage = dg_rpg.available_route_events(dg_rpg_state, who)[0]
+    $ situation = dg_dialogue.route_intro(dg_rpg_state, who, stage[0])
     frame:
-        background DG_PAPER padding (55, 45)
-        align (0.5, 0.5) xsize 1100
+        background Solid("#102530f4")
+        xpos 515 ypos 115 xsize 1320 ysize 865
+        padding (40, 32)
         vbox:
-            spacing 24
-            text (u"Сюжетный этап: " + dg_rpg.NPC_NAMES[who]) style "dg_ink_title"
-            $ stage = dg_rpg.available_route_events(dg_rpg_state, who)[0]
-            text (u"%s · порог %d очков" % (stage[1], stage[0])) style "dg_ink_small"
-            textbutton u"Поддержать персонажа" style "dg_ink_act" action Return("support")
-            textbutton u"Высказать свою точку зрения" style "dg_ink_act" action Return("honest")
-            textbutton u"Сохранить дистанцию" style "dg_ink_act" action Return("leave")
-            textbutton u"Не сейчас" style "dg_ink_act" action Return(None)
+            spacing 17
+            text (u"РУТ: " + dg_rpg.NPC_NAMES[who] + u" · ЭТАП " + str(stage[0])) style "dg_title" size 46 color "#ffe19b"
+            text dg_literal(situation["title"] + u" · " + stage[1]) style "dg_sub" size 30
+            frame:
+                background Solid("#071923dd")
+                padding (23, 17)
+                xsize 1210 ysize 345
+                viewport:
+                    mousewheel True scrollbars "vertical"
+                    ysize 303
+                    text dg_literal(situation["text"]) style "dg_text" size 28 xmaximum 1140
+            text u"КАК ОТВЕТИТЬ?" style "dg_meta" size 24
+            for choice, caption in situation["options"]:
+                textbutton caption style "dg_navlink" text_size 28 sensitive (dg_rpg_state["energy"] >= 12) action Return(choice)
+            if dg_rpg_state["energy"] < 12:
+                text u"Для сюжетного события нужно 12 энергии." style "dg_text" size 24 color "#ffe19b"
+            textbutton u"Вернуться позже" style "dg_navlink" text_size 25 action Return(None)
+
+screen dg_rpg_route_result(who, level, stance):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#081a25e8")
+    frame:
+        background DG_PAPER
+        padding (65, 52)
+        align (0.5, 0.5) xsize 1250 ysize 670
+        vbox:
+            spacing 29
+            text (u"Событие рута: " + dg_rpg.NPC_NAMES[who]) style "dg_ink_title"
+            text dg_literal(dg_dialogue.route_conclusion(who, level, stance)) style "dg_ink_small" size 33 xmaximum 1100
+            textbutton u"Продолжить смену" style "dg_ink_act" action Return(None)
 
 transform dg_rpg_portrait_transform:
     zoom 0.56
@@ -587,9 +617,12 @@ label dg_rpg_loop:
         jump dg_rpg_loop
     if dg_rpg_cmd == "route":
         $ dg_rpg_focus = dg_rpg_value
+        $ dg_rpg_route_level = dg_rpg.available_route_events(dg_rpg_state, dg_rpg_focus)[0][0]
         call screen dg_rpg_route_choice(dg_rpg_focus)
         if _return:
-            $ dg_rpg_apply("route", (dg_rpg_focus, _return))
+            $ dg_rpg_route_stance = _return
+            $ dg_rpg_apply("route", (dg_rpg_focus, dg_rpg_route_stance))
+            call screen dg_rpg_route_result(dg_rpg_focus, dg_rpg_route_level, dg_rpg_route_stance)
         jump dg_rpg_loop
     if dg_rpg_cmd == "ai":
         if not dg_runtime.app.client.authenticated():
