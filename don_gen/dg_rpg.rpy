@@ -13,6 +13,7 @@ init 1001 python:
     import dg_comfy
     import dg_adult
     import dg_art
+    import dg_narrative
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -97,6 +98,8 @@ init 1001 python:
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
+        elif action == "remember_narrative":
+            dg_narrative.remember_scene(state, arg[0], arg[1])
         elif action == "cg_record":
             if dg_art.marker(state,arg) is None:
                 raise ValueError("CG access denied")
@@ -151,6 +154,43 @@ init 1001 python:
         if not isinstance(story, basestring) or len(story.strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
             raise ValueError("AI returned invalid scene length")
         return story.strip()
+
+    def dg_rpg_auto_generate(kind, who, identity, story, choices=None):
+        # The worker only WRITES PROSE; world mechanics remain locked.
+        state=dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"])
+        app=dg_runtime.app
+        ref=u""
+        # Use the actual installed 7DL route text when available. If no 7DL
+        # resources exist, the route-specific persona profile still applies.
+        if who=="mi" and state["source"].startswith("7dl:"):
+            root=(app.catalog.get("source_roots") or {}).get("7dl")
+            if root and os.path.isdir(root):
+                try:
+                    import dg_source_7dl
+                    ref=dg_source_7dl.source_context(
+                        root,os.path.join(dg_rpg_root(),"_source_cache"),
+                        state["source"].split(":",1)[1],
+                        dg_rpg.NPC_NAMES[who]+u" "+story[:160],
+                        mode="divergent",day=(state["day"] if state["day"]<=7 else 7),
+                        limit=3,max_chars=5200)
+                except (IOError,OSError,ValueError,TypeError):
+                    logging.getLogger("don_gen").warning(
+                        "7DL context unavailable for auto scene",exc_info=True)
+        instructions,prompt=dg_narrative.request(
+            state,kind,who,identity,story,choices=choices,source_reference=ref)
+        instructions+=u" "+dg_adult.scene_policy(state,who)
+        if not app.models:
+            app.refresh_models()
+        model=dg_backend.default_model(app.models,persistent.dg_model)
+        app.set_status(u"Рассказываем уникальный эпизод лагеря…")
+        result=app.client.generate(instructions,prompt,model=model,
+                                   effort=dg_backend.DEFAULT_EFFORT,
+                                   fast_mode=persistent.dg_fast_mode)
+        if isinstance(result,bytes):
+            result=result.decode("utf-8")
+        if not isinstance(result,unicode) or len(result.strip())<100 or len(result)>12000:
+            raise ValueError("Narrator returned invalid scene text")
+        return result.strip()
 
     # Optional private gen_assets pack, imported from a local checkout by install.ps1.
     DG_MAP_USER = "mods/don_gen/images/gen_assets/map_default.png"
@@ -937,6 +977,7 @@ screen dg_rpg_hub:
             textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
             textbutton u"ГАЛЕРЕЯ CG · иллюстрации смены" style "dg_act" action Return(("cg_gallery", None))
             textbutton (u"Режим истории: 18+ AU" if dg_adult.enabled(dg_rpg_state) else u"Режим истории: обычный") style "dg_act" action Return(("adult", None))
+            textbutton (u"Автосцены NPC: AI" if getattr(persistent,"dg_auto_narrate",True) else u"Автосцены NPC: без AI") style "dg_act" action Return(("narrator",None))
             textbutton (u"Художник: ComfyUI локально" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Художник: облачный") style "dg_act" action Return(("artist", None))
             textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
             if not dg_rpg_state["finished"]:
@@ -1659,7 +1700,10 @@ label dg_rpg_vn_text(scene_text, who=None):
         $ dg_rpg_vn_line_index += 1
     return
 
-label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None):
+label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None, scene_identity=None):
+    if scene_identity is not None:
+        call dg_rpg_narrate("result",who,scene_identity,scene_text)
+        $ scene_text = _return
     call dg_rpg_vn_text(scene_text, who)
     if cg_possible:
         menu:
@@ -1670,7 +1714,27 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None):
     else:
         return None
 
-label dg_rpg_vn_choice(story_text, choice_pairs, who=None):
+# Generate one contextual scene BEFORE presenting local, deterministic choices.
+# If offline, no login or network request is attempted. Cache generated scenes
+# per shift: re-opening the event never spends another call.
+label dg_rpg_narrate(kind, who, identity, source_text, choices=None):
+    $ dg_narrative_key = dg_narrative.context(dg_rpg_state,kind,who,identity)["scene_id"]
+    $ dg_narrative_saved = dg_narrative.read_scene(dg_rpg_state,dg_narrative_key)
+    if dg_narrative_saved is not None:
+        return dg_narrative_saved["text"]
+    if getattr(persistent,"dg_auto_narrate",True) and dg_runtime.app.client.authenticated():
+        $ dg_run("chapter",dg_rpg_auto_generate,kind,who,identity,source_text,choices)
+        if not dg_runtime.app.error:
+            $ dg_rpg_apply("remember_narrative",(dg_narrative_key,dg_runtime.app.result))
+            return dg_runtime.app.result
+        else:
+            $ logging.getLogger("don_gen").warning("Auto narrator failed; using local backup: %s", dg_runtime.app.error)
+    return source_text
+
+label dg_rpg_vn_choice(story_text, choice_pairs, who=None, scene_identity=None):
+    if scene_identity is not None:
+        call dg_rpg_narrate("world" if who is not None else "encounter", who, scene_identity, story_text, choice_pairs)
+        $ story_text = _return
     call dg_rpg_vn_text(story_text, who)
     $ dg_rpg_vn_selected = renpy.display_menu([(dg_literal(caption), key) for key, caption in choice_pairs])
     if dg_rpg_vn_selected == "__cancel__":
@@ -1684,7 +1748,11 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
         $ dg_rpg_vn_dlg = dg_dialogue.topic(dg_rpg_state, who, topic_index)
     else:
         $ dg_rpg_vn_dlg = dg_dialogue.outcome(dg_rpg_state, who, topic_index, stance)
-    call dg_rpg_vn_text(dg_rpg_vn_dlg["text"], who)
+    $ dg_rpg_vn_dlg = dg_narrative.decorate_dialogue(dg_rpg_state,who,phase,dg_rpg_vn_dlg,topic_index,stance)
+    $ dg_npc_situation_id = "%s:%d:%s:%d" % (who,topic_index,phase,dg_rpg_state["dialogue_counts"].get("%d:%s" % (dg_rpg_state["day"],who),0))
+    call dg_rpg_narrate("npc_"+phase,who,dg_npc_situation_id,dg_rpg_vn_dlg["text"],dg_rpg_vn_dlg.get("options"))
+    $ dg_rpg_vn_narrated = _return
+    call dg_rpg_vn_text(dg_rpg_vn_narrated, who)
     if phase == "result":
         return
     $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
@@ -1767,6 +1835,9 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "diag":
         call screen dg_diagnostics
         jump dg_rpg_loop
+    if dg_rpg_cmd == "narrator":
+        $ persistent.dg_auto_narrate = not getattr(persistent,"dg_auto_narrate",True)
+        jump dg_rpg_loop
     if dg_rpg_cmd == "artist":
         call screen dg_rpg_artist_settings
         jump dg_rpg_loop
@@ -1831,12 +1902,12 @@ label dg_rpg_loop:
         if dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"]) and dg_rpg_state["energy"] >= 9:
             $ dg_incident_current = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
             $ dg_rpg_incident_choices = list(dg_social.INCIDENT_CHOICES) + [("__cancel__", u"Не вмешиваться сейчас")]
-            call dg_rpg_vn_choice(dg_incident_current["text"], dg_rpg_incident_choices)
+            call dg_rpg_vn_choice(dg_incident_current["text"], dg_rpg_incident_choices, None, "incident:%d" % dg_rpg_state["day"])
             if _return:
                 $ dg_rpg_incident_choice = _return
                 $ dg_rpg_apply("incident", dg_rpg_incident_choice)
                 $ dg_rpg_incident_result = {"title":dg_rpg_last_incident["title"],"text":dg_rpg_last_incident["text"]}
-                call dg_rpg_vn_scene(dg_rpg_incident_result["text"])
+                call dg_rpg_vn_scene(dg_rpg_incident_result["text"], True, None, "incident_outcome:%d:%s" % (dg_rpg_state["day"],dg_rpg_incident_choice))
                 if _return == "cg":
                     $ dg_cg_plan = dg_rpg_cg_for("incident", dg_rpg_incident_result["title"], dg_rpg_incident_result["text"], None)
                     jump dg_rpg_cg_label
@@ -1846,12 +1917,12 @@ label dg_rpg_loop:
         if dg_social.personal_scene(dg_rpg_state, dg_rpg_focus) and dg_rpg_state["energy"] >= 12:
             $ dg_personal_current = dg_social.personal_scene(dg_rpg_state,dg_rpg_focus)
             $ dg_personal_choices = list(dg_personal_current["choices"]) + [("__cancel__", u"Вернуться позже")]
-            call dg_rpg_vn_choice(dg_personal_current["text"], dg_personal_choices, dg_rpg_focus)
+            call dg_rpg_vn_choice(dg_personal_current["text"], dg_personal_choices, dg_rpg_focus, "personal:%s:%d" % (dg_rpg_focus,dg_personal_current["stage"]))
             if _return:
                 $ dg_rpg_personal_stance = _return
                 $ dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))
                 $ dg_rpg_personal_result = {"title": dg_rpg_last_personal["title"], "text": dg_rpg_last_personal["text"]}
-                call dg_rpg_vn_scene(dg_rpg_personal_result["text"], True, dg_rpg_focus)
+                call dg_rpg_vn_scene(dg_rpg_personal_result["text"], True, dg_rpg_focus, "personal_result:%s:%s:%d" % (dg_rpg_focus,dg_rpg_personal_stance,dg_rpg_state["day"]))
                 if _return == "cg":
                     $ dg_cg_plan = dg_rpg_cg_for("personal", dg_rpg_personal_result["title"], dg_rpg_personal_result["text"], dg_rpg_focus)
                     jump dg_rpg_cg_label
@@ -1888,7 +1959,7 @@ label dg_rpg_loop:
         $ dg_rpg_route_level = dg_rpg.available_route_events(dg_rpg_state, dg_rpg_focus)[0][0]
         $ dg_route_intro = dg_dialogue.route_intro(dg_rpg_state, dg_rpg_focus, dg_rpg_route_level)
         $ dg_route_choices = list(dg_route_intro["options"]) + [("__cancel__", u"Вернуться позже")]
-        call dg_rpg_vn_choice(dg_route_intro["text"], dg_route_choices, dg_rpg_focus)
+        call dg_rpg_vn_choice(dg_route_intro["text"], dg_route_choices, dg_rpg_focus, "route:%s:%d" % (dg_rpg_focus,dg_rpg_route_level))
         if _return:
             $ dg_rpg_route_stance = _return
             $ dg_rpg_apply("route", (dg_rpg_focus, dg_rpg_route_stance))
@@ -1942,7 +2013,7 @@ label dg_rpg_world_label:
     $ dg_world_choices = [(choice["key"], choice["text"]) for choice in dg_world_active["choices"]]
     $ dg_world_choices.append(("custom", u"Написать своё действие · AI"))
     $ dg_world_choices.append(("__cancel__", u"Вернуться в лагерь"))
-    call dg_rpg_vn_choice(dg_world_active["story"], dg_world_choices, dg_world_active["npc"])
+    call dg_rpg_vn_choice(dg_world_active["story"], dg_world_choices, dg_world_active["npc"], dg_world_active["id"])
     if _return == "custom":
         $ dg_rpg_hybrid_mode = "world"
         $ dg_rpg_hybrid_who = None
@@ -1951,7 +2022,7 @@ label dg_rpg_world_label:
     if _return:
         $ dg_rpg_world_stance = _return
         $ dg_rpg_apply("world", dg_rpg_world_stance)
-        call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"])
+        call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"], "outcome:"+dg_world_active["id"]+":"+dg_rpg_world_stance)
         if _return == "cg":
             $ dg_cg_plan = dg_rpg_cg_for("world", dg_rpg_last_world["title"], dg_rpg_last_world["text"], dg_rpg_last_world.get("npc"))
             jump dg_rpg_cg_label
