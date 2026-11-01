@@ -1615,7 +1615,10 @@ label dg_rpg_loop:
                 $ dg_rpg_incident_choice = _return
                 $ dg_rpg_apply("incident", dg_rpg_incident_choice)
                 $ dg_rpg_incident_result = {"title":dg_rpg_last_incident["title"],"text":dg_rpg_last_incident["text"]}
-                call screen dg_rpg_action_result(dg_rpg_incident_result)
+                call screen dg_rpg_action_result(dg_rpg_incident_result, True)
+                if _return == "cg":
+                    $ dg_cg_plan = dg_rpg_cg_for("incident", dg_rpg_incident_result["title"], dg_rpg_incident_result["text"], None)
+                    jump dg_rpg_cg_label
         jump dg_rpg_loop
     if dg_rpg_cmd == "personal":
         $ dg_rpg_focus = dg_rpg_value
@@ -1625,7 +1628,10 @@ label dg_rpg_loop:
                 $ dg_rpg_personal_stance = _return
                 $ dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))
                 $ dg_rpg_personal_result = {"title": dg_rpg_last_personal["title"], "text": dg_rpg_last_personal["text"]}
-                call screen dg_rpg_action_result(dg_rpg_personal_result)
+                call screen dg_rpg_action_result(dg_rpg_personal_result, True)
+                if _return == "cg":
+                    $ dg_cg_plan = dg_rpg_cg_for("personal", dg_rpg_personal_result["title"], dg_rpg_personal_result["text"], dg_rpg_focus)
+                    jump dg_rpg_cg_label
         jump dg_rpg_loop
     if dg_rpg_cmd == "talk":
         $ dg_rpg_focus = dg_rpg_value
@@ -1677,16 +1683,21 @@ label dg_rpg_loop:
         else:
             $ dg_rpg_open(dg_rpg_state["id"])
             call screen dg_rpg_read_scene(dg_runtime.app.result)
+            if _return == "cg":
+                $ dg_cg_plan = dg_rpg_cg_for("ai", u"Особая сцена", dg_runtime.app.result, dg_rpg_focus, dg_rpg_intent)
+                jump dg_rpg_cg_label
         jump dg_rpg_loop
-    if dg_rpg_cmd == "background" or dg_rpg_cmd == "sprite":
-        # A working localhost ComfyUI never needs ChatGPT sign-in.
+    if dg_rpg_cmd == "background":
+        # Never generate a background that already has an exact canonical asset
+        # or was synthesized in this shift. No implicit API calls.
+        if dg_rpg_bg_status()["status"] != "missing":
+            jump dg_rpg_loop
         if getattr(persistent, "dg_rpg_art_provider", "cloud") != "comfy":
             if not dg_runtime.app.client.authenticated():
                 call dg_connect
                 if not dg_runtime.app.client.authenticated():
                     jump dg_rpg_loop
-        $ dg_rpg_art_kind = "background" if dg_rpg_cmd == "background" else "sprite"
-        $ dg_run("chapter", dg_rpg_art_generate, dg_rpg_art_kind, dg_rpg_value)
+        $ dg_run("chapter", dg_rpg_art_generate, "background", dg_rpg_value)
         if dg_runtime.app.error:
             call screen dg_error
         jump dg_rpg_loop
@@ -1707,6 +1718,9 @@ label dg_rpg_world_label:
         $ dg_rpg_world_stance = _return
         $ dg_rpg_apply("world", dg_rpg_world_stance)
         call screen dg_rpg_world_result(dg_rpg_last_world)
+        if _return == "cg":
+            $ dg_cg_plan = dg_rpg_cg_for("world", dg_rpg_last_world["title"], dg_rpg_last_world["text"], dg_rpg_last_world.get("npc"))
+            jump dg_rpg_cg_label
     jump dg_rpg_loop
 
 
@@ -1729,6 +1743,10 @@ label dg_rpg_hybrid_review_label:
     if _return == "local":
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, None))
         call screen dg_rpg_hybrid_read(dg_rpg_hybrid_entry)
+        if _return == "cg":
+            $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc")
+            $ dg_cg_plan = dg_rpg_cg_for("hybrid", u"Мой поступок", dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"], dg_cg_who, dg_rpg_hybrid_entry["action"])
+            jump dg_rpg_cg_label
         jump dg_rpg_loop
     if _return == "ai":
         if not dg_runtime.app.client.authenticated():
@@ -1742,5 +1760,34 @@ label dg_rpg_hybrid_review_label:
         $ dg_rpg_hybrid_scene = dg_runtime.app.result
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, dg_rpg_hybrid_scene))
         call screen dg_rpg_hybrid_read(dg_rpg_hybrid_entry)
+        if _return == "cg":
+            $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc")
+            $ dg_cg_plan = dg_rpg_cg_for("hybrid", u"Мой поступок", dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"], dg_cg_who, dg_rpg_hybrid_entry["action"])
+            jump dg_rpg_cg_label
         jump dg_rpg_loop
+    jump dg_rpg_loop
+
+
+# All CG displays use this explicit, user-clicked path.
+# No image request is made when a story screen is merely opened.
+label dg_rpg_cg_label:
+    if dg_cg_plan is None:
+        jump dg_rpg_loop
+    call screen dg_rpg_cg_art(dg_cg_plan)
+    if _return == "generate":
+        if not dg_art.marker(dg_rpg_state,dg_cg_plan):
+            jump dg_rpg_loop
+        if dg_cg_plan["kind"] == "cg18" and getattr(persistent,"dg_rpg_art_provider","cloud") != "comfy":
+            $ dg_runtime.app.error = u"CG 18+ можно создавать только локально через ComfyUI."
+            call screen dg_error
+            jump dg_rpg_cg_label
+        if getattr(persistent,"dg_rpg_art_provider","cloud") != "comfy":
+            if not dg_runtime.app.client.authenticated():
+                call dg_connect
+                if not dg_runtime.app.client.authenticated():
+                    jump dg_rpg_cg_label
+        $ dg_run("chapter", dg_rpg_art_generate, dg_cg_plan["kind"], dg_cg_plan)
+        if dg_runtime.app.error:
+            call screen dg_error
+        jump dg_rpg_cg_label
     jump dg_rpg_loop
