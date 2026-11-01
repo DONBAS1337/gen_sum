@@ -452,7 +452,7 @@ def prepare_incident(state):
         return None
     if current is None or current["day"]!=state["day"]:
         index=(state["day"]+int(state["id"][4:8],16))%len(PAIR_DEFS)
-        if not state.get("mystery",{}).get("yulia_discovered") and "uv" in PAIR_DEFS[index][:2]:
+        if "uv" in PAIR_DEFS[index][:2]:
             index=(index+1)%len(PAIR_DEFS)
         a,b,score,title,description=PAIR_DEFS[index]
         social["incident"]={"day":state["day"],"pair":[a,b],
