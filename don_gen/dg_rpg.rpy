@@ -53,6 +53,18 @@ init 1001 python:
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
+        elif action == "cg_record":
+            if dg_art.marker(state,arg) is None:
+                raise ValueError("CG access denied")
+            status=dg_art.resolve(dg_rpg_root(),state["id"],arg["kind"],
+                                  arg["key"],dg_rpg_cg_builtin(arg))
+            if status["status"] == "missing":
+                raise ValueError("CG not available")
+            state.setdefault("cg_history",[])
+            if not any(x["key"] == arg["key"] and x["kind"] == arg["kind"]
+                       for x in state["cg_history"]):
+                state["cg_history"].append(dict(arg))
+                state["cg_history"] = state["cg_history"][-60:]
         elif action == "contract":
             store.dg_rpg_last_contract = dg_rpg.accept_contract(state, arg)
         else:
@@ -810,6 +822,7 @@ screen dg_rpg_hub:
                 textbutton u"ГИБРИДНАЯ СЦЕНА · действие + реакция AI" style "dg_act" action Return(("hybrid", None))
                 textbutton u"ПОРУЧЕНИЯ · длинные задания" style "dg_act" action Return(("contracts", None))
             textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
+            textbutton u"ГАЛЕРЕЯ CG · иллюстрации смены" style "dg_act" action Return(("cg_gallery", None))
             textbutton (u"Режим истории: 18+ AU" if dg_adult.enabled(dg_rpg_state) else u"Режим истории: обычный") style "dg_act" action Return(("adult", None))
             textbutton (u"Художник: ComfyUI локально" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Художник: облачный") style "dg_act" action Return(("artist", None))
             textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
@@ -941,6 +954,36 @@ screen dg_rpg_hybrid_review(plan):
                     spacing 38
                     textbutton u"ИЗМЕНИТЬ" style "dg_navlink" action Return("retry")
                     textbutton u"ОТМЕНА" style "dg_navlink" action Return("cancel")
+
+screen dg_rpg_cg_gallery:
+    modal True
+    add dg_rpg_bg()
+    add Solid("#071924f0")
+    frame:
+        background Solid("#102c37fa")
+        align (0.5,0.5) xsize 1590 ysize 915 padding (43,31)
+        vbox:
+            spacing 20
+            text u"ГАЛЕРЕЯ CG · ТЕКУЩАЯ СМЕНА" style "dg_title" size 49 color "#ffe1a4"
+            text u"Иллюстрации сохранены на диске. Открытие галереи не запускает генерацию." style "dg_text" size 26
+            viewport:
+                mousewheel True scrollbars "vertical" ysize 665
+                vbox:
+                    spacing 15
+                    $ gallery_items = dg_rpg_state.get("cg_history", [])
+                    if not gallery_items:
+                        text u"Пока CG нет. Их можно создавать после крупных сюжетных сцен." style "dg_text" size 29
+                    for cg_item in gallery_items[::-1]:
+                        if cg_item["kind"] != "cg18" or dg_adult.enabled(dg_rpg_state):
+                            frame:
+                                background Solid("#21414be9")
+                                padding (22,15)
+                                xsize 1420
+                                hbox:
+                                    spacing 22
+                                    text (u"18+" if cg_item["kind"] == "cg18" else u"CG") style "dg_meta" size 26 color "#ffe0ad"
+                                    textbutton dg_literal(cg_item["title"]) style "dg_navlink" text_size 27 action Return(("view",cg_item))
+            textbutton u"ВЕРНУТЬСЯ В ЛАГЕРЬ" style "dg_primary" action Return(None)
 
 screen dg_rpg_cg_art(plan):
     modal True
@@ -1545,6 +1588,12 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "journal":
         call screen dg_rpg_journal
         jump dg_rpg_loop
+    if dg_rpg_cmd == "cg_gallery":
+        call screen dg_rpg_cg_gallery
+        if isinstance(_return, tuple) and len(_return)==2 and _return[0]=="view":
+            $ dg_cg_plan = _return[1]
+            jump dg_rpg_cg_label
+        jump dg_rpg_loop
     if dg_rpg_cmd == "finale":
         call screen dg_rpg_finale
         jump dg_rpg_loop
@@ -1776,6 +1825,8 @@ label dg_rpg_hybrid_review_label:
 label dg_rpg_cg_label:
     if dg_cg_plan is None:
         jump dg_rpg_loop
+    if dg_rpg_cg_status(dg_cg_plan)["status"] in ("generated","builtin"):
+        $ dg_rpg_apply("cg_record",dg_cg_plan)
     call screen dg_rpg_cg_art(dg_cg_plan)
     if _return == "generate":
         if not dg_art.marker(dg_rpg_state,dg_cg_plan):
@@ -1792,5 +1843,7 @@ label dg_rpg_cg_label:
         $ dg_run("chapter", dg_rpg_art_generate, dg_cg_plan["kind"], dg_cg_plan)
         if dg_runtime.app.error:
             call screen dg_error
+        else:
+            $ dg_rpg_apply("cg_record",dg_cg_plan)
         jump dg_rpg_cg_label
     jump dg_rpg_loop
