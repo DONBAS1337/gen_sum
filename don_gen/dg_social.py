@@ -182,6 +182,7 @@ def resolve_personal(state, who, approach):
     social["last_interactions"].append({"day":state["day"],"who":who,"kind":"personal",
                                          "title":scene["title"],"text":result["text"]})
     social["last_interactions"] = social["last_interactions"][-80:]
+    dg_world.refresh_open_event(state)
     return result
 
 
@@ -372,12 +373,20 @@ def action(state, text, nearby):
     notes=quest_steps(state,place,intent)
     if notes:
         narration+=u"\n\n"+u"\n".join(notes)
+    dg_world.refresh_open_event(state)
     social["actions"].append({"day":state["day"],"slot":state["slot"],"key":counter_key,
                               "intent":intent,"target":target,"place":place,
                               "text":parsed["original"],"impact":impact})
     social["actions"]=social["actions"][-80:]
     return {"status":"done","text":narration,"intent":intent,"target":target,
             "quest_updates":notes,"arc":arc,"impact":impact}
+
+
+
+def quest_at(state, place):
+    return [entry for entry in quest_list(state)
+            if entry["status"]=="active" and
+            QUESTS[entry["id"]][4][entry["step"]][0]==place]
 
 
 def report(state):
