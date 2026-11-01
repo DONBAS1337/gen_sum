@@ -21,7 +21,7 @@ except NameError:
     text_type = str
 
 MODES = ("free", "world", "npc")
-MAX_ACTION = 360
+MAX_ACTION = 4000
 MAX_SCENE = 12000
 
 def _json(value):
