@@ -150,12 +150,49 @@ init 1001 python:
 
     # Optional private gen_assets pack, imported from a local checkout by install.ps1.
     DG_MAP_USER = "mods/don_gen/images/gen_assets/map_default.png"
+    # Hotspots located over buildings on the real gen_assets Sovyonok map.
+    # Individual cabin roofs are separate interactive targets below.
     DG_MAP_USER_PINS = (
-        ("gate",288,570), ("square",761,503), ("cabins",709,326),
-        ("canteen",885,555), ("library",1006,400), ("clubs",426,480),
-        ("stage",885,190), ("beach",1060,738), ("lake",1290,865),
-        ("forest",1528,337), ("infirmary",898,460), ("sports",1160,490)
+        ("gate",472,505), ("parking",351,486), ("square",928,456),
+        ("cabins",874,303), ("cabins_south",710,626),
+        ("canteen",1098,521), ("canteen_veranda",1056,577),
+        ("library",1230,366), ("clubs",497,542), ("clubhouse",521,470),
+        ("stage",1101,115), ("outdoor_stage",1130,192),
+        ("beach",1378,746), ("lake",1015,873), ("forest",628,124),
+        ("forest_path",527,230), ("infirmary",1083,420), ("sports",1355,528),
+        ("music",641,305), ("administration",814,408), ("showers",746,475),
+        ("washrooms",581,457), ("kitchen",1066,489), ("storage",1188,527),
+        ("gym",1378,469), ("volleyball",1288,514), ("football",1513,553),
+        ("badminton",1435,400), ("boathouse",903,688), ("pier",929,772),
+        ("beachhouse",1394,616), ("island",711,953),
+        ("island_far",1192,985), ("old_camp",273,1028),
+        ("campfire",663,757), ("radio",668,383),
+        ("headquarters",798,444), ("laundry",744,530),
+        ("warehouse",1173,473)
     )
+    # 31 cabins follow the numbered roofs on the genuine camp plan.
+    DG_MAP_USER_CABINS = (
+        ("cabin_01",785,300), ("cabin_02",829,301),
+        ("cabin_03",865,303), ("cabin_04",911,311),
+        ("cabin_05",972,313), ("cabin_06",1011,313),
+        ("cabin_07",812,245), ("cabin_08",848,247),
+        ("cabin_09",916,258), ("cabin_10",952,260),
+        ("cabin_11",990,264), ("cabin_12",811,183),
+        ("cabin_13",837,183), ("cabin_14",865,184),
+        ("cabin_15",901,186), ("cabin_16",941,188),
+        ("cabin_17",981,190), ("cabin_18",663,566),
+        ("cabin_19",711,569), ("cabin_20",757,570),
+        ("cabin_21",798,569), ("cabin_22",675,634),
+        ("cabin_23",706,653), ("cabin_24",731,676),
+        ("cabin_25",596,652), ("cabin_26",623,684),
+        ("cabin_27",656,706), ("cabin_28",687,732),
+        ("cabin_29",586,753), ("cabin_30",552,770),
+        ("cabin_31",511,789)
+    )
+    DG_MAP_USER_IDLE = im.Scale("mods/don_gen/images/map_idle.png",29,29)
+    DG_MAP_USER_HOVER = im.Scale("mods/don_gen/images/map_hover.png",44,44)
+    DG_MAP_USER_CURRENT = im.Scale("mods/don_gen/images/map_selected.png",35,35)
+
     DG_MAP_ICON_BY_NPC = {
         "dv":"dv", "el":"el", "mi":"mi", "mz":"zh", "mt":"od",
         "sl":"sl", "sh":"sh", "cs":"vi", "us":"ul", "un":"un", "uv":"yu"
@@ -695,8 +732,10 @@ screen dg_rpg_map:
         $ incident_here = dg_social.incident_at(dg_rpg_state, slug)
         $ locals_here = dg_rpg.at_place(dg_rpg_state, slug)
         imagebutton:
-            idle (DG_MAP_PIN_SELECTED if dg_rpg_state["place"] == slug else DG_MAP_PIN_IDLE)
-            hover DG_MAP_PIN_HOVER
+            idle ((DG_MAP_USER_CURRENT if dg_rpg_state["place"] == slug else DG_MAP_USER_IDLE)
+                  if renpy.loadable(DG_MAP_USER)
+                  else (DG_MAP_PIN_SELECTED if dg_rpg_state["place"] == slug else DG_MAP_PIN_IDLE))
+            hover (DG_MAP_USER_HOVER if renpy.loadable(DG_MAP_USER) else DG_MAP_PIN_HOVER)
             xpos px ypos py
             focus_mask True
             hovered SetScreenVariable("dg_map_hover", slug)
@@ -721,6 +760,18 @@ screen dg_rpg_map:
                         add Transform(mini, zoom=0.068) xpos (px - 5 + index * 31) ypos (py + 33)
                     else:
                         add DG_MAP_BADGE_NPC xpos (px + index * 24) ypos (py + 33)
+    if renpy.loadable(DG_MAP_USER):
+        # Every house on the real gen_assets map can be entered DIRECTLY:
+        # transparent idle hotspot, highlighted roof on hover.
+        for cabin, bx, by in DG_MAP_USER_CABINS:
+            imagebutton:
+                idle Solid("#ffffff01", 27, 26)
+                hover Solid("#ffe0a990", 27, 26)
+                xpos bx ypos by
+                focus_mask False
+                hovered SetScreenVariable("dg_map_hover", cabin)
+                unhovered SetScreenVariable("dg_map_hover", None)
+                action Return(("go", cabin))
     frame:
         background Solid("#102632ec")
         xpos 0 ypos 0 xsize 1920 ysize 94
@@ -730,7 +781,7 @@ screen dg_rpg_map:
             text u"DON-GEN  /  КАРТА ЛАГЕРЯ" style "dg_meta" size 26 color "#f5edda"
             text (u"День %d/%d · %s · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"],
                    dg_rpg.SLOTS[dg_rpg_state["slot"]], dg_world.weather(dg_rpg_state)[1])) style "dg_text" size 24
-    textbutton u"ВСЕ 70 МЕСТ" style "dg_map_pin" xpos 1480 ypos 19 action Return(("places", None))
+    textbutton u"СПИСОК МЕСТ" style "dg_map_pin" xpos 1480 ypos 19 action Return(("places", None))
     textbutton u"ЗАКРЫТЬ" style "dg_map_pin" xpos 1690 ypos 19 action Return(("close", None))
     frame:
         background Solid("#102632ed")
