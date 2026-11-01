@@ -55,9 +55,9 @@ init 1001 python:
         logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
 
-    def dg_rpg_hybrid_preview(mode, action, who=None):
+    def dg_rpg_hybrid_preview(mode, action, who=None, topic=None):
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
-        store.dg_rpg_hybrid_plan = dg_hybrid.preview(current, action, mode, who)
+        store.dg_rpg_hybrid_plan = dg_hybrid.preview(current, action, mode, who, topic)
         logging.getLogger("don_gen").info(
             "Hybrid preview mode=%s day=%d valid=%s", mode, current["day"],
             store.dg_rpg_hybrid_plan["status"] == "ready")
@@ -1189,10 +1189,12 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "hybrid":
         $ dg_rpg_hybrid_mode = "free"
         $ dg_rpg_hybrid_who = None
+        $ dg_rpg_hybrid_topic = None
         jump dg_rpg_hybrid_entry
     if dg_rpg_cmd == "hybrid_npc":
         $ dg_rpg_hybrid_mode = "npc"
         $ dg_rpg_hybrid_who = dg_rpg_value
+        $ dg_rpg_hybrid_topic = None
         jump dg_rpg_hybrid_entry
     if dg_rpg_cmd == "free":
         call screen dg_rpg_free_input
@@ -1238,6 +1240,7 @@ label dg_rpg_loop:
         if _return == "custom":
             $ dg_rpg_hybrid_mode = "npc"
             $ dg_rpg_hybrid_who = dg_rpg_focus
+            $ dg_rpg_hybrid_topic = None
             jump dg_rpg_hybrid_entry
         if _return is None:
             jump dg_rpg_loop
@@ -1246,6 +1249,7 @@ label dg_rpg_loop:
         if _return == "custom":
             $ dg_rpg_hybrid_mode = "npc"
             $ dg_rpg_hybrid_who = dg_rpg_focus
+            $ dg_rpg_hybrid_topic = dg_rpg_talk_topic
             jump dg_rpg_hybrid_entry
         if _return is None:
             jump dg_rpg_loop
@@ -1300,6 +1304,7 @@ label dg_rpg_world_label:
     if _return == "custom":
         $ dg_rpg_hybrid_mode = "world"
         $ dg_rpg_hybrid_who = None
+        $ dg_rpg_hybrid_topic = None
         jump dg_rpg_hybrid_entry
     if _return:
         $ dg_rpg_world_stance = _return
@@ -1315,7 +1320,7 @@ label dg_rpg_hybrid_entry:
     if not _return:
         jump dg_rpg_loop
     $ dg_rpg_hybrid_action_text = _return
-    $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who)
+    $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who, dg_rpg_hybrid_topic)
     jump dg_rpg_hybrid_review_label
 
 label dg_rpg_hybrid_review_label:
