@@ -97,6 +97,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
     }
     dg_world.prepare(state)
     dg_social.ensure(state)
+    dg_social.prepare_incident(state)
     return state
 
 
@@ -120,6 +121,8 @@ def validate(state):
     state.setdefault("dialogue_counts", {})
     dg_world.ensure(state)
     dg_social.ensure(state)
+    if not state.get("finished"):
+        dg_social.prepare_incident(state)
     if len(state.get("journal", [])) > 500 or len(state.get("ai_scenes", [])) > 80 or len(state["dialogue_history"]) > 100:
         raise ValueError("Oversized save")
     return state
@@ -133,6 +136,10 @@ def where_is(state, who):
     if who not in NPC_NAMES or state["finished"]:
         return None
     schedule = next(n for n in NPCS if n[0] == who)
+    # A shared event temporarily brings two NPCs to one real map location.
+    incident = dg_social.incident(state)
+    if incident and who in incident["pair"]:
+        return incident["place"]
     # Deterministic day-specific schedule variation; no random rolls on screen redraw.
     slot = state["slot"]
     if slot == 2 and state["day"] % 3 == 0 and who in ("sl", "un", "mi"):
@@ -233,6 +240,9 @@ def _tick(state):
         expired = dg_world.missed(state)
         if expired:
             _journal(state, expired)
+        unseen = dg_social.missed_incident(state)
+        if unseen:
+            _journal(state, unseen)
     state["slot"] += 1
     if state["slot"] >= 4:
         state["slot"] = 0
@@ -249,6 +259,7 @@ def _tick(state):
             for notice in dg_social.expire_quests(state):
                 _journal(state, notice)
             dg_world.prepare(state)
+            dg_social.prepare_incident(state)
 
 
 def move(state, place):
@@ -430,6 +441,17 @@ def accept_contract(state, ident):
     return result
 
 
+
+def social_encounter(state, stance):
+    validate(state)
+    if state["finished"]:
+        raise ValueError("The camp shift has ended")
+    outcome=dg_social.resolve_incident(state,stance)
+    _journal(state,u"Встреча персонажей: " + outcome["text"][-360:])
+    _tick(state)
+    return outcome
+
+
 def append_ai_scene(state, who, text):
     if who not in NPC_NAMES:
         raise ValueError("Unknown character")
@@ -458,6 +480,7 @@ def summary_for_ai(state, who, intent):
         "world_state": dg_world.world_report(state),
         "recent_world_decisions": state["world"]["decisions"][-7:],
         "social_world": dg_social.report(state),
+        "active_social_incident": dg_social.incident(state),
         "route_milestones": available_route_events(state, who),
         "completed_route_events": [v for v in state["route_events_done"] if v.startswith(who + ":")]
     }
