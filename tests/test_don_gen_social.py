@@ -242,7 +242,7 @@ class SocialSandboxTests(unittest.TestCase):
             script=stream.read().decode("utf-8")
         for expected in (
             "screen dg_rpg_free_input:", "screen dg_rpg_contracts:",
-            "screen dg_rpg_personal(who):", "screen dg_rpg_action_result(result):",
+            "screen dg_rpg_personal(who):", "screen dg_rpg_action_result(result, cg_worthy=False):",
             "screen dg_rpg_npc_incident:", 'Return(("incident", None))',
             'Return(("free", None))', 'Return(("contracts", None))',
             'dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))',
