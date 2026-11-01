@@ -168,12 +168,55 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(len(recovered["social"]["bonds"]),len(dg_social.PAIR_DEFS))
         self.assertEqual(len(dg_social.quest_list(recovered)),4)
 
+    def test_npc_encounter_is_visible_and_choices_have_effects(self):
+        st=self.state
+        incident=dg_social.incident(st)
+        self.assertIsNotNone(incident)
+        place=incident["place"]
+        a,b=incident["pair"]
+        self.assertEqual(dg_rpg.where_is(st,a),place)
+        self.assertEqual(dg_rpg.where_is(st,b),place)
+        self.assertIn(a,[who for who,name in dg_rpg.at_place(st,place)])
+        dg_rpg.move(st,place)
+        initial=dg_social.bond(st,a,b)
+        outcome=dg_rpg.social_encounter(st,"mediate")
+        self.assertEqual(outcome["delta"],10)
+        self.assertEqual(dg_social.bond(st,a,b),initial+10)
+        self.assertIsNone(dg_social.incident(st))
+        self.assertEqual(st["slot"],1)
+        with self.assertRaises(ValueError):
+            dg_rpg.social_encounter(st,"mediate")
+
+    def test_siding_with_one_npc_can_hurt_the_other(self):
+        st=self.state
+        first=dg_social.incident(st)
+        a,b=first["pair"]
+        dg_rpg.move(st,first["place"])
+        result=dg_rpg.social_encounter(st,"support_a")
+        self.assertEqual(result["delta"],-5)
+        self.assertEqual(st["affinity"][a],7)
+        self.assertEqual(st["affinity"][b],0)
+
+    def test_unresolved_encounter_has_real_autonomous_outcome(self):
+        st=self.state
+        first=copy.deepcopy(dg_social.incident(st))
+        for _ in range(4):
+            dg_rpg.activity(st,"rest")
+        self.assertEqual(st["day"],2)
+        self.assertTrue(any(item["day"]==1 and u"решили вопрос самостоятельно" in item["text"]
+                            for item in st["social"]["rumours"]))
+        self.assertIsNotNone(dg_social.incident(st))
+        self.assertNotEqual(first["day"],dg_social.incident(st)["day"])
+        self.assertIsNone(dg_social.incident_at(st,first["place"]) if
+                          dg_social.incident(st)["place"]!=first["place"] else None)
+
     def test_renpy_wiring_for_new_gameplay(self):
         with open(os.path.join(os.path.dirname(__file__),"..","don_gen","dg_rpg.rpy"),"rb") as stream:
             script=stream.read().decode("utf-8")
         for expected in (
             "screen dg_rpg_free_input:", "screen dg_rpg_contracts:",
             "screen dg_rpg_personal(who):", "screen dg_rpg_action_result(result):",
+            "screen dg_rpg_npc_incident:", 'Return(("incident", None))',
             'Return(("free", None))', 'Return(("contracts", None))',
             'dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))',
             'SetScreenVariable("view", "social")'):
