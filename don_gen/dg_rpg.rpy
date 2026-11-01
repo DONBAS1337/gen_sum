@@ -223,7 +223,10 @@ init 1001 python:
         return Solid("#173039")
 
     def dg_rpg_sprite(who):
-        # No sprite synthesis: use stock game sprite / previously imported assets.
+        # Read legacy saved sprite PNGs; never submit new sprite synthesis jobs.
+        custom = dg_rpg.asset_path(dg_rpg_root(),dg_rpg_state["id"],"sprite",who)
+        if custom and renpy.loadable(custom):
+            return Image(custom)
         candidates = [name for name in dg_runtime.original_images
                       if name.startswith(who + " ") and " pioneer " in (" " + name + " ")]
         if not candidates:
@@ -329,8 +332,8 @@ init 1001 python:
             dedicated=os.path.join(workflow_dir,"comfy_workflow_%s_api.json" % kind)
             fallback=os.path.join(workflow_dir,"comfy_workflow_background_api.json")
             generic=os.path.join(workflow_dir,"comfy_workflow_api.json")
-            if kind=="cg18" and not os.path.isfile(dedicated):
-                raise ValueError("Adult CG requires comfy_workflow_cg18_api.json")
+            # A dedicated 18+ workflow is optional. The approved Anima BG
+            # workflow can render a wide CG with different scene prompting.
             workflow=(dedicated if os.path.isfile(dedicated) else
                       fallback if os.path.isfile(fallback) else generic)
             dg_runtime.app.set_status(u"ComfyUI: создаём иллюстрацию…")
