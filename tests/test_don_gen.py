@@ -62,12 +62,14 @@ class DONGENTests(unittest.TestCase):
             dg_rpg.new_game("../escape", 18, 7, "bad\nhistory")
 
     def test_free_travel_does_not_call_ai_or_pass_time(self):
+        self.state["social"]["incident"]["status"] = "resolved"
         dg_rpg.move(self.state, "square")
         self.assertEqual(self.state["day"], 1)
         self.assertEqual(self.state["slot"], 0)
         self.assertIn(("sl", "Славя"), dg_rpg.at_place(self.state))
 
     def test_schedule_moves_characters(self):
+        self.state["social"]["incident"]["status"] = "resolved"
         self.assertEqual(dg_rpg.where_is(self.state, "mi"), "stage")
         dg_rpg.activity(self.state, "rest")
         self.assertEqual(dg_rpg.where_is(self.state, "mi"), "clubs")
@@ -75,6 +77,7 @@ class DONGENTests(unittest.TestCase):
         self.assertEqual(dg_rpg.where_is(self.state, "mi"), "stage")
 
     def test_relationship_milestones_and_route_choice(self):
+        self.state["social"]["incident"]["status"] = "resolved"
         dg_rpg.move(self.state, "square")
         dg_rpg.activity(self.state, "talk", "sl")
         self.assertEqual(self.state["affinity"]["sl"], 8)
