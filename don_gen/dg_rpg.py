@@ -35,6 +35,33 @@ PLACES = (
     ("forest", u"Лес", 71, 89),
     ("infirmary", u"Медпункт", 86, 16),
     ("sports", u"Спортплощадка", 42, 88),
+    ("parking", u"Стоянка", 6, 48),
+    ("music", u"Музыкальный кружок", 30, 19),
+    ("clubhouse", u"Общие кружки", 32, 38),
+    ("administration", u"Административный корпус", 43, 36),
+    ("showers", u"Душевые", 37, 45),
+    ("washrooms", u"Умывальники", 35, 43),
+    ("kitchen", u"Кухня", 64, 46),
+    ("storage", u"Склад", 73, 48),
+    ("gym", u"Спортзал", 79, 49),
+    ("volleyball", u"Волейбольная площадка", 78, 57),
+    ("football", u"Футбольное поле", 86, 57),
+    ("badminton", u"Бадминтон", 82, 37),
+    ("canteen_veranda", u"Веранда столовой", 68, 52),
+    ("cabins_south", u"Южные домики", 30, 56),
+    ("boathouse", u"Лодочная станция", 49, 73),
+    ("pier", u"Причал", 52, 76),
+    ("beachhouse", u"Пляжные раздевалки", 75, 70),
+    ("island", u"Ближний остров", 36, 91),
+    ("island_far", u"Дальний остров", 73, 94),
+    ("old_camp", u"Старый корпус", 16, 78),
+    ("campfire", u"Костровая площадка", 31, 65),
+    ("forest_path", u"Лесная тропа", 22, 24),
+    ("radio", u"Радиорубка", 52, 25),
+    ("headquarters", u"Штаб отряда", 48, 44),
+    ("laundry", u"Прачечная", 35, 50),
+    ("outdoor_stage", u"Кулисы", 53, 21),
+    ("warehouse", u"Хозяйственный двор", 72, 55),
 )
 PLACE_NAMES = dict((p[0], p[1]) for p in PLACES)
 NPCS = (
@@ -75,11 +102,11 @@ def _clean(value, maximum):
 
 
 def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его"):
-    name = _clean(name, 35)
-    background = _clean(background, 120)
+    name = _clean(name, 100)
+    background = _clean(background, 8000)
     age, days = int(age), int(days)
-    if age < 14 or age > 80 or days < 1 or days > 120:
-        raise ValueError("Age must be 14..80 and duration 1..120")
+    if age < 1 or age > 999999999 or days < 1 or days > 120:
+        raise ValueError("Age must be 1..999999999 and duration 1..120")
     if pronouns not in (u"он/его", u"она/её", u"они/их"):
         raise ValueError("Unknown pronouns")
     if source not in ("vanilla", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"):
@@ -92,6 +119,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "affinity": dict((npc[0], 0) for npc in NPCS),
         "met": [], "milestones": [], "journal": [], "event": u"Вы приехали в Совёнок. Впереди целая смена.",
         "visits": {}, "finished": False, "ai_scenes": [],
+        "mystery": {"yulia_discovered": False},
         "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": [],
         "dialogue_history": [], "dialogue_counts": {}
     }
@@ -104,9 +132,13 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
 def validate(state):
     if not isinstance(state, dict) or state.get("version") != 1:
         raise ValueError("Unsupported save format")
+    state.setdefault("mystery", {"yulia_discovered": False})
     if not re.match(r"^[a-f0-9]{32}$", state.get("id", "")):
         raise ValueError("Invalid save ID")
-    _clean(state["hero"]["name"], 35)
+    _clean(state["hero"]["name"], 100)
+    _clean(state["hero"]["background"], 8000)
+    if not (1 <= int(state["hero"]["age"]) <= 999999999):
+        raise ValueError("Invalid age")
     state["hero"].setdefault("pronouns", u"он/его")
     if state["place"] not in PLACE_NAMES:
         raise ValueError("Invalid location")
@@ -135,6 +167,10 @@ def camp_time(state):
 def where_is(state, who):
     if who not in NPC_NAMES or state["finished"]:
         return None
+    # Yulia is a secret encounter, never part of routine public schedules.
+    if who == "uv":
+        secret = state.get("mystery", {})
+        return "forest_path" if secret.get("yulia_discovered") and state["slot"] == 3 else None
     schedule = next(n for n in NPCS if n[0] == who)
     # A shared event temporarily brings two NPCs to one real map location.
     incident = dg_social.incident(state)
