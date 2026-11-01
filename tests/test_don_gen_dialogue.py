@@ -101,7 +101,9 @@ class DialogueTests(unittest.TestCase):
         with open(os.path.join(folder, "dg_rpg.rpy"), "rb") as fh:
             script = fh.read().decode("utf-8")
         self.assertIn('DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"', script)
-        self.assertEqual(script.count('("gate", 382, 392)'), 1)
+        self.assertIn('("gate",175,640)', script)
+        self.assertIn('DG_MAP_ATLAS = "mods/don_gen/images/don_gen_atlas.png"', script)
+        self.assertIn('Return(("go", slug))', script)
         self.assertIn('screen dg_rpg_dialogue(who, phase', script)
         self.assertIn('Return(("talk", who))', script)
         self.assertNotIn('min(progress, goal)', script)
