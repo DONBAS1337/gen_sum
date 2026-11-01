@@ -283,10 +283,10 @@ def make_event(state):
                  "title": title, "story": situation, "choices": choices}
     else:
         daily_index = _seed(state["id"], day, "daily") % len(DAILY_MOTIFS)
-        if not state.get("mystery", {}).get("yulia_discovered", False):
-            # Never reveal the mystical figure through a random daytime vignette.
-            if DAILY_MOTIFS[daily_index][1] == "uv":
-                daily_index = (daily_index + 1) % len(DAILY_MOTIFS)
+        # Yulia never appears through ordinary daytime routines, even after
+        # the player discovers her. Night-only secret scenes handle her.
+        if DAILY_MOTIFS[daily_index][1] == "uv":
+            daily_index = (daily_index + 1) % len(DAILY_MOTIFS)
         selected = DAILY_MOTIFS[daily_index]
         place, who, title, lead = selected
         prior = world["decisions"][-1]["stance"] if world["decisions"] else ""
