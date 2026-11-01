@@ -132,6 +132,7 @@ def event_fingerprint(state, kind, who, identity, moment=None):
 def context(state, kind, who=None, identity=None, moment=None):
     """Unique, grounded palette. No mutating game state and no random global PRNG."""
     import dg_rpg
+    import dg_world
     source=state.get("source","vanilla")
     time=state["slot"] if moment is None else moment
     key=event_fingerprint(state,kind,who,identity or "",time)
@@ -158,7 +159,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "recent_conversations":copy.deepcopy(state.get("dialogue_history",[])[-4:]),
         "world":copy.deepcopy(state.get("world",{}).get("preparations",{})),
         "social_bonds":copy.deepcopy(state.get("social",{}).get("bonds",{})),
-        "weather":None
+        "weather":dg_world.weather(state)[1]
     }
 
 def decorate_event(state,event):
@@ -168,8 +169,7 @@ def decorate_event(state,event):
     prefix=(u"На первый взгляд всё началось с привычного лагерного дела, "
             u"но рядом обнаружилась новая подробность: %s. " %
             c["physical_detail"])
-    focus=(u"Для %s этот день связан с тем, что он или она %s. "
-           u"За внешним поводом скрывается %s.") % (
+    focus=(u"%s %s. За внешним поводом скрывается %s.") % (
            PERSONA[event["npc"]][0],c["character_hook"],c["motivation"])
     tension=u"Неожиданное осложнение: %s. " % c["unexpected_twist"]
     if event["npc"]=="mi" and state.get("source") in MI_7DL:
@@ -179,6 +179,17 @@ def decorate_event(state,event):
                         "twist":c["unexpected_twist"],"hook":c["character_hook"],
                         "profile":state.get("source","vanilla")}
     return scene
+
+def decorate_outcome(state,event,choice_key,text):
+    """Varied epilogue; original mechanically authoritative outcome remains."""
+    c=context(state,"world_outcome",event["npc"],event["id"]+":"+choice_key,0)
+    who=PERSONA[event["npc"]][0]
+    addition=(u"\n\nПосле принятого решения %s не возвращается сразу к привычным "
+              u"делам. Её или его беспокоит %s; в разговоре снова появляется "
+              u"такая подробность, как %s. Становится заметно, что %s. "
+              u"Это повод для следующей встречи, а не готовый исход истории.") % (
+             who,c["motivation"],c["physical_detail"],c["unexpected_twist"])
+    return text+addition
 
 def decorate_dialogue(state,who,phase,scene,topic_index=0,stance=None):
     c=context(state,"npc_"+phase,who,str(topic_index)+u":"+_u(stance or ""),
