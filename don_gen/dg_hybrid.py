@@ -195,7 +195,10 @@ def locked_context(state, plan):
         import dg_dialogue
         selected_topic = dg_dialogue.topic(copy_state, focus, plan["topic"])
     evt=dg_world.current(copy_state)
+    import dg_narrative
+    variation=dg_narrative.context(copy_state,"hybrid",focus,plan["action"][:180])
     return {
+        "narrative_variation":variation,
         "hero":copy_state["hero"],"world_profile":copy_state["source"],
         "day":copy_state["day"],"time_slot":dg_rpg.SLOTS[copy_state["slot"]],
         "place":dg_rpg.PLACE_NAMES[copy_state["place"]],
@@ -232,6 +235,9 @@ INSTRUCTIONS = (
     u"НЕ придумывай новые очки, квесты, предметы, телепортацию, завершение рута, ходы времени, "
     u"смену локации, новые действия игрока или финал вместо вычисленного. "
     u"Не изменяй характер NPC, отношения и факты прошлых решений. "
+    u"Оживи сцену через narrative_variation: уникальную цель, конфликт и детали "
+    u"данного персонажа; для Мику учитывай отдельные профили 7ДЛ, DJ и классики. "
+    u"Не повторяй сюжет предыдущей сцены, не превращай всех NPC в одинаковых собеседников. "
     u"При свободной реплике NPC покажи конкретный ответ собеседника, оставь инициативу игроку. "
     u"Дай живой диалог, реакции, обстановку, 160–350 слов на русском. "
     u"Закончить можно эмоциональным моментом, но без новых механических результатов."
