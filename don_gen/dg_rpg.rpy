@@ -195,56 +195,56 @@ screen dg_rpg_picker:
 
 screen dg_rpg_setup:
     modal True
-    default name = u"Семён"
-    default age = "18"
-    default days = "14"
-    default history = u"Новичок в лагере"
-    default source = "vanilla"
-    default pronouns = u"он/его"
     add Solid("#152c34")
-    use dg_chrome(u"СОЗДАНИЕ ПЕРСОНАЖА", Return(None))
-    text u"Ваша история начинается здесь" style "dg_title" xpos 120 ypos 135 size 68
+    use dg_chrome(u"СОЗДАНИЕ ПЕРСОНАЖА", Return(("cancel",)))
+    text u"Ваша история начинается здесь" style "dg_title" xpos 120 ypos 120 size 67
     frame:
         background DG_PAPER
-        padding (60, 45)
-        xpos 330 ypos 270 xsize 1260 ysize 630
+        padding (50, 32)
+        xpos 300 ypos 250 xsize 1320 ysize 715
         vbox:
-            spacing 22
+            spacing 15
             hbox:
-                spacing 50
+                spacing 65
                 vbox:
-                    xsize 490
+                    xsize 520
+                    spacing 9
                     text u"ИМЯ" style "dg_ink_label"
-                    input value ScreenVariableInputValue("name") length 35 style "dg_ink_input" xmaximum 480
-                    null height 15
+                    textbutton (dg_literal(dg_create_name) + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "name"))
+                    null height 11
                     text u"ВОЗРАСТ (14–80)" style "dg_ink_label"
-                    input value ScreenVariableInputValue("age") length 3 style "dg_ink_input"
-                    null height 15
+                    textbutton (dg_create_age + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "age"))
+                    null height 11
                     text u"ДНЕЙ В СМЕНЕ (1–120)" style "dg_ink_label"
-                    input value ScreenVariableInputValue("days") length 3 style "dg_ink_input"
+                    textbutton (dg_create_days + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "days"))
+                    null height 5
+                    text u"Нажмите «изменить», чтобы ввести значение." style "dg_ink_small" size 21
                 vbox:
-                    xsize 550
+                    xsize 590
+                    spacing 10
                     text u"ПРЕДЫСТОРИЯ" style "dg_ink_label"
-                    input value ScreenVariableInputValue("history") length 120 style "dg_ink_input" xmaximum 520
-                    null height 18
+                    textbutton (dg_literal(dg_create_history) + u"  · ИЗМЕНИТЬ") style "dg_ink_act" action Return(("edit", "history")) xmaximum 565
+                    null height 9
                     text u"МИР И ХАРАКТЕРЫ" style "dg_ink_label"
-                    textbutton u"Оригинальный Совёнок" style "dg_ink_act" action SetScreenVariable("source", "vanilla") selected source == "vanilla"
+                    textbutton u"Оригинальный Совёнок" style "dg_ink_act" action SetVariable("dg_create_source", "vanilla") selected dg_create_source == "vanilla"
                     if dg_detect_7dl_root():
-                        textbutton u"7ДЛ · Мику" style "dg_ink_act" action SetScreenVariable("source", "7dl:mi_7dl") selected source == "7dl:mi_7dl"
-                        textbutton u"7ДЛ · DJ" style "dg_ink_act" action SetScreenVariable("source", "7dl:mi_dj") selected source == "7dl:mi_dj"
-                        textbutton u"7ДЛ · Классика" style "dg_ink_act" action SetScreenVariable("source", "7dl:mi_cl") selected source == "7dl:mi_cl"
+                        textbutton u"7ДЛ · Мику" style "dg_ink_act" action SetVariable("dg_create_source", "7dl:mi_7dl") selected dg_create_source == "7dl:mi_7dl"
+                        textbutton u"7ДЛ · DJ" style "dg_ink_act" action SetVariable("dg_create_source", "7dl:mi_dj") selected dg_create_source == "7dl:mi_dj"
+                        textbutton u"7ДЛ · Классика" style "dg_ink_act" action SetVariable("dg_create_source", "7dl:mi_cl") selected dg_create_source == "7dl:mi_cl"
             text u"ОБРАЩЕНИЕ" style "dg_ink_label"
             hbox:
-                spacing 26
+                spacing 36
                 for choice in (u"он/его", u"она/её", u"они/их"):
-                    textbutton choice style "dg_ink_act" selected pronouns == choice action SetScreenVariable("pronouns", choice)
-            null height 6
-            text u"В этом режиме возраст и имя задаются игроком. Персонажи остаются в рамках своего характера, а сюжетная генерация доступна отдельно." style "dg_ink_small" size 22
-            $ valid = bool(name.strip() and history.strip() and age.isdigit() and days.isdigit() and 14 <= int(age) <= 80 and 1 <= int(days) <= 120)
+                    textbutton choice style "dg_ink_act" selected dg_create_pronouns == choice action SetVariable("dg_create_pronouns", choice)
+            null height 8
+            text u"Имя, возраст и длительность можно изменить до начала смены. Режим RPG работает и без генерации." style "dg_ink_small" size 22
+            $ dg_valid = bool(dg_create_name.strip() and dg_create_history.strip() and dg_create_age.isdigit() and dg_create_days.isdigit() and 14 <= int(dg_create_age) <= 80 and 1 <= int(dg_create_days) <= 120)
             hbox:
-                spacing 34
-                textbutton u"Начать смену" style "dg_ink_act" sensitive valid action Return((name.strip(), age, days, history.strip(), source, pronouns))
-                textbutton u"Отмена" style "dg_ink_act" action Return(None)
+                spacing 44
+                textbutton u"Начать смену" style "dg_ink_act" sensitive dg_valid action Return(("start",))
+                textbutton u"Отмена" style "dg_ink_act" action Return(("cancel",))
+            if not dg_valid:
+                text u"Заполните имя/предысторию, возраст 14–80, смена 1–120 дней." style "dg_ink_small" size 20 color "#b22e1f"
 
 screen dg_rpg_map:
     modal True
@@ -423,14 +423,35 @@ label dg_rpg_picker_label:
     if dg_rpg_cmd == "back":
         jump dg_menu
     if dg_rpg_cmd == "new":
-        call screen dg_rpg_setup
-        if not _return:
-            jump dg_rpg_picker_label
-        $ dg_rpg_name, dg_rpg_age, dg_rpg_days, dg_rpg_history, dg_rpg_source, dg_rpg_pronouns = _return
-        $ dg_rpg_start(dg_rpg_name, dg_rpg_age, dg_rpg_days, dg_rpg_history, dg_rpg_source, dg_rpg_pronouns)
-    else:
-        $ dg_rpg_open(dg_rpg_value)
+        $ dg_create_name = u"Семён"
+        $ dg_create_age = u"18"
+        $ dg_create_days = u"14"
+        $ dg_create_history = u"Новичок в лагере"
+        $ dg_create_source = "vanilla"
+        $ dg_create_pronouns = u"он/его"
+        jump dg_rpg_create_loop
+    $ dg_rpg_open(dg_rpg_value)
     jump dg_rpg_loop
+
+label dg_rpg_create_loop:
+    call screen dg_rpg_setup
+    $ dg_create_cmd = _return
+    if not dg_create_cmd or dg_create_cmd[0] == "cancel":
+        jump dg_rpg_picker_label
+    if dg_create_cmd[0] == "edit":
+        if dg_create_cmd[1] == "name":
+            $ dg_create_name = renpy.input(u"Имя персонажа:", default=dg_create_name, length=35).strip()
+        elif dg_create_cmd[1] == "age":
+            $ dg_create_age = renpy.input(u"Возраст персонажа (14–80):", default=dg_create_age, length=3, allow="0123456789").strip()
+        elif dg_create_cmd[1] == "days":
+            $ dg_create_days = renpy.input(u"Продолжительность смены (1–120 дней):", default=dg_create_days, length=3, allow="0123456789").strip()
+        elif dg_create_cmd[1] == "history":
+            $ dg_create_history = renpy.input(u"Предыстория персонажа:", default=dg_create_history, length=120).strip()
+        jump dg_rpg_create_loop
+    if dg_create_cmd[0] == "start":
+        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns)
+        jump dg_rpg_loop
+    jump dg_rpg_create_loop
 
 label dg_rpg_loop:
     call screen dg_rpg_hub
