@@ -145,6 +145,8 @@ def personal_scene(state, who):
     social = ensure(state)
     if who not in PERSONAL or state.get("finished"):
         return None
+    if who == "uv" and not state.get("mystery", {}).get("yulia_discovered", False):
+        return None
     stage = social["personal"].get(who, 0)
     if stage >= 3 or state["affinity"].get(who, 0) < GATES[stage]:
         return None
@@ -279,6 +281,8 @@ def npc_daily(state):
         return None
     # A deterministic pair interacts without waiting for the player.
     index = (day + int(state["id"][:4], 16)) % len(PAIR_DEFS)
+    if not state.get("mystery", {}).get("yulia_discovered") and "uv" in PAIR_DEFS[index][:2]:
+        index = (index + 1) % len(PAIR_DEFS)
     a,b,baseline,title,story = PAIR_DEFS[index]
     key = _pair(a,b)
     old = social["bonds"][key]
@@ -448,6 +452,8 @@ def prepare_incident(state):
         return None
     if current is None or current["day"]!=state["day"]:
         index=(state["day"]+int(state["id"][4:8],16))%len(PAIR_DEFS)
+        if not state.get("mystery",{}).get("yulia_discovered") and "uv" in PAIR_DEFS[index][:2]:
+            index=(index+1)%len(PAIR_DEFS)
         a,b,score,title,description=PAIR_DEFS[index]
         social["incident"]={"day":state["day"],"pair":[a,b],
                             "place":INCIDENT_PLACES[index],"title":title,
@@ -534,7 +540,8 @@ def quest_at(state, place):
 def report(state):
     social=ensure(state)
     return {"bonds":[{"a":a,"b":b,"title":title,
-                       "score":bond(state,a,b)} for a,b,value,title,desc in PAIR_DEFS],
+                       "score":bond(state,a,b)} for a,b,value,title,desc in PAIR_DEFS
+                      if state.get("mystery",{}).get("yulia_discovered") or "uv" not in (a,b)],
             "personal":social["personal"],
             "quests":quest_list(state),
             "rumours":social["rumours"][-8:],
