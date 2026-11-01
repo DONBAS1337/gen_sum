@@ -1,7 +1,8 @@
 # DON-GEN standalone installer for Everlasting Summer (Windows PowerShell 5.1+).
 # Copies ONLY the don_gen directory. Never writes into any other mod.
 param(
-    [string]$GameDir = ""
+    [string]$GameDir = "",
+    [string]$AssetsDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,6 +43,30 @@ if (Test-Path -LiteralPath $Dest) {
 }
 
 Copy-Item -Path (Join-Path $Source "*") -Destination $Dest -Force -Recurse
+
+# Private gen_assets repository: import ONLY map + character-pin files from an
+# explicit local checkout. Never download using a token and never copy large CGs.
+if ($AssetsDir) {
+    $Root = (Resolve-Path -LiteralPath $AssetsDir -ErrorAction Stop).Path
+    $Maps = Join-Path $Root "maps"
+    if ((Split-Path -Leaf $Root) -ieq "maps") { $Maps = $Root }
+    if (-not (Test-Path -LiteralPath (Join-Path $Maps "map_default.png"))) {
+        throw "No maps/map_default.png in AssetsDir: $Root"
+    }
+    $AssetsOut = Join-Path (Join-Path $Dest "images") "gen_assets"
+    New-Item -ItemType Directory -Force -Path $AssetsOut | Out-Null
+    $MapNames = @("map_default.png", "map_bg.jpg", "7dl_bg.jpg",
+                  "map_selected.png", "map_available.png")
+    foreach ($Name in $MapNames) {
+        $File = Join-Path $Maps $Name
+        if (Test-Path -LiteralPath $File) {
+            Copy-Item -LiteralPath $File -Destination $AssetsOut -Force
+        }
+    }
+    Get-ChildItem -LiteralPath $Maps -File -Filter "map_icon_*.png" |
+        Copy-Item -Destination $AssetsOut -Force
+    Write-Host "gen_assets maps imported from: $Maps"
+}
 # Remove only DON-GEN bytecode. Old Ren'Py bytecode can shadow updated .rpy/.py.
 Get-ChildItem -LiteralPath $Dest -Recurse -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Extension -in @(".rpyc", ".pyo", ".pyc") } |
