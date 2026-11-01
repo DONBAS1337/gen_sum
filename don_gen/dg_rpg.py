@@ -316,6 +316,22 @@ def move(state, place):
     return state
 
 
+
+def _try_reveal_yulia(state, action):
+    """The mystical NPC exists, but is only encountered after a deliberate discovery."""
+    if state.get("mystery", {}).get("yulia_discovered"):
+        return False
+    if action not in ("explore", "search"):
+        return False
+    if state["slot"] != 3 or state["place"] not in ("forest_path", "forest", "lake", "old_camp"):
+        return False
+    if state["world"]["tracks"]["lake"]["stage"] < 2:
+        return False
+    state["mystery"]["yulia_discovered"] = True
+    _journal(state, u"Секретная встреча: на ночной тропе появляется загадочная девушка. Она называет себя Юлей и просит никому пока не рассказывать о встрече.")
+    return True
+
+
 def activity(state, action, who=None):
     validate(state)
     if state["finished"]:
@@ -359,6 +375,7 @@ def activity(state, action, who=None):
             state["activity_counts"][action] = state["activity_counts"].get(action, 0) + 1
     _check_quests(state)
     _journal(state, label + u" — " + PLACE_NAMES[state["place"]] + u".")
+    _try_reveal_yulia(state, action)
     _tick(state)
     return state
 
@@ -454,6 +471,7 @@ def free_action(state, requested):
     if result["intent"] == "search":
         state["activity_counts"]["explore"] = state["activity_counts"].get("explore", 0) + 1
     _check_quests(state)
+    _try_reveal_yulia(state, result["intent"])
     _tick(state)
     return result
 
