@@ -27,6 +27,9 @@ class SocialSandboxTests(unittest.TestCase):
             self.assertEqual(len(beats),3)
             self.assertEqual(len(set(x[0] for x in beats)),3)
             self.state["affinity"][who]=70
+            if who == "uv":
+                self.assertIsNone(dg_social.personal_scene(self.state,who))
+                self.state["mystery"]["yulia_discovered"] = True
             data=dg_social.personal_scene(self.state,who)
             self.assertIsNotNone(data)
             self.assertGreater(len(data["text"]),55)
