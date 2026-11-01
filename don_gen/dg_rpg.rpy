@@ -485,6 +485,121 @@ screen dg_rpg_hub:
             text u"Разговоры и активности меняют время и отношения локально. AI-сцены вызываются только вручную." style "dg_small" size 23
 
 
+# Player-defined actions are resolved by a transparent local interpreter.
+screen dg_rpg_free_input:
+    modal True
+    default action_text = u""
+    add dg_rpg_bg()
+    add Solid("#041725ee")
+    frame:
+        background Solid("#143240fa")
+        align (0.5, 0.5) xsize 1350 ysize 720
+        padding (56, 41)
+        vbox:
+            spacing 26
+            text u"СВОБОДНОЕ ДЕЙСТВИЕ" style "dg_title" size 56 color "#ffe5a0"
+            text u"Опиши СВОИМИ словами, что герой делает сейчас. Без списка готовых реплик." style "dg_text" size 29 xmaximum 1180
+            frame:
+                background Solid("#071b25")
+                padding (25, 22)
+                xsize 1220 ysize 125
+                input:
+                    value ScreenVariableInputValue("action_text")
+                    style "dg_rpg_edit_input"
+                    length 180
+                    xmaximum 1150
+                    default_focus True
+            text u"Примеры: «Помочь Мику с репетицией», «Исследовать старые записи», «Договориться с Алисой», «Организовать игру на площади»." style "dg_text" size 26 xmaximum 1175
+            text u"Локальная система понимает практические действия, учитывает место и NPC. Если намерение не распознано, ход не расходуется. Для произвольной прозы есть отдельная AI-сцена." style "dg_text" size 23 color "#b9d4d6" xmaximum 1175
+            hbox:
+                spacing 45
+                textbutton u"СОВЕРШИТЬ ПОСТУПОК" style "dg_primary" sensitive bool(action_text.strip()) action Return(action_text.strip())
+                textbutton u"ОТМЕНА" style "dg_act" action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+screen dg_rpg_action_result(result):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#081c27f0")
+    frame:
+        background Solid("#13323a")
+        align (0.5, 0.5)
+        xsize 1380 ysize 810
+        padding (48, 39)
+        vbox:
+            spacing 22
+            text dg_literal(result.get("title", u"ТВОЙ ПОСТУПОК")) style "dg_title" size 49 color "#ffe5a0"
+            frame:
+                background Solid("#071a25")
+                padding (22, 18)
+                xsize 1265 ysize 535
+                viewport:
+                    mousewheel True scrollbars "vertical" ysize 490
+                    text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
+            textbutton u"Вернуться в лагерь" style "dg_primary" action Return(None)
+
+screen dg_rpg_personal(who):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#081923dd")
+    $ scene = dg_social.personal_scene(dg_rpg_state, who)
+    $ portrait = dg_rpg_sprite(who)
+    if portrait is not None:
+        add portrait at dg_rpg_portrait_transform xpos 75 ypos 155
+    frame:
+        background Solid("#122f39f0")
+        xpos 510 ypos 112 xsize 1330 ysize 840
+        padding (48, 37)
+        vbox:
+            spacing 24
+            text (u"ЛИЧНАЯ ИСТОРИЯ · " + dg_social.NAMES[who]) style "dg_meta" size 25 color "#ffe5a0"
+            text dg_literal(scene["title"]) style "dg_title" size 50
+            frame:
+                background Solid("#081c26d9")
+                padding (25, 20)
+                xsize 1220 ysize 318
+                viewport:
+                    mousewheel True scrollbars "vertical" ysize 270
+                    text dg_literal(scene["text"]) style "dg_text" size 32 xmaximum 1140
+            text u"ОТ ТЕБЯ ЗАВИСИТ, КАК ПРОДОЛЖИТСЯ ВАША ИСТОРИЯ" style "dg_meta" size 23
+            for code, caption in scene["choices"]:
+                textbutton caption style "dg_navlink" text_size 27 action Return(code)
+            textbutton u"Вернуться к разговору позже" style "dg_navlink" text_size 24 action Return(None)
+
+screen dg_rpg_contracts:
+    modal True
+    add Solid("#102a35")
+    use dg_chrome(u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ", Return(None))
+    text u"Дела, за которые отвечаешь" style "dg_title" size 62 xpos 110 ypos 115
+    text u"Принятые задания выполняются через свободные действия в нужном месте. Сроки идут, даже пока ты занят другими историями." style "dg_sub" size 25 xpos 115 ypos 210 xmaximum 1610
+    frame:
+        background Solid("#0b202b")
+        xpos 105 ypos 287 xsize 1710 ysize 680
+        padding (35, 27)
+        viewport:
+            mousewheel True scrollbars "vertical" ysize 610
+            vbox:
+                spacing 24
+                for entry in dg_social.quest_list(dg_rpg_state):
+                    frame:
+                        background Solid("#18353ce7")
+                        padding (22, 19)
+                        xsize 1580
+                        vbox:
+                            spacing 11
+                            text dg_literal(entry["title"]) style "dg_title" size 34 color "#ffdfa0"
+                            if entry["status"] == "available":
+                                text (u"Этапы: %d. Срок: %d дней с момента принятия." % (entry["total"], entry["limit"])) style "dg_text" size 24
+                                textbutton u"ПРИНЯТЬ ПОРУЧЕНИЕ" style "dg_navlink" action Return(("accept", entry["id"]))
+                            elif entry["status"] == "active":
+                                text (u"В работе: %d/%d · срок до дня %d" % (entry["step"], entry["total"], entry["deadline"])) style "dg_text" size 25
+                                text dg_literal(entry["task"]) style "dg_text" size 26 xmaximum 1445
+                                textbutton u"ПЕРЕЙТИ К МЕСТУ ЗАДАНИЯ" style "dg_navlink" action Return(("travel", dg_social.QUESTS[entry["id"]][4][entry["step"]][0]))
+                            elif entry["status"] == "completed":
+                                text u"ВЫПОЛНЕНО · награда получена · результаты влияют на другие истории" style "dg_text" size 25 color "#aadbb3"
+                            else:
+                                text u"СРОК ИСТЁК · другие пионеры продолжили дело без тебя" style "dg_text" size 25 color "#f4b0a9"
+
 screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
     modal True
     add dg_rpg_bg()
