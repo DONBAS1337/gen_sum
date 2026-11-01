@@ -6,6 +6,7 @@ init 1001 python:
     import logging
     import dg_rpg
     import dg_dialogue
+    import dg_world
     import dg_backend
 
     def dg_rpg_root():
@@ -33,6 +34,8 @@ init 1001 python:
             dg_rpg.route_event(state, arg[0], arg[1])
         elif action == "conversation":
             store.dg_rpg_last_scene = dg_rpg.conversation(state, arg[0], arg[1], arg[2])
+        elif action == "world":
+            store.dg_rpg_last_world = dg_rpg.story_choice(state, arg)
         else:
             dg_rpg.activity(state, action)
         dg_rpg.save(dg_rpg_root(), state)
@@ -207,6 +210,70 @@ screen dg_rpg_picker:
                 spacing 20
                 textbutton u"Создать персонажа" style "dg_primary" action Return(("new", None))
                 textbutton u"Назад" style "dg_act" action Return(("back", None))
+
+# Contrast-focused modal editor; avoids the tiny global Ren'Py input overlay.
+style dg_rpg_edit_input is dg_ink_input:
+    size 46
+    color "#fff5d8"
+    outlines []
+    kerning 1
+
+screen dg_rpg_edit_field(field, current):
+    modal True
+    default editor_text = current
+    $ title = {"name": u"Имя героя", "age": u"Возраст героя", "days": u"Дней в смене", "history": u"Предыстория героя"}[field]
+    $ tip = {"name": u"Как к тебе будут обращаться другие пионеры?",
+             "age": u"Укажи число от 14 до 80.",
+             "days": u"Укажи длину смены от 1 до 120 дней.",
+             "history": u"Кто ты и как оказался в лагере? Эти сведения используются в сюжетных сценах."}[field]
+    $ valid_edit = bool(editor_text.strip()) and (
+        ((editor_text.isdigit() and 14 <= int(editor_text) <= 80) if field == "age"
+         else (editor_text.isdigit() and 1 <= int(editor_text) <= 120) if field == "days"
+         else True))
+    add Solid("#061522f5")
+    frame:
+        background Solid("#18343ff8")
+        padding (45, 37)
+        align (0.5, 0.5)
+        xsize 1110 ysize 510
+        vbox:
+            spacing 18
+            text u"DON-GEN · НАСТРОЙКА ПЕРСОНАЖА" style "dg_meta" size 23
+            text title style "dg_title" size 55
+            text tip style "dg_text" size 28 xmaximum 995
+            null height 11
+            frame:
+                background Solid("#071b25")
+                padding (24, 19)
+                xsize 1000 ysize 102
+                if field == "age" or field == "days":
+                    input:
+                        value ScreenVariableInputValue("editor_text")
+                        allow "0123456789"
+                        length 3
+                        xmaximum 925
+                        style "dg_rpg_edit_input"
+                        default_focus True
+                elif field == "name":
+                    input:
+                        value ScreenVariableInputValue("editor_text")
+                        length 35
+                        xmaximum 925
+                        style "dg_rpg_edit_input"
+                        default_focus True
+                else:
+                    input:
+                        value ScreenVariableInputValue("editor_text")
+                        length 120
+                        xmaximum 925
+                        style "dg_rpg_edit_input"
+                        default_focus True
+            text u"Нажми на светлый текст в поле и введи значение. Применить — только после проверки." style "dg_text" size 22 color "#c9e0d7"
+            hbox:
+                spacing 48
+                textbutton u"ПРИМЕНИТЬ" style "dg_primary" sensitive valid_edit action Return(("save", editor_text.strip()))
+                textbutton u"ОТМЕНА" style "dg_act" action Return(("cancel", None))
+    key "K_ESCAPE" action Return(("cancel", None))
 
 screen dg_rpg_setup:
     modal True
@@ -598,14 +665,26 @@ label dg_rpg_create_loop:
     if not dg_create_cmd or dg_create_cmd[0] == "cancel":
         jump dg_rpg_picker_label
     if dg_create_cmd[0] == "edit":
-        if dg_create_cmd[1] == "name":
-            $ dg_create_name = renpy.input(u"Имя персонажа:", default=dg_create_name, length=35).strip()
-        elif dg_create_cmd[1] == "age":
-            $ dg_create_age = renpy.input(u"Возраст персонажа (14–80):", default=dg_create_age, length=3, allow="0123456789").strip()
-        elif dg_create_cmd[1] == "days":
-            $ dg_create_days = renpy.input(u"Продолжительность смены (1–120 дней):", default=dg_create_days, length=3, allow="0123456789").strip()
-        elif dg_create_cmd[1] == "history":
-            $ dg_create_history = renpy.input(u"Предыстория персонажа:", default=dg_create_history, length=120).strip()
+        $ dg_edit_name = dg_create_cmd[1]
+        if dg_edit_name == "name":
+            $ dg_edit_current = dg_create_name
+        elif dg_edit_name == "age":
+            $ dg_edit_current = dg_create_age
+        elif dg_edit_name == "days":
+            $ dg_edit_current = dg_create_days
+        else:
+            $ dg_edit_current = dg_create_history
+        call screen dg_rpg_edit_field(dg_edit_name, dg_edit_current)
+        $ dg_edit_result = _return
+        if dg_edit_result and dg_edit_result[0] == "save":
+            if dg_edit_name == "name":
+                $ dg_create_name = dg_edit_result[1]
+            elif dg_edit_name == "age":
+                $ dg_create_age = dg_edit_result[1]
+            elif dg_edit_name == "days":
+                $ dg_create_days = dg_edit_result[1]
+            elif dg_edit_name == "history":
+                $ dg_create_history = dg_edit_result[1]
         jump dg_rpg_create_loop
     if dg_create_cmd[0] == "start":
         $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns)
