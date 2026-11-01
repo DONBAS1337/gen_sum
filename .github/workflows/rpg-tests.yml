@@ -1,5 +1,6 @@
 name: DON-GEN standalone mod checks
 on:
+  workflow_dispatch:
   push:
     branches: [feature/camp-sandbox-rpg]
   pull_request:
