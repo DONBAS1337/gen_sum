@@ -287,8 +287,10 @@ init 1001 python:
         else:
             raise ValueError("Unknown asset type")
         if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy":
-            workflow = os.path.join(renpy.config.gamedir, "mods", "don_gen",
-                                    "comfy_workflow_api.json")
+            workflow_dir = os.path.join(renpy.config.gamedir, "mods", "don_gen")
+            custom_workflow = os.path.join(workflow_dir, "comfy_workflow_%s_api.json" % kind)
+            workflow = (custom_workflow if os.path.isfile(custom_workflow)
+                        else os.path.join(workflow_dir, "comfy_workflow_api.json"))
             logging.getLogger("don_gen").info("Local ComfyUI image request kind=%s key=%s", kind, key)
             dg_runtime.app.set_status(u"Локальный ComfyUI: создаём изображение…")
             data = dg_comfy.generate(workflow, prompt, kind)
@@ -533,7 +535,7 @@ screen dg_rpg_artist_settings:
             text u"Выбери, кто создаёт изображения. На обычные разговоры и механику RPG эта настройка не влияет." style "dg_text" size 29 xmaximum 1330
             textbutton u"ОБЛАЧНЫЙ ГЕНЕРАТОР" style "dg_primary" selected getattr(persistent, "dg_rpg_art_provider", "cloud") != "comfy" action SetField(persistent, "dg_rpg_art_provider", "cloud")
             textbutton u"COMFYUI · 127.0.0.1:8188" style "dg_primary" selected getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" action SetField(persistent, "dg_rpg_art_provider", "comfy")
-            text u"Для ComfyUI нужен работающий сервер на порту 8188 и экспортированный workflow в формате API: game/mods/don_gen/comfy_workflow_api.json" style "dg_text" size 25 xmaximum 1320
+            text u"Нужен ComfyUI на 8188 и API workflow: comfy_workflow_api.json; можно отдельно comfy_workflow_background_api.json и comfy_workflow_sprite_api.json." style "dg_text" size 25 xmaximum 1320
             text u"В поле текстового промпта workflow укажи __DG_PROMPT__. Для спрайтов потребуется отдельный workflow с прозрачностью, иначе они будут отклонены." style "dg_text" size 24 xmaximum 1300
             text u"Локальный сервис с интерфейсом 8189 не используется автоматически: его API не проверен. Генерация идёт прямо в ComfyUI 8188." style "dg_text" size 24 color "#c0dbd7" xmaximum 1300
             textbutton u"ЗАКРЫТЬ" style "dg_act" action Return(None)
