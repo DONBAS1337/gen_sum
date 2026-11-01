@@ -857,10 +857,10 @@ screen dg_rpg_world_event:
             add nearby at dg_rpg_portrait_transform xpos 50 ypos 145
         frame:
             background Solid("#102831f4")
-            xpos 505 ypos 110 xsize 1340 ysize 865
-            padding (43, 32)
+            xpos 505 ypos 95 xsize 1340 ysize 930
+            padding (39, 25)
             vbox:
-                spacing 13
+                spacing 8
                 text (u"★ ЖИВОЙ СЮЖЕТ · ДЕНЬ %d" % dg_rpg_state["day"]) style "dg_meta" size 24 color "#ffdd98"
                 text dg_literal(active["title"]) style "dg_title" size 48
                 text (dg_rpg.PLACE_NAMES[active["place"]] + u" · " +
@@ -868,16 +868,16 @@ screen dg_rpg_world_event:
                 frame:
                     background Solid("#061b26e5")
                     padding (22, 15)
-                    xsize 1230 ysize 328
+                    xsize 1230 ysize 270
                     viewport:
-                        ysize 288
+                        ysize 232
                         mousewheel True
                         scrollbars "vertical"
                         text dg_literal(active["story"]) style "dg_text" size 29 xmaximum 1168
                 text u"КАК ТЫ ПОСТУПИШЬ? РЕШЕНИЕ ИЗМЕНИТ СЛЕДУЮЩИЕ ДНИ" style "dg_meta" size 22 color "#ffda91"
                 if dg_rpg_state["energy"] >= 8:
                     viewport:
-                        ysize 225
+                        ysize 184
                         mousewheel True
                         scrollbars "vertical"
                         vbox:
@@ -886,7 +886,7 @@ screen dg_rpg_world_event:
                                 textbutton dg_literal(choice["text"]) style "dg_navlink" text_size 26 xmaximum 1165 action Return(choice["key"])
                 else:
                     text u"Для сюжетного выбора нужно 8 энергии. Сначала отдохни." style "dg_text" size 27 color "#ffe19b"
-                textbutton u"НАПИСАТЬ СВОЁ ДЕЙСТВИЕ · гибридная сцена" style "dg_navlink" text_size 25 sensitive (dg_rpg_state["energy"] >= 8) action Return("custom")
+                textbutton u"НАПИСАТЬ СВОЁ ДЕЙСТВИЕ · гибридная сцена" style "dg_navlink" text_size 24 sensitive (dg_rpg_state["energy"] >= 8) action Return("custom")
                 textbutton u"Вернуться в лагерь (решение можно принять позже)" style "dg_navlink" text_size 24 action Return(None)
     else:
         text u"На этом месте сегодня больше нет активных событий." style "dg_text" xpos 500 ypos 500
