@@ -19,7 +19,7 @@ jobs:
       - name: Compile all standalone Python modules
         run: python -m compileall -q don_gen
       - name: Test DON-GEN core and standalone layout
-        run: python -m unittest discover -s tests -p 'test_don_gen.py' -v
+        run: python -m unittest discover -s tests -p 'test_don_gen*.py' -v
       - name: Verify no legacy imports in standalone package
         run: |
           python - <<'PY'
