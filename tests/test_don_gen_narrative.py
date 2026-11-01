@@ -14,7 +14,7 @@ class NarrativeDirector(unittest.TestCase):
         event=dg_world.current(st)
         self.assertEqual(event["choices"],dg_world.PLOTS[event["arc"]]["chapters"][event["stage"]] and event["choices"])
         self.assertIn("narrative",event)
-        self.assertIn(event["narrative"]["physical_detail"],event["story"])
+        self.assertIn(event["narrative"]["detail"],event["story"])
         self.assertEqual(event["id"],dg_world.current(st)["id"])
         self.assertEqual(event["story"],dg_world.current(st)["story"])
     def test_episode_palettes_are_diverse(self):
@@ -79,7 +79,7 @@ class NarrativeDirector(unittest.TestCase):
             for code in dg_rpg.NPC_NAMES:
                 c=dg_narrative.context(st,"npc_choice",code,"story")
                 self.assertTrue(c["character_hook"])
-        self.assertIn(u"тайн",dg_narrative.PERSONA["uv"][1])
+        self.assertIn(u"таин",dg_narrative.PERSONA["uv"][1])
     def test_py2_compatibility_and_scene_narration_control_wiring(self):
         with open(os.path.join(ROOT,"don_gen","dg_rpg.rpy"),"rb") as f:
             script=f.read().decode("utf-8")
