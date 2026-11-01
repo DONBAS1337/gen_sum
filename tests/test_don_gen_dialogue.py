@@ -53,6 +53,7 @@ class DialogueTests(unittest.TestCase):
         dg_rpg.save(self.directory, self.state)
         loaded = dg_rpg.load(self.directory, self.state["id"])
         self.assertEqual(loaded["dialogue_history"][0]["topic"], u"Музыка")
+        loaded["slot"] = 1
         self.assertTrue(dg_rpg.summary_for_ai(loaded, "mi", u"Поговорить")["recent_dialogue"])
 
     def test_repeated_same_day_talk_has_diminishing_returns(self):
