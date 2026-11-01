@@ -75,6 +75,25 @@ class DialogueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             dg_dialogue.outcome(self.state, "mi", 1, "invalid")
 
+    def test_route_scenes_have_real_choices(self):
+        for who in dg_rpg.NPC_NAMES:
+            for milestone in dg_rpg.MILESTONES:
+                scene = dg_dialogue.route_intro(self.state, who, milestone)
+                self.assertGreater(len(scene["text"]), 150)
+                self.assertEqual(len(scene["options"]), 3)
+                outcomes = [dg_dialogue.route_conclusion(who, milestone, choice)
+                            for choice, title in scene["options"]]
+                self.assertEqual(len(set(outcomes)), 3)
+
+    def test_diary_has_persistent_dialogue_and_ai_tabs(self):
+        folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "don_gen"))
+        with open(os.path.join(folder, "dg_rpg.rpy"), "rb") as fh:
+            script = fh.read().decode("utf-8")
+        self.assertIn('SetScreenVariable("view", "talks")', script)
+        self.assertIn('SetScreenVariable("view", "ai")', script)
+        self.assertIn('dg_rpg_state.get("dialogue_history", [])', script)
+        self.assertNotIn('min(progress, goal)', script)
+
     def test_map_is_based_on_original_user_supplied_image(self):
         folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "don_gen"))
         with open(os.path.join(folder, "dg_rpg.rpy"), "rb") as fh:
