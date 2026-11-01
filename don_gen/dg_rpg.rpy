@@ -419,7 +419,10 @@ screen dg_rpg_hub:
                 xsize 855
                 text (u"Событие дня завершено. Можно исследовать лагерь и общаться с ребятами." if not dg_rpg_state["finished"] else u"Смена завершена. Итоги приключений доступны в хронике.") style "dg_text" size 25
         text dg_literal(dg_rpg_state["event"]) style "dg_small" size 22 xmaximum 850
-        textbutton u"Открыть карту" style "dg_primary" action Return(("map", None)) sensitive not dg_rpg_state["finished"]
+        if dg_rpg_state["finished"]:
+            textbutton u"ИТОГИ МОЕЙ СМЕНЫ" style "dg_primary" action Return(("finale", None))
+        else:
+            textbutton u"Открыть карту" style "dg_primary" action Return(("map", None))
         if not dg_rpg_state["finished"]:
             text u"ПОВСЕДНЕВНЫЕ ЗАНЯТИЯ" style "dg_meta"
             hbox:
@@ -510,6 +513,24 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
                 textbutton u"Завершить разговор без выбора" style "dg_navlink" text_size 24 action Return(None)
             else:
                 textbutton u"Закончить встречу" style "dg_primary" text_size 33 action Return("done")
+
+screen dg_rpg_finale:
+    modal True
+    add Solid("#0e252f")
+    use dg_chrome(u"ИТОГИ СМЕНЫ", Return(None))
+    frame:
+        background DG_PAPER
+        xpos 260 ypos 175 xsize 1400 ysize 785
+        padding (58, 39)
+        vbox:
+            spacing 16
+            text u"Твоя история в Совёнке" style "dg_ink_title" size 50
+            viewport:
+                mousewheel True
+                scrollbars "vertical"
+                ysize 570
+                text dg_literal(dg_world.finale(dg_rpg_state)) style "dg_ink_small" size 30 xmaximum 1260
+            textbutton u"Вернуться к дневнику" style "dg_ink_act" action Return(None)
 
 screen dg_rpg_world_event:
     modal True
@@ -805,6 +826,9 @@ label dg_rpg_loop:
         jump dg_rpg_picker_label
     if dg_rpg_cmd == "journal":
         call screen dg_rpg_journal
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "finale":
+        call screen dg_rpg_finale
         jump dg_rpg_loop
     if dg_rpg_cmd == "diag":
         call screen dg_diagnostics
