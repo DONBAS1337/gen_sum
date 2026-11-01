@@ -14,6 +14,40 @@ init 1001 python:
     import dg_adult
     import dg_art
 
+    def dg_rpg_vn_pages(text):
+        # Narrative is shown in the game's regular Ren'Py say window.
+        # Keep pages short enough for the classic bottom textbox.
+        if isinstance(text, bytes):
+            text = text.decode("utf-8")
+        if text is None:
+            return []
+        import re
+        result = []
+        for paragraph in re.split(u"\\n\\s*\\n", text):
+            paragraph = paragraph.strip()
+            if not paragraph:
+                continue
+            sentences = re.split(u"(?<=[.!?…])\\s+", paragraph)
+            page = u""
+            for sentence in sentences:
+                if not sentence:
+                    continue
+                if page and len(page) + len(sentence) + 1 > 240:
+                    result.append(page)
+                    page = u""
+                if len(sentence) > 260:
+                    tokens = sentence.split(u" ")
+                    for token in tokens:
+                        if page and len(page) + len(token) + 1 > 240:
+                            result.append(page)
+                            page = u""
+                        page = page + (u" " if page else u"") + token
+                else:
+                    page = page + (u" " if page else u"") + sentence
+            if page:
+                result.append(page)
+        return result
+
     def dg_rpg_preview_height(value, low, high, base, chars_per_row, row_height):
         # In Everlasting Summer's Ren'Py 7 store, 'min'/'max' may be unicode
         # globals rather than Python built-ins. Avoid either in screen code.
@@ -1547,6 +1581,46 @@ screen dg_rpg_read_scene(scene_text):
             text dg_literal(scene_text) style "dg_ink_small" size 30 xmaximum 1240
     textbutton u"Иллюстрировать сцену (CG)" style "dg_primary" xpos 1120 ypos 955 action Return("cg")
 
+# Narration now uses Everlasting Summer's own Ren'Py say window.
+# This is a label, not a custom fullscreen paper-like Screen.
+label dg_rpg_vn_text(scene_text):
+    scene expression dg_rpg_bg()
+    $ dg_rpg_vn_lines = dg_rpg_vn_pages(scene_text)
+    $ dg_rpg_vn_line_index = 0
+    while dg_rpg_vn_line_index < len(dg_rpg_vn_lines):
+        $ dg_rpg_vn_line = dg_literal(dg_rpg_vn_lines[dg_rpg_vn_line_index])
+        "[dg_rpg_vn_line]"
+        $ dg_rpg_vn_line_index += 1
+    return
+
+label dg_rpg_vn_scene(scene_text, cg_possible=True):
+    call dg_rpg_vn_text(scene_text)
+    if cg_possible:
+        menu:
+            "Продолжить историю":
+                $ _return = None
+            "Посмотреть или создать CG":
+                $ _return = "cg"
+    else:
+        $ _return = None
+    return
+
+label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
+    if phase == "topics":
+        $ dg_rpg_vn_dlg = dg_dialogue.opening(dg_rpg_state, who)
+    elif phase == "choice":
+        $ dg_rpg_vn_dlg = dg_dialogue.topic(dg_rpg_state, who, topic_index)
+    else:
+        $ dg_rpg_vn_dlg = dg_dialogue.outcome(dg_rpg_state, who, topic_index, stance)
+    call dg_rpg_vn_text(dg_rpg_vn_dlg["text"])
+    if phase == "result":
+        return
+    $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
+    $ dg_rpg_vn_options.append((u"Написать свою реплику · AI", "custom"))
+    $ dg_rpg_vn_options.append((u"Завершить разговор", None))
+    $ _return = renpy.display_menu(dg_rpg_vn_options)
+    return
+
 label dg_rpg_main:
     $ dg_setup()
     $ dg_place("gate")
@@ -1686,7 +1760,7 @@ label dg_rpg_loop:
                 $ dg_rpg_incident_choice = _return
                 $ dg_rpg_apply("incident", dg_rpg_incident_choice)
                 $ dg_rpg_incident_result = {"title":dg_rpg_last_incident["title"],"text":dg_rpg_last_incident["text"]}
-                call screen dg_rpg_action_result(dg_rpg_incident_result, True)
+                call dg_rpg_vn_scene(dg_rpg_incident_result["text"])
                 if _return == "cg":
                     $ dg_cg_plan = dg_rpg_cg_for("incident", dg_rpg_incident_result["title"], dg_rpg_incident_result["text"], None)
                     jump dg_rpg_cg_label
@@ -1699,7 +1773,7 @@ label dg_rpg_loop:
                 $ dg_rpg_personal_stance = _return
                 $ dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))
                 $ dg_rpg_personal_result = {"title": dg_rpg_last_personal["title"], "text": dg_rpg_last_personal["text"]}
-                call screen dg_rpg_action_result(dg_rpg_personal_result, True)
+                call dg_rpg_vn_scene(dg_rpg_personal_result["text"])
                 if _return == "cg":
                     $ dg_cg_plan = dg_rpg_cg_for("personal", dg_rpg_personal_result["title"], dg_rpg_personal_result["text"], dg_rpg_focus)
                     jump dg_rpg_cg_label
@@ -1708,7 +1782,7 @@ label dg_rpg_loop:
         $ dg_rpg_focus = dg_rpg_value
         if dg_rpg_state["energy"] < 8:
             jump dg_rpg_loop
-        call screen dg_rpg_dialogue(dg_rpg_focus, "topics")
+        call dg_rpg_vn_dialogue(dg_rpg_focus, "topics")
         if _return == "custom":
             $ dg_rpg_hybrid_mode = "npc"
             $ dg_rpg_hybrid_who = dg_rpg_focus
@@ -1717,7 +1791,7 @@ label dg_rpg_loop:
         if _return is None:
             jump dg_rpg_loop
         $ dg_rpg_talk_topic = int(_return)
-        call screen dg_rpg_dialogue(dg_rpg_focus, "choice", dg_rpg_talk_topic)
+        call dg_rpg_vn_dialogue(dg_rpg_focus, "choice", dg_rpg_talk_topic)
         if _return == "custom":
             $ dg_rpg_hybrid_mode = "npc"
             $ dg_rpg_hybrid_who = dg_rpg_focus
@@ -1727,7 +1801,7 @@ label dg_rpg_loop:
             jump dg_rpg_loop
         $ dg_rpg_talk_stance = _return
         $ dg_rpg_apply("conversation", (dg_rpg_focus, dg_rpg_talk_topic, dg_rpg_talk_stance))
-        call screen dg_rpg_dialogue(dg_rpg_focus, "result", dg_rpg_talk_topic, dg_rpg_talk_stance)
+        call dg_rpg_vn_dialogue(dg_rpg_focus, "result", dg_rpg_talk_topic, dg_rpg_talk_stance)
         jump dg_rpg_loop
     if dg_rpg_cmd == "route":
         $ dg_rpg_focus = dg_rpg_value
@@ -1736,7 +1810,7 @@ label dg_rpg_loop:
         if _return:
             $ dg_rpg_route_stance = _return
             $ dg_rpg_apply("route", (dg_rpg_focus, dg_rpg_route_stance))
-            call screen dg_rpg_route_result(dg_rpg_focus, dg_rpg_route_level, dg_rpg_route_stance)
+            call dg_rpg_vn_text(dg_dialogue.route_conclusion(dg_rpg_focus, dg_rpg_route_level, dg_rpg_route_stance))
         jump dg_rpg_loop
     if dg_rpg_cmd == "ai":
         if not dg_runtime.app.client.authenticated():
@@ -1753,7 +1827,7 @@ label dg_rpg_loop:
             call screen dg_error
         else:
             $ dg_rpg_open(dg_rpg_state["id"])
-            call screen dg_rpg_read_scene(dg_runtime.app.result)
+            call dg_rpg_vn_scene(dg_runtime.app.result)
             if _return == "cg":
                 $ dg_cg_plan = dg_rpg_cg_for("ai", u"Особая сцена", dg_runtime.app.result, dg_rpg_focus, dg_rpg_intent)
                 jump dg_rpg_cg_label
@@ -1788,7 +1862,7 @@ label dg_rpg_world_label:
     if _return:
         $ dg_rpg_world_stance = _return
         $ dg_rpg_apply("world", dg_rpg_world_stance)
-        call screen dg_rpg_world_result(dg_rpg_last_world)
+        call dg_rpg_vn_scene(dg_rpg_last_world["text"])
         if _return == "cg":
             $ dg_cg_plan = dg_rpg_cg_for("world", dg_rpg_last_world["title"], dg_rpg_last_world["text"], dg_rpg_last_world.get("npc"))
             jump dg_rpg_cg_label
@@ -1815,7 +1889,7 @@ label dg_rpg_hybrid_review_label:
         jump dg_rpg_loop
     if _return == "local":
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, None))
-        call screen dg_rpg_hybrid_read(dg_rpg_hybrid_entry)
+        call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])
         if _return == "cg":
             $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc")
             $ dg_cg_plan = dg_rpg_cg_for("hybrid", u"Мой поступок", dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"], dg_cg_who, dg_rpg_hybrid_entry["action"])
@@ -1832,7 +1906,7 @@ label dg_rpg_hybrid_review_label:
             jump dg_rpg_hybrid_review_label
         $ dg_rpg_hybrid_scene = dg_runtime.app.result
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, dg_rpg_hybrid_scene))
-        call screen dg_rpg_hybrid_read(dg_rpg_hybrid_entry)
+        call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])
         if _return == "cg":
             $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc")
             $ dg_cg_plan = dg_rpg_cg_for("hybrid", u"Мой поступок", dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"], dg_cg_who, dg_rpg_hybrid_entry["action"])
