@@ -14,7 +14,7 @@ ADULT_AU_AGES = {
     "el": 19, "sh": 19, "mt": 29, "cs": 28
 }
 INELIGIBLE = ("us", "uv")  # Ulyana and Yulia stay outside adult content.
-ADULT_STEMS = (u"секс",u"эрот",u"интим",u"гол",u"раздев",u"постел",
+ADULT_STEMS = (u"секс",u"эрот",u"интим",u"голый",u"голая",u"голые",u"голыш",u"раздев",u"постел",
                u"обнаж",u"порно",u"nsfw",u"sex",u"nude",u"naked")
 YOUNG_STEMS = (u"ульян",u"юл",u"ulyana",u"yulia",u"uliana")
 SAFE_NOTICE = (
