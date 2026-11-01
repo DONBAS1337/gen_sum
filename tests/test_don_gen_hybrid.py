@@ -133,6 +133,18 @@ class HybridTests(unittest.TestCase):
         self.assertEqual(self.st["slot"],1)
         self.assertEqual(self.st["dialogue_history"][-1]["stance"],"custom")
 
+    def test_custom_npc_speech_keeps_selected_dialogue_topic(self):
+        import json
+        dg_rpg.move(self.st, dg_rpg.where_is(self.st,"mi"))
+        plan=dg_hybrid.preview(self.st,u"Я бы хотел помочь тебе, но сначала расскажи о своей песне.","npc","mi",0)
+        self.assertEqual(plan["status"],"ready")
+        self.assertEqual(plan["topic"],0)
+        instructions,payload=dg_hybrid.build_request(self.st,plan)
+        data=json.loads(payload)
+        self.assertEqual(data["selected_dialogue_topic"]["title"],u"Музыка")
+        with self.assertRaises(ValueError):
+            dg_hybrid.preview(self.st,u"Привет, Мику","npc","mi",99)
+
     def test_npc_absent_is_not_silently_teleported(self):
         plan=dg_hybrid.preview(self.st,u"Как прошёл твой день?","npc","mi")
         self.assertEqual(plan["status"],"unknown")
