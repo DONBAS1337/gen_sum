@@ -134,11 +134,18 @@ def _effects(before, after):
                        (u"утро",u"день",u"вечер",u"ночь")[after["slot"]]))
     return changes
 
-def preview(state, action, mode="free", who=None):
+def preview(state, action, mode="free", who=None, topic=None):
     if mode not in MODES:
         raise ValueError("Unknown action mode")
     if mode != "npc" and who is not None:
         raise ValueError("Unexpected NPC target")
+    if topic is not None and mode != "npc":
+        raise ValueError("Dialogue topic only applies to NPC replies")
+    if topic is not None:
+        import dg_dialogue
+        if who not in dg_dialogue.CHARACTERS or not (0 <= int(topic) < len(dg_dialogue.CHARACTERS[who][1])):
+            raise ValueError("Invalid conversation topic")
+        topic = int(topic)
     action=_clean_action(action)
     # Migrate only a COPY; previews must never change the currently saved game.
     source=copy.deepcopy(state)
@@ -148,8 +155,8 @@ def preview(state, action, mode="free", who=None):
     after,result=_simulate(source,action,mode,who)
     if result.get("status")!="done":
         return {"status":"unknown","message":result["text"],"mode":mode,
-                "action":action,"who":who}
-    return {"status":"ready","mode":mode,"action":action,"who":who,
+                "action":action,"who":who,"topic":topic}
+    return {"status":"ready","mode":mode,"action":action,"who":who,"topic":topic,
             "before":baseline,"after":fingerprint(after),
             "result":result,"effects":_effects(source,after),
             "day":source["day"],"slot":source["slot"],"place":source["place"]}
@@ -163,6 +170,10 @@ def locked_context(state, plan):
     if fingerprint(copy_state)!=plan["before"]:
         raise ValueError("Game state changed before generation")
     focus=plan.get("who") or plan["result"].get("who") or plan["result"].get("npc")
+    selected_topic = None
+    if plan.get("mode") == "npc" and plan.get("topic") is not None:
+        import dg_dialogue
+        selected_topic = dg_dialogue.topic(copy_state, focus, plan["topic"])
     evt=dg_world.current(copy_state)
     return {
         "hero":copy_state["hero"],"world_profile":copy_state["source"],
@@ -171,6 +182,7 @@ def locked_context(state, plan):
         "weather":dg_world.weather(copy_state)[1],
         "present_people":[name for who,name in dg_rpg.at_place(copy_state)],
         "speaker":dg_rpg.NPC_NAMES.get(focus,u"Повествователь"),
+        "selected_dialogue_topic":selected_topic,
         "affinity":copy_state["affinity"].get(focus),
         "story_event":({"title":evt["title"],"story":evt["story"]}
                        if evt and plan["mode"]=="world" else None),
