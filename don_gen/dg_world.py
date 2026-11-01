@@ -214,6 +214,8 @@ def _branch_context(state, plot):
         lead = u"Предыдущая помощь объединила ребят, и теперь они охотнее идут навстречу друг другу."
     elif history[-1] == "investigate":
         lead = u"Твои прошлые наблюдения дали новые зацепки, зато не все довольны долгими обсуждениями."
+    elif history[-1] == "missed":
+        lead = u"Пока ты был занят другим, ребята приняли решение без тебя. Последствия этого решения уже влияют на новую главу."
     else:
         lead = u"После твоего смелого решения в лагере появились как сторонники, так и сомневающиеся."
     connections = []
@@ -408,7 +410,14 @@ def missed(state):
         return None
     world["morale"] = clamp(world["morale"] - 2)
     world["resources"] = clamp(world["resources"] - 1)
-    text = u"День %d: возможность «%s» упущена. Пионеры справились без твоего участия, но сплочённость и ресурсы лагеря немного снизились." % (state["day"], event["title"])
+    # Crucial for an autonomous world: the story advances EVEN if player is absent.
+    # The NPCs solve the immediate problem, often badly, without waiting forever.
+    if event["arc"] != "daily":
+        track = world["tracks"][event["arc"]]
+        if track["stage"] < 5:
+            track["stage"] += 1
+            track["choices"].append("missed")
+    text = u"День %d: возможность «%s» упущена. Пионеры приняли решение без тебя; история продолжается, но сплочённость и ресурсы лагеря немного снизились." % (state["day"], event["title"])
     world["chronicle"].append({"day": state["day"], "title": event["title"],
                                 "text": text, "arc": event["arc"], "status": "missed"})
     world["chronicle"] = world["chronicle"][-150:]
@@ -426,6 +435,9 @@ def story_status(state, arc):
         return u"История ещё не начата."
     if stage < 5:
         return u"Этап %d/5. Ранее принято решений: %d." % (stage, len(track["choices"]))
+    abandoned = track["choices"].count("missed")
+    if abandoned >= 3:
+        return u"Завершено без твоего участия: ребята самостоятельно прошли через трудности. Не всё сложилось удачно, а некоторые вопросы остались без ответа."
     support = track["choices"].count("support")
     investigate = track["choices"].count("investigate")
     risky = track["choices"].count("independent")
