@@ -1592,10 +1592,12 @@ label dg_rpg_loop:
             call screen dg_rpg_read_scene(dg_runtime.app.result)
         jump dg_rpg_loop
     if dg_rpg_cmd == "background" or dg_rpg_cmd == "sprite":
-        if not dg_runtime.app.client.authenticated():
-            call dg_connect
+        # A working localhost ComfyUI never needs ChatGPT sign-in.
+        if getattr(persistent, "dg_rpg_art_provider", "cloud") != "comfy":
             if not dg_runtime.app.client.authenticated():
-                jump dg_rpg_loop
+                call dg_connect
+                if not dg_runtime.app.client.authenticated():
+                    jump dg_rpg_loop
         $ dg_rpg_art_kind = "background" if dg_rpg_cmd == "background" else "sprite"
         $ dg_run("chapter", dg_rpg_art_generate, dg_rpg_art_kind, dg_rpg_value)
         if dg_runtime.app.error:
