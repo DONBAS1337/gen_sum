@@ -493,12 +493,11 @@ init 1001 python:
             prompt=dg_art.background_prompt(state,key)
             asset_key=key
         elif kind in ("cg","cg18"):
-            if not isinstance(key,dict) or key.get("kind") != kind:
-                raise ValueError("Incorrect cinematic scene request")
-            if dg_art.marker(state,key) is None:
-                raise ValueError("Adult scene not permitted or unrecognized")
-            prompt=dg_art.cg_prompt(state,key)
-            asset_key=key["key"]
+            # The screen sends immutable UTF-8 JSON rather than a Ren'Py store
+            # dictionary that might change during the background thread.
+            plan=dg_art.validate_scene_request(state,kind,key)
+            prompt=dg_art.cg_prompt(state,plan)
+            asset_key=plan["key"]
         else:
             raise ValueError("Sprite generation disabled: use stock assets")
         if getattr(persistent,"dg_rpg_art_provider","cloud") == "comfy":
@@ -1143,6 +1142,21 @@ screen dg_rpg_hybrid_review(plan):
                     spacing 38
                     textbutton u"ИЗМЕНИТЬ" style "dg_navlink" action Return("retry")
                     textbutton u"ОТМЕНА" style "dg_navlink" action Return("cancel")
+
+screen dg_rpg_art_error(message):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#061923de")
+    frame:
+        background Solid("#142f3df6")
+        align (0.5,0.5) xsize 1410 ysize 500 padding (48,34)
+        vbox:
+            spacing 24
+            text u"CG · НЕ УДАЛОСЬ СОЗДАТЬ ИЛЛЮСТРАЦИЮ" style "dg_title" size 43 color "#ffe2a6"
+            viewport:
+                mousewheel True scrollbars "vertical" ysize 245
+                text dg_literal(message) style "dg_text" size 27 xmaximum 1300
+            textbutton u"ВЕРНУТЬСЯ К СЦЕНЕ" style "dg_primary" action Return(None)
 
 screen dg_rpg_cg_gallery:
     modal True
@@ -2144,9 +2158,12 @@ label dg_rpg_cg_label:
                 call dg_connect
                 if not dg_runtime.app.client.authenticated():
                     jump dg_rpg_cg_label
-        $ dg_run("chapter", dg_rpg_art_generate, dg_cg_plan["kind"], dg_cg_plan)
+        $ dg_cg_payload = dg_art.freeze_scene_request(dg_cg_plan)
+        $ dg_run("chapter", dg_rpg_art_generate, dg_cg_plan["kind"], dg_cg_payload)
         if dg_runtime.app.error:
-            call screen dg_error
+            $ dg_cg_failed_text = dg_runtime.app.error
+            $ logging.getLogger("don_gen").error("CG generation failure: %s",dg_cg_failed_text)
+            call screen dg_rpg_art_error(dg_cg_failed_text)
         else:
             $ dg_rpg_apply("cg_record",dg_cg_plan)
         jump dg_rpg_cg_label
