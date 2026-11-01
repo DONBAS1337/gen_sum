@@ -1004,6 +1004,7 @@ screen dg_rpg_cg_art(plan):
                 text u"ИЛЛЮСТРАЦИЯ СЦЕНЫ · CG" style "dg_title" size 49 color "#ffe4a6"
                 text dg_literal(plan["title"]) style "dg_text" size 31 xmaximum 1220
                 text u"Для этого события иллюстрация пока не найдена. Можно продолжить чтение без генерации или создать CG вручную." style "dg_text" size 29 xmaximum 1210
+                text (u"ID сцены: " + plan["key"]) style "dg_text" size 19 color "#b8d3d9"
                 text (u"Отдельный взрослый CG (только 18+ AU)" if plan["kind"]=="cg18" else u"Обычный CG, широкий кадр 16:9") style "dg_text" size 25 color "#e3c691"
                 textbutton u"СОЗДАТЬ CG ВЫБРАННЫМ ГЕНЕРАТОРОМ" style "dg_primary" action Return("generate")
     frame:
