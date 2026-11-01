@@ -14,3 +14,5 @@ Installation details: [README.md](README.md). RPG features: [RPG.md](RPG.md).
 - Automatic Python checks run in GitHub Actions; in-game Ren'Py smoke testing is still necessary.
 
 Base branch `gen-7dl-vanilla` is unchanged.
+
+2026-11-01: Added `dg_world.py` nonlinear camp director and `tests/test_don_gen_world.py`; see README v0.3 for new UI and daily events. Character setup now uses its own contrast popup screen.
