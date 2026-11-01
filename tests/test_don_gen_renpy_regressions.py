@@ -84,7 +84,7 @@ class ReportedTracebacks(unittest.TestCase):
                          'call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"], "outcome:"+dg_world_active["id"]+":"+dg_rpg_world_stance)',
                          'call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])'):
             self.assertIn(expected,SCRIPT)
-        self.assertIn('show expression dg_rpg_sprite(who) as dg_vn_character at right',SCRIPT)
+        self.assertIn('show expression dg_rpg_vn_primary_sprite as dg_vn_character at right',SCRIPT)
         self.assertIn('__cancel__',SCRIPT)
         for outdated in ('call screen dg_rpg_read_scene(', 'call screen dg_rpg_world_result(',
                          'call screen dg_rpg_hybrid_read('):
