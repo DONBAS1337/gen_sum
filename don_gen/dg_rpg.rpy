@@ -1667,6 +1667,8 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True):
 label dg_rpg_vn_choice(story_text, choice_pairs):
     call dg_rpg_vn_text(story_text)
     $ dg_rpg_vn_selected = renpy.display_menu([(dg_literal(caption), key) for key, caption in choice_pairs])
+    if dg_rpg_vn_selected == "__cancel__":
+        return None
     return dg_rpg_vn_selected
 
 label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
@@ -1681,8 +1683,10 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
         return
     $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
     $ dg_rpg_vn_options.append((u"Написать свою реплику · AI", "custom"))
-    $ dg_rpg_vn_options.append((u"Завершить разговор", None))
+    $ dg_rpg_vn_options.append((u"Завершить разговор", "__cancel__"))
     $ dg_rpg_vn_selected = renpy.display_menu(dg_rpg_vn_options)
+    if dg_rpg_vn_selected == "__cancel__":
+        return None
     return dg_rpg_vn_selected
 
 label dg_rpg_main:
@@ -1820,7 +1824,7 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "incident":
         if dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"]):
             $ dg_incident_current = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
-            $ dg_rpg_incident_choices = list(dg_social.INCIDENT_CHOICES) + [(None, u"Не вмешиваться сейчас")]
+            $ dg_rpg_incident_choices = list(dg_social.INCIDENT_CHOICES) + [("__cancel__", u"Не вмешиваться сейчас")]
             call dg_rpg_vn_choice(dg_incident_current["text"], dg_rpg_incident_choices)
             if _return:
                 $ dg_rpg_incident_choice = _return
@@ -1835,7 +1839,7 @@ label dg_rpg_loop:
         $ dg_rpg_focus = dg_rpg_value
         if dg_social.personal_scene(dg_rpg_state, dg_rpg_focus):
             $ dg_personal_current = dg_social.personal_scene(dg_rpg_state,dg_rpg_focus)
-            $ dg_personal_choices = list(dg_personal_current["choices"]) + [(None, u"Вернуться позже")]
+            $ dg_personal_choices = list(dg_personal_current["choices"]) + [("__cancel__", u"Вернуться позже")]
             call dg_rpg_vn_choice(dg_personal_current["text"], dg_personal_choices)
             if _return:
                 $ dg_rpg_personal_stance = _return
@@ -1875,7 +1879,7 @@ label dg_rpg_loop:
         $ dg_rpg_focus = dg_rpg_value
         $ dg_rpg_route_level = dg_rpg.available_route_events(dg_rpg_state, dg_rpg_focus)[0][0]
         $ dg_route_intro = dg_dialogue.route_intro(dg_rpg_state, dg_rpg_focus, dg_rpg_route_level)
-        $ dg_route_choices = list(dg_route_intro["options"]) + [(None, u"Вернуться позже")]
+        $ dg_route_choices = list(dg_route_intro["options"]) + [("__cancel__", u"Вернуться позже")]
         call dg_rpg_vn_choice(dg_route_intro["text"], dg_route_choices)
         if _return:
             $ dg_rpg_route_stance = _return
@@ -1926,7 +1930,7 @@ label dg_rpg_world_label:
     $ dg_world_active = dg_world.event_at(dg_rpg_state, dg_rpg_state["place"])
     $ dg_world_choices = [(choice["key"], choice["text"]) for choice in dg_world_active["choices"]]
     $ dg_world_choices.append(("custom", u"Написать своё действие · AI"))
-    $ dg_world_choices.append((None, u"Вернуться в лагерь"))
+    $ dg_world_choices.append(("__cancel__", u"Вернуться в лагерь"))
     call dg_rpg_vn_choice(dg_world_active["story"], dg_world_choices)
     if _return == "custom":
         $ dg_rpg_hybrid_mode = "world"
