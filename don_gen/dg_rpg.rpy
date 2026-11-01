@@ -431,36 +431,67 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
 
 screen dg_rpg_journal:
     modal True
-    add Solid("#172a32")
+    default view = "timeline"
+    add Solid("#142832")
     use dg_chrome(u"ДНЕВНИК", Return())
-    text u"Дневник смены и руты" style "dg_title" xpos 120 ypos 135 size 65
+    text u"Дневник смены" style "dg_title" xpos 100 ypos 115 size 65
     hbox:
-        xpos 110 ypos 270 spacing 65
+        xpos 100 ypos 215 spacing 28
+        textbutton u"События" style "dg_navlink" selected view == "timeline" action SetScreenVariable("view", "timeline")
+        textbutton u"Разговоры" style "dg_navlink" selected view == "talks" action SetScreenVariable("view", "talks")
+        textbutton u"AI-сцены" style "dg_navlink" selected view == "ai" action SetScreenVariable("view", "ai")
+    hbox:
+        xpos 95 ypos 295 spacing 45
         frame:
             background Solid("#091a24")
-            padding (25, 20)
-            xsize 850 ysize 680
+            padding (23, 21)
+            xsize 970 ysize 660
             viewport:
-                mousewheel True scrollbars "vertical" ysize 620
+                mousewheel True
+                scrollbars "vertical"
+                ysize 610
                 vbox:
                     spacing 16
-                    for row in dg_rpg_state["journal"][::-1]:
-                        text (u"День %d · %s" % (row["day"], dg_rpg.SLOTS[row["slot"]])) style "dg_meta"
-                        text dg_literal(row["text"]) style "dg_text" size 26 xmaximum 740
+                    if view == "timeline":
+                        for row in dg_rpg_state["journal"][::-1]:
+                            text (u"День %d · %s" % (row["day"], dg_rpg.SLOTS[row["slot"]])) style "dg_meta" size 20
+                            text dg_literal(row["text"]) style "dg_text" size 26 xmaximum 855
+                    elif view == "talks":
+                        if not dg_rpg_state.get("dialogue_history"):
+                            text u"Вы ещё не вели подробных разговоров. Встретьте персонажа и выберите тему беседы." style "dg_text" size 28 xmaximum 850
+                        for item in dg_rpg_state.get("dialogue_history", [])[::-1]:
+                            text (u"День %d · %s · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]], item["topic"])) style "dg_meta" size 23
+                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
+                            text (u"Отношения +%d" % item["affinity_gain"]) style "dg_text" size 22 color "#ffe19b"
+                            null height 12
+                    else:
+                        if not dg_rpg_state["ai_scenes"]:
+                            text u"Пока нет AI-сцен. Они создаются вручную через кнопку персонажа." style "dg_text" size 28
+                        for item in dg_rpg_state["ai_scenes"][::-1]:
+                            text (u"День %d · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]])) style "dg_meta" size 23
+                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
+                            null height 13
         frame:
             background Solid("#091a24")
-            padding (25, 20)
-            xsize 780 ysize 680
+            padding (24, 19)
+            xsize 760 ysize 660
             viewport:
-                mousewheel True scrollbars "vertical" ysize 620
+                mousewheel True scrollbars "vertical" ysize 610
                 vbox:
                     spacing 13
+                    text u"ХАРАКТЕРИСТИКИ" style "dg_meta" size 25
+                    text (u"Энергия: %d/100" % dg_rpg_state["energy"]) style "dg_text" size 26
+                    text (u"Любознательность: %d · Доброта: %d · Навык: %d" %
+                          (dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"],
+                           dg_rpg_state["stats"]["skill"])) style "dg_text" size 23 xmaximum 680
+                    null height 10
+                    text u"ОТНОШЕНИЯ" style "dg_meta"
                     for who, name, morning, daytime, evening, night in dg_rpg.NPCS:
-                        text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 26
-                    null height 25
+                        text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 25
+                    null height 18
                     text u"ЗАДАНИЯ" style "dg_meta"
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):
-                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" ✓" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 25
+                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" ✓" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 24
 
 screen dg_rpg_route_choice(who):
     modal True
