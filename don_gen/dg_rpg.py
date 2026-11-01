@@ -13,6 +13,7 @@ import re
 import shutil
 import uuid
 import dg_dialogue
+import dg_world
 
 try:
     text_type = unicode
@@ -93,6 +94,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": [],
         "dialogue_history": [], "dialogue_counts": {}
     }
+    dg_world.prepare(state)
     return state
 
 
@@ -114,6 +116,7 @@ def validate(state):
     state.setdefault("route_events_done", [])
     state.setdefault("dialogue_history", [])
     state.setdefault("dialogue_counts", {})
+    dg_world.ensure(state)
     if len(state.get("journal", [])) > 500 or len(state.get("ai_scenes", [])) > 80 or len(state["dialogue_history"]) > 100:
         raise ValueError("Oversized save")
     return state
@@ -211,6 +214,10 @@ def route_event(state, who, approach):
 
 
 def _tick(state):
+    if state["slot"] == 3:
+        expired = dg_world.missed(state)
+        if expired:
+            _journal(state, expired)
     state["slot"] += 1
     if state["slot"] >= 4:
         state["slot"] = 0
@@ -219,6 +226,8 @@ def _tick(state):
         if state["day"] > state["duration"]:
             state["finished"] = True
             _journal(state, u"Смена закончилась. Все встречи и достижения сохранились в дневнике.")
+        else:
+            dg_world.prepare(state)
 
 
 def move(state, place):
@@ -332,6 +341,24 @@ def conversation(state, who, topic_index, stance):
     return scene
 
 
+
+def story_choice(state, key):
+    """Persistent, offline nonlinear event. Effects apply exactly once."""
+    validate(state)
+    if state["finished"]:
+        raise ValueError("The camp shift has ended")
+    outcome = dg_world.choose(state, key)
+    _journal(state, u"Сюжет: %s. %s" % (outcome["title"], outcome["text"][:360]))
+    score = state["affinity"][outcome["npc"]]
+    for threshold in MILESTONES:
+        marker = outcome["npc"] + ":" + str(threshold)
+        if score >= threshold and marker not in state["milestones"]:
+            state["milestones"].append(marker)
+    _check_quests(state)
+    _tick(state)
+    return outcome
+
+
 def append_ai_scene(state, who, text):
     if who not in NPC_NAMES:
         raise ValueError("Unknown character")
@@ -357,6 +384,8 @@ def summary_for_ai(state, who, intent):
         "recent_journal": state["journal"][-10:],
         "recent_scenes": state["ai_scenes"][-3:],
         "recent_dialogue": state["dialogue_history"][-6:],
+        "world_state": dg_world.world_report(state),
+        "recent_world_decisions": state["world"]["decisions"][-7:],
         "route_milestones": available_route_events(state, who),
         "completed_route_events": [v for v in state["route_events_done"] if v.startswith(who + ":")]
     }
