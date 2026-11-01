@@ -234,7 +234,10 @@ INSTRUCTIONS = (
 )
 
 def build_request(state, plan):
-    narrator_policy = dg_adult.scene_policy(state, plan.get("who") or plan["result"].get("who") or plan["result"].get("npc"))
+    if plan.get("status") != "ready":
+        raise ValueError("Only accepted local action plans may reach the narrator")
+    result = plan["result"]
+    narrator_policy = dg_adult.scene_policy(state, plan.get("who") or result.get("who") or result.get("npc"))
     return INSTRUCTIONS + u" " + narrator_policy, json.dumps(locked_context(state,plan),ensure_ascii=False,
                                     sort_keys=True)
 
