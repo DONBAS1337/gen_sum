@@ -10,12 +10,16 @@ init 1001 python:
     import dg_social
     import dg_hybrid
     import dg_backend
+    import dg_comfy
+    import dg_adult
 
     def dg_rpg_root():
         return dg_runtime.app.library.root
 
-    def dg_rpg_start(name, age, days, history, source, pronouns):
+    def dg_rpg_start(name, age, days, history, source, pronouns, adult=False):
         state = dg_rpg.new_game(name, age, days, history, source, pronouns)
+        if adult:
+            dg_adult.set_enabled(state, True, confirmed=True)
         dg_rpg.save(dg_rpg_root(), state)
         store.dg_rpg_state = state
         logging.getLogger("don_gen").info("RPG created id=%s days=%s", state["id"], state["duration"])
@@ -46,6 +50,8 @@ init 1001 python:
             store.dg_rpg_last_incident = dg_rpg.social_encounter(state, arg)
         elif action == "hybrid":
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
+        elif action == "adult_mode":
+            dg_adult.set_enabled(state, arg, confirmed=bool(arg))
         elif action == "contract":
             store.dg_rpg_last_contract = dg_rpg.accept_contract(state, arg)
         else:
@@ -238,6 +244,7 @@ init 1001 python:
             u"Не выдумывай новые цифры характеристик, награды или местонахождение персонажей. "
             u"Верни только текст сцены без Markdown, программного кода и меню."
         )
+        instructions += u" " + dg_adult.scene_policy(state, who)
         logging.getLogger("don_gen").info("AI scene request npc=%s day=%d", who, state["day"])
         app.set_status(u"Создаём особую сцену…")
         story_text = app.client.generate(instructions, json.dumps(context, ensure_ascii=False),
@@ -276,6 +283,13 @@ init 1001 python:
             transparent = True
         else:
             raise ValueError("Unknown asset type")
+        if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy":
+            workflow = os.path.join(renpy.config.gamedir, "mods", "don_gen",
+                                    "comfy_workflow_api.json")
+            logging.getLogger("don_gen").info("Local ComfyUI image request kind=%s key=%s", kind, key)
+            dg_runtime.app.set_status(u"Локальный ComfyUI: создаём изображение…")
+            data = dg_comfy.generate(workflow, prompt, kind)
+            return dg_rpg.save_asset(dg_rpg_root(), state["id"], kind, key, data)
         app = dg_runtime.app
         logging.getLogger("don_gen").info("AI image request kind=%s key=%s", kind, key)
         app.set_status(u"Рисуем %s…" % (u"фон" if kind == "background" else u"спрайт"))
@@ -472,6 +486,9 @@ screen dg_rpg_setup:
                         textbutton u"7ДЛ · Мику" style "dg_ink_act" action SetVariable("dg_create_source", "7dl:mi_7dl") selected dg_create_source == "7dl:mi_7dl"
                         textbutton u"7ДЛ · DJ" style "dg_ink_act" action SetVariable("dg_create_source", "7dl:mi_dj") selected dg_create_source == "7dl:mi_dj"
                         textbutton u"7ДЛ · Классика" style "dg_ink_act" action SetVariable("dg_create_source", "7dl:mi_cl") selected dg_create_source == "7dl:mi_cl"
+            text u"РЕЖИМ ИСТОРИИ" style "dg_ink_label"
+            textbutton (u"18+ · ВЗРОСЛАЯ AU: ВКЛЮЧЕНА" if dg_create_adult else u"18+ · ВЗРОСЛАЯ AU: ВЫКЛЮЧЕНА") style "dg_ink_act" text_size 24 selected dg_create_adult sensitive (dg_create_age.isdigit() and int(dg_create_age) >= 18) action SetVariable("dg_create_adult", not dg_create_adult)
+            text u"Только для совершеннолетнего героя. В альтернативной версии допустимы зрелые романтические сцены между взрослыми. Ульяна и Юля исключены." style "dg_ink_small" size 21
             text u"ОБРАЩЕНИЕ" style "dg_ink_label"
             hbox:
                 spacing 36
@@ -479,7 +496,7 @@ screen dg_rpg_setup:
                     textbutton choice style "dg_ink_act" selected dg_create_pronouns == choice action SetVariable("dg_create_pronouns", choice)
             null height 8
             text u"Имя, возраст и длительность можно изменить до начала смены. Режим RPG работает и без генерации." style "dg_ink_small" size 22
-            $ dg_valid = bool(dg_create_name.strip() and dg_create_history.strip() and dg_create_age.isdigit() and dg_create_days.isdigit() and 1 <= int(dg_create_age) <= 999999999 and 1 <= int(dg_create_days) <= 120)
+            $ dg_valid = bool(dg_create_name.strip() and dg_create_history.strip() and dg_create_age.isdigit() and dg_create_days.isdigit() and 1 <= int(dg_create_age) <= 999999999 and 1 <= int(dg_create_days) <= 120 and (not dg_create_adult or int(dg_create_age) >= 18))
             hbox:
                 spacing 44
                 textbutton u"Начать смену" style "dg_ink_act" sensitive dg_valid action Return(("start",))
@@ -499,6 +516,45 @@ style dg_map_pin_text is dg_text:
     color "#f8eed1"
     hover_color "#ffe899"
     outlines [(1, "#051119", 0, 1)]
+
+screen dg_rpg_artist_settings:
+    modal True
+    add dg_rpg_bg()
+    add Solid("#071a28f0")
+    frame:
+        background Solid("#163844f9")
+        align (0.5, 0.5) xsize 1460 ysize 775 padding (46, 37)
+        vbox:
+            spacing 23
+            text u"ГЕНЕРАЦИЯ ФОНОВ И СПРАЙТОВ" style "dg_title" size 49 color "#ffe1aa"
+            text u"Выбери, кто создаёт изображения. На обычные разговоры и механику RPG эта настройка не влияет." style "dg_text" size 29 xmaximum 1330
+            textbutton u"ОБЛАЧНЫЙ ГЕНЕРАТОР" style "dg_primary" selected getattr(persistent, "dg_rpg_art_provider", "cloud") != "comfy" action SetField(persistent, "dg_rpg_art_provider", "cloud")
+            textbutton u"COMFYUI · 127.0.0.1:8188" style "dg_primary" selected getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" action SetField(persistent, "dg_rpg_art_provider", "comfy")
+            text u"Для ComfyUI нужен работающий сервер на порту 8188 и экспортированный workflow в формате API: game/mods/don_gen/comfy_workflow_api.json" style "dg_text" size 25 xmaximum 1320
+            text u"В поле текстового промпта workflow укажи __DG_PROMPT__. Для спрайтов потребуется отдельный workflow с прозрачностью, иначе они будут отклонены." style "dg_text" size 24 xmaximum 1300
+            text u"Локальный сервис с интерфейсом 8189 не используется автоматически: его API не проверен. Генерация идёт прямо в ComfyUI 8188." style "dg_text" size 24 color "#c0dbd7" xmaximum 1300
+            textbutton u"ЗАКРЫТЬ" style "dg_act" action Return(None)
+
+screen dg_rpg_adult_settings:
+    modal True
+    add dg_rpg_bg()
+    add Solid("#071a28f2")
+    frame:
+        background Solid("#173541f9")
+        align (0.5, 0.5) xsize 1490 ysize 790 padding (50, 41)
+        vbox:
+            spacing 20
+            text u"ДОПОЛНИТЕЛЬНЫЙ РЕЖИМ 18+" style "dg_title" size 52 color "#ffe1aa"
+            text u"По умолчанию взрослые темы выключены. Этот режим — отдельная альтернативная вселенная с совершеннолетними версиями допущенных персонажей, не изменение их канонического возраста." style "dg_text" size 29 xmaximum 1350
+            text u"Не распространяется на Ульяну и Юлю. Взаимное согласие обязательно. Любое изменение сохраняется только в текущей смене." style "dg_text" size 26 xmaximum 1310
+            text (u"Сейчас: ВКЛЮЧЁН" if dg_adult.enabled(dg_rpg_state) else u"Сейчас: ВЫКЛЮЧЕН") style "dg_meta" size 26 color "#ffdfaa"
+            if dg_adult.enabled(dg_rpg_state):
+                textbutton u"ВЫКЛЮЧИТЬ РЕЖИМ 18+" style "dg_primary" action Return("disable")
+            elif dg_rpg_state["hero"]["age"] >= 18:
+                textbutton u"ПОДТВЕРЖДАЮ 18+ · ВКЛЮЧИТЬ ВЗРОСЛУЮ AU" style "dg_primary" action Return("enable")
+            else:
+                text u"Герой несовершеннолетний. Включение недоступно." style "dg_text" size 26 color "#ffe5b4"
+            textbutton u"ОТМЕНА" style "dg_act" action Return(None)
 
 screen dg_rpg_map:
     modal True
@@ -700,6 +756,8 @@ screen dg_rpg_hub:
                 textbutton u"ГИБРИДНАЯ СЦЕНА · действие + реакция AI" style "dg_act" action Return(("hybrid", None))
                 textbutton u"ПОРУЧЕНИЯ · длинные задания" style "dg_act" action Return(("contracts", None))
             textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
+            textbutton (u"Режим истории: 18+ AU" if dg_adult.enabled(dg_rpg_state) else u"Режим истории: обычный") style "dg_act" action Return(("adult", None))
+            textbutton (u"Художник: ComfyUI локально" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Художник: облачный") style "dg_act" action Return(("artist", None))
             textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
             if not dg_rpg_state["finished"]:
                 textbutton u"Создать фон локации (AI)" style "dg_act" action Return(("background", dg_rpg_state["place"]))
@@ -1347,6 +1405,7 @@ label dg_rpg_picker_label:
         $ dg_create_history = u"Новичок в лагере"
         $ dg_create_source = "vanilla"
         $ dg_create_pronouns = u"он/его"
+        $ dg_create_adult = False
         jump dg_rpg_create_loop
     $ dg_rpg_open(dg_rpg_value)
     jump dg_rpg_loop
@@ -1379,7 +1438,7 @@ label dg_rpg_create_loop:
                 $ dg_create_history = dg_edit_result[1]
         jump dg_rpg_create_loop
     if dg_create_cmd[0] == "start":
-        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns)
+        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns, dg_create_adult)
         jump dg_rpg_loop
     jump dg_rpg_create_loop
 
@@ -1396,6 +1455,16 @@ label dg_rpg_loop:
         jump dg_rpg_loop
     if dg_rpg_cmd == "diag":
         call screen dg_diagnostics
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "artist":
+        call screen dg_rpg_artist_settings
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "adult":
+        call screen dg_rpg_adult_settings
+        if _return == "enable":
+            $ dg_rpg_apply("adult_mode", True)
+        elif _return == "disable":
+            $ dg_rpg_apply("adult_mode", False)
         jump dg_rpg_loop
     if dg_rpg_cmd == "map":
         call screen dg_rpg_map
