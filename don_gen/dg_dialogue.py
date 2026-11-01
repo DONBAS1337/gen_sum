@@ -185,10 +185,10 @@ def topic(state, who, topic_index):
     # determines NPC dialogue, stat gain and affinity.
     return {
         "speaker": who, "title": chosen[0],
-        "text": chosen[1] + u"\n\n" + chosen[2],
-        "options": list(zip(STANCE_STATS.keys(), chosen[3])) if False else [
-            (STANCE, chosen[3][k]) for k, STANCE in enumerate(STANCES)
-        ]
+        "text": chosen[1] + u"\n\n" + chosen[2] + u"\n\n" +
+                u"На мгновение вы замолкаете. По лагерю разносятся голоса и далёкий шум деревьев; прямо сейчас разговор зависит от того, что ты решишь сказать. " +
+                u"Собеседник не торопит тебя с ответом, внимательно наблюдая за твоей реакцией.",
+        "options": [(stance, chosen[3][k]) for k, stance in enumerate(STANCES)]
     }
 
 
