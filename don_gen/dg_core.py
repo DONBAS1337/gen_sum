@@ -33,7 +33,7 @@ class StoryError(ValueError):
 
 ValidationError = StoryError
 CUSTOM_CHOICE_LIMIT = 1000
-BACKGROUND_PATTERN = r"^bg gs_generated_[a-f0-9]{32}\Z"
+BACKGROUND_PATTERN = r"^bg dg_generated_[a-f0-9]{32}\Z"
 BACKGROUND_STYLE = """Create ONE empty background for the visual novel Everlasting Summer / Бесконечное лето.
 Match the original game's painted background art, especially the Sovyonok camp square,
 camp entrance and library. When reference images are provided, use ONLY their drawing style,
@@ -208,7 +208,7 @@ def background_request(payload):
 
 def background_name(description):
     description = _text(description, "background description", 2000).strip()
-    return "bg gs_generated_" + hashlib.sha256((BACKGROUND_STYLE + description).encode("utf-8")).hexdigest()[:32]
+    return "bg dg_generated_" + hashlib.sha256((BACKGROUND_STYLE + description).encode("utf-8")).hexdigest()[:32]
 
 
 def png_size(data):
@@ -240,7 +240,7 @@ def parse_payload(payload, catalog, legacy_assets=False):
             return
         # Older cached chapters could use other mods. Never relax new drafts or missing generated PNGs.
         if legacy_assets and (kind in ("sprite", "sprite tag", "music", "ambience", "sound") or
-                              (kind == "background" and "bg black" in backgrounds and not name.startswith("bg gs_generated_"))):
+                              (kind == "background" and "bg black" in backgrounds and not name.startswith("bg dg_generated_"))):
             return
         missing.add((kind, name))
         candidates = sorted(available)
@@ -443,7 +443,7 @@ class Store(object):
             return []
         result = []
         for filename in sorted(os.listdir(directory)):
-            if not re.match(r"^gs_generated_[a-f0-9]{32}\.json\Z", filename):
+            if not re.match(r"^dg_generated_[a-f0-9]{32}\.json\Z", filename):
                 continue
             item = _read_json(os.path.join(directory, filename))
             if not isinstance(item, dict) or item.get("name") != "bg " + filename[:-5]:
@@ -482,11 +482,11 @@ class Store(object):
             root = roots.get("7dl") if isinstance(roots, dict) else None
             if root and os.path.isdir(root):
                 try:
-                    import gs_source_7dl
+                    import dg_source_7dl
                     route = profile.split(":", 1)[1]
-                    index = gs_source_7dl.load_or_build(
+                    index = dg_source_7dl.load_or_build(
                         root, os.path.join(self.root, "_source_cache"))
-                    source_sprites = gs_source_7dl.route_sprite_names(
+                    source_sprites = dg_source_7dl.route_sprite_names(
                         index, route, allowed_tags=set(catalog["characters"]))
                     catalog["sprites"].extend(source_sprites)
                 except (IOError, OSError, ValueError, TypeError):
@@ -647,7 +647,7 @@ class Store(object):
             if not root or not os.path.isdir(root):
                 raise StoryError("Для этой истории нужен установленный «7 дней лета: Complete Edition».")
             try:
-                import gs_source_7dl
+                import dg_source_7dl
                 route = profile.split(":", 1)[1]
                 query_parts = [story["premise"][:6000]]
                 if parent:
@@ -655,7 +655,7 @@ class Store(object):
                 query_parts.append(recent_excerpt)
                 if selected_choice:
                     query_parts.append(selected_choice)
-                source_text = gs_source_7dl.source_context(
+                source_text = dg_source_7dl.source_context(
                     root,
                     os.path.join(self.root, "_source_cache"),
                     route,
@@ -678,7 +678,7 @@ def instructions(catalog):
     for key in ("music", "ambience", "sounds"):
         assets[key] = sorted(catalog[key])
     assets["transitions"] = ["dissolve", "fade"]
-    instructions = """Ты создаёшь русскоязычную визуальную новеллу «Генеративное лето» в мире «Бесконечного лета». Сюжет задаёт пользователь: premise содержит исходный замысел, selected_choice — его новое решение или пожелание. Оба поля задают обязательные события истории. Если новое пожелание меняет исходный замысел, следуй более новому selected_choice в изменённой части; остальные пожелания premise сохраняются. Сохраняй само заданное событие и его результат; свобода автора — в языке, ракурсе, темпе и подробности описания в пределах правил ниже. Не подменяй событие посторонним приключением, фантазией героя или бесконечным откладыванием.
+    instructions = """Ты создаёшь русскоязычную визуальную новеллу «DON-GEN» в мире «Бесконечного лета». Сюжет задаёт пользователь: premise содержит исходный замысел, selected_choice — его новое решение или пожелание. Оба поля задают обязательные события истории. Если новое пожелание меняет исходный замысел, следуй более новому selected_choice в изменённой части; остальные пожелания premise сохраняются. Сохраняй само заданное событие и его результат; свобода автора — в языке, ракурсе, темпе и подробности описания в пределах правил ниже. Не подменяй событие посторонним приключением, фантазией героя или бесконечным откладыванием.
 
 Сгенерируй один законченный эпизод с живыми диалогами, действиями и атмосферой. По умолчанию — примерно 60–100 реплик и абзацев повествования суммарно; если premise или selected_choice просит другую длину, соблюдай её. Если есть предыдущий эпизод, начни с последствий selected_choice, не повторяй уже показанный текст и уважай установленные факты. Обычно заверши эпизод важным выбором из 2–4 разных вариантов с различными последствиями, чтобы над решением хотелось задуматься. Вместо выбора можно завершить всю историю: по прямой просьбе пользователя либо когда именно сейчас получается сильный, красивый и заслуженный финал, основной конфликт разрешён и все заложенные «чеховские ружья» получили развязку. Без просьбы пользователя не завершай историю лишь потому, что закончилась текущая сцена. При просьбе закончить доведи открытые линии до развязки в этом эпизоде. В финале не добавляй выборы, новые загадки или обещание следующей главы.
 

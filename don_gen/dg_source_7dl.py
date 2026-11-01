@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Safe 7DL source indexer/retriever for Generative Summer.
+"""Safe 7DL source indexer/retriever for DON-GEN.
 
 Python 2.7/3 compatible.  It NEVER imports or executes foreign Ren'Py code.
 It treats .rpy files only as text and builds a compact searchable index.
 
 Typical use outside the game:
-    python gs_source_7dl.py build --root "D:/.../workshop/content/331470/3266357374" --out 7dl_index.json
-    python gs_source_7dl.py query --index 7dl_index.json --route mi_7dl --text "Мику музыкальный клуб репетиция"
+    python dg_source_7dl.py build --root "D:/.../workshop/content/331470/3266357374" --out 7dl_index.json
+    python dg_source_7dl.py query --index 7dl_index.json --route mi_7dl --text "Мику музыкальный клуб репетиция"
 
 The in-game integration can import build_index/query/render_context directly and cache
-7dl_index.json under the Generative Summer save directory.
+7dl_index.json under the DON-GEN save directory.
 """
 from __future__ import unicode_literals
 
@@ -563,7 +563,7 @@ def build_index(root, source_map=None, include_assets=True):
         }
 
     index = {
-        "format": "generative_summer_7dl_index",
+        "format": "don_gen_7dl_index",
         "version": INDEX_VERSION,
         "created_at": time.time(),
         "root_hint": root,
@@ -844,7 +844,7 @@ def load_or_build(root, cache_dir):
             index = None
         if index is not None:
             cached_root = index.get("root_hint") or ""
-            if (index.get("format") == "generative_summer_7dl_index" and
+            if (index.get("format") == "don_gen_7dl_index" and
                     index.get("version") == INDEX_VERSION and
                     os.path.normcase(os.path.abspath(cached_root)) == os.path.normcase(root)):
                 _INDEX_CACHE[path] = index
@@ -886,7 +886,7 @@ def _cli_query(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Safe 7DL source indexer for Generative Summer")
+    parser = argparse.ArgumentParser(description="Safe 7DL source indexer for DON-GEN")
     sub = parser.add_subparsers(dest="command")
 
     build = sub.add_parser("build")

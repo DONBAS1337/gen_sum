@@ -7,15 +7,15 @@ import os
 import sys
 import threading
 
-# Mark the helper before importing gs_backend. Python 3 would not bridge again
+# Mark the helper before importing dg_backend. Python 3 would not bridge again
 # anyway, but this also makes the execution mode explicit.
-os.environ["GS_TEXT_WORKER"] = "1"
+os.environ["DG_TEXT_WORKER"] = "1"
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 if MODULE_DIR not in sys.path:
     sys.path.insert(0, MODULE_DIR)
 
-import gs_backend
+import dg_backend
 
 
 def _watch_parent():
@@ -67,12 +67,12 @@ def main():
     trace = {}
     client = None
     try:
-        client = gs_backend.Client(request["data_dir"])
+        client = dg_backend.Client(request["data_dir"])
         text = client.generate(
             request["instructions"],
             request["prompt"],
             model=request.get("model"),
-            effort=request.get("effort", gs_backend.DEFAULT_EFFORT),
+            effort=request.get("effort", dg_backend.DEFAULT_EFFORT),
             trace=trace,
             fast_mode=bool(request.get("fast_mode", True)),
         )

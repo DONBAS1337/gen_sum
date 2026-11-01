@@ -178,13 +178,13 @@ def _curl_response_open(url, body, headers):
 
     request_headers = dict(headers or {})
     request_headers.update({
-        "User-Agent": "generative_summer/0.1 (codex-compatible)",
-        "originator": "generative_summer",
+        "User-Agent": "don_gen/0.1 (codex-compatible)",
+        "originator": "don_gen",
     })
 
     # Append the HTTP status after the SSE body so _authorized can keep its
     # existing 401-refresh / HTTP error behaviour.
-    marker = b"\n__GS_HTTP_CODE__:"
+    marker = b"\n__DG_HTTP_CODE__:"
     args = [
         curl,
         "--http1.1",
@@ -200,7 +200,7 @@ def _curl_response_open(url, body, headers):
         args.extend(["--header", "%s: %s" % (key, value)])
     if body is not None:
         args.extend(["--data-binary", "@-"])
-    args.extend(["--write-out", "\n__GS_HTTP_CODE__:%{http_code}"])
+    args.extend(["--write-out", "\n__DG_HTTP_CODE__:%{http_code}"])
 
     options = {"creationflags": 0x08000000} if os.name == "nt" else {}
     process = subprocess.Popen(
@@ -255,8 +255,8 @@ def _http_open(url, body=None, headers=None):
         return _curl_response_open(url, body, headers)
 
     headers = dict(headers or {})
-    headers.update({"User-Agent": "generative_summer/0.1 (codex-compatible)",
-                    "originator": "generative_summer"})
+    headers.update({"User-Agent": "don_gen/0.1 (codex-compatible)",
+                    "originator": "don_gen"})
     opener = build_opener(_NoRedirect(), HTTPSHandler(context=_ssl_context()))
     if url.startswith(BACKEND + "/images/"):
         timeout = GENERATION_TIMEOUT
@@ -434,7 +434,7 @@ def _response_text(response, cancel=None, trace=None):
 def _external_python3():
     """Find an optional modern Python for long-lived SSE requests."""
     candidates = []
-    configured = os.environ.get("GS_PYTHON3")
+    configured = os.environ.get("DG_PYTHON3")
     if configured:
         candidates.append(configured)
 
@@ -476,9 +476,9 @@ def _generate_via_python3(client, executable, instructions, prompt, model, effor
     avoids both Python 2 environment-type issues and Windows pipe deadlocks on
     large traces/responses.
     """
-    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gs_text_worker.py")
+    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dg_text_worker.py")
     if not os.path.isfile(worker):
-        raise ClientError("Не найден gs_text_worker.py рядом с gs_backend.py.")
+        raise ClientError("Не найден dg_text_worker.py рядом с dg_backend.py.")
 
     if not os.path.isdir(client.data_dir):
         os.makedirs(client.data_dir)
@@ -766,7 +766,7 @@ class Client(object):
                     result["code"] = query["code"][0]
                 else:
                     valid = False
-                body = ("Login received. Return to Generative Summer." if valid else "Invalid callback.").encode("utf-8")
+                body = ("Login received. Return to DON-GEN." if valid else "Invalid callback.").encode("utf-8")
                 self.send_response(200 if valid else 400)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -789,7 +789,7 @@ class Client(object):
             "scope": "openid profile email offline_access", "state": state,
             "code_challenge": _b64(hashlib.sha256(verifier.encode("ascii")).digest()),
             "code_challenge_method": "S256", "id_token_add_organizations": "true",
-            "codex_cli_simplified_flow": "true", "originator": "generative_summer"})
+            "codex_cli_simplified_flow": "true", "originator": "don_gen"})
         try:
             if on_status:
                 on_status("Завершите вход ChatGPT в открывшемся браузере.")
@@ -835,10 +835,10 @@ class Client(object):
                 raise ClientError("Аккаунт не вернул доступных моделей Codex.")
             return self._models
 
-    def generate_background(self, prompt, references=None, trace=None):
+    def generate_background(self, prompt, references=None, trace=None, transparent=False):
         """Same subscription/auth as Codex's standalone Images client, no API key."""
-        body = {"model": IMAGE_MODEL, "prompt": prompt, "size": "2048x1152",
-                "quality": "medium", "background": "opaque", "n": 1}
+        body = {"model": IMAGE_MODEL, "prompt": prompt, "size": "1024x1536" if transparent else "2048x1152",
+                "quality": "medium", "background": "transparent" if transparent else "opaque", "n": 1}
         path = "/images/edits" if references else "/images/generations"
         if references:
             body["images"] = [{"image_url": value} for value in references]
@@ -870,7 +870,7 @@ class Client(object):
     def generate(self, instructions, prompt, model=None, effort=DEFAULT_EFFORT, cancel=None, trace=None, fast_mode=True):
         # Ren'Py 7.4 / Python 2.7 is unreliable on the long Codex SSE stream.
         # If a modern Python is installed, isolate only this text request there.
-        if sys.version_info[0] < 3 and not os.environ.get("GS_TEXT_WORKER"):
+        if sys.version_info[0] < 3 and not os.environ.get("DG_TEXT_WORKER"):
             executable = _external_python3()
             if executable:
                 return _generate_via_python3(
