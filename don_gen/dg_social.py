@@ -291,6 +291,9 @@ def parse(text):
     if len(text) < 5:
         return None
     lowered = text.lower()
+    # Explicit refusal should not accidentally count as performing the action.
+    if re.search(u"(?<!\\w)не\\s+(?:хочу|буду|стану|могу)\\b", lowered, re.UNICODE):
+        return None
     selected = None
     # A word stem must start at a word boundary to avoid false partial matches.
     for key, stems in VERBS:
@@ -360,9 +363,14 @@ def action(state, text, nearby):
     if intent=="mediate" and impact:
         pairs=[(a,b) for a,b,value,title,story in PAIR_DEFS if a==target or b==target] if target else []
         if not pairs:
-            pairs=[(a,b) for a,b,value,title,story in PAIR_DEFS][:1]
-        a,b=pairs[0]
-        social["bonds"][_pair(a,b)]=max(-100,min(100,social["bonds"][_pair(a,b)]+7))
+            # Free mediation at a place influences an actual local incident,
+            # rather than mysteriously changing Miku/Alice from anywhere.
+            active=incident_at(state,state["place"])
+            if active:
+                pairs=[tuple(active["pair"])]
+        if pairs:
+            a,b=pairs[0]
+            social["bonds"][_pair(a,b)]=max(-100,min(100,social["bonds"][_pair(a,b)]+7))
     place = state["place"]
     location={"square":u"площади","gate":u"ворот","cabins":u"домиков",
         "canteen":u"столовой","library":u"библиотеки","clubs":u"клубов",
