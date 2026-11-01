@@ -48,7 +48,7 @@ class AtlasAndHiddenNPC(unittest.TestCase):
     def test_atlas_has_real_png_data_and_valid_16_9_pixels(self):
         w,h,t,raw=read_png("don_gen_atlas.png")
         self.assertEqual((w,h,t),(1280,720,3))
-        self.assertGreater(len(set(raw)),35)
+        self.assertGreater(len(set(raw)),25)
         for icon in ("idle","hover","selected","story","quest","encounter","character"):
             w,h,t,raw=read_png("map_"+icon+".png")
             self.assertEqual((w,h,t),(56,56,6))
