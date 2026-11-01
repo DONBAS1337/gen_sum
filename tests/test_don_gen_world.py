@@ -124,6 +124,33 @@ class WorldDirectorTests(unittest.TestCase):
         self.assertEqual(stats["resolved"], 120)
         self.assertEqual(len(stats["tracks"]), 4)
 
+    def test_ending_changes_with_world_and_relationships(self):
+        hopeful = copy.deepcopy(self.state)
+        difficult = copy.deepcopy(self.state)
+        hopeful["world"]["morale"] = 89
+        hopeful["world"]["knowledge"] = 93
+        hopeful["affinity"]["mi"] = 75
+        difficult["world"]["morale"] = 18
+        difficult["world"]["freedom"] = 88
+        positive = dg_world.finale(hopeful)
+        gloomy = dg_world.finale(difficult)
+        self.assertIn(u"Мику", positive)
+        self.assertNotEqual(positive, gloomy)
+        self.assertIn(u"Фестиваль Совёнка", positive)
+        self.assertIn(u"Тайна радиокружка", positive)
+
+    def test_daily_motif_variety(self):
+        self.assertEqual(len(dg_world.DAILY_MOTIFS), len(dg_world.DAILY_CHOICES))
+        self.assertGreaterEqual(len(dg_world.DAILY_MOTIFS), 16)
+        for group in dg_world.DAILY_CHOICES:
+            self.assertEqual(len(group), 3)
+            self.assertEqual(len(set(group)), 3)
+        self.assertGreaterEqual(sum(len(x) for x in dg_world.DAILY_CHOICES), 48)
+
+    def test_hero_backstory_is_in_world_story(self):
+        self.assertIn(u"Игорь", dg_world.current(self.state)["story"])
+        self.assertIn(u"Музыкант", dg_world.current(self.state)["story"])
+
     def test_ui_has_editor_and_world_story_and_diary(self):
         directory = os.path.join(os.path.dirname(__file__), "..", "don_gen")
         with open(os.path.join(directory, "dg_rpg.rpy"), "rb") as source:
@@ -133,6 +160,7 @@ class WorldDirectorTests(unittest.TestCase):
         self.assertIn('background Solid("#071b25")', code)
         self.assertNotIn('renpy.input(u"Возраст', code)
         self.assertIn("screen dg_rpg_world_event:", code)
+        self.assertIn("screen dg_rpg_finale:", code)
         self.assertIn("screen dg_rpg_world_result(result):", code)
         self.assertIn('SetScreenVariable("view", "world")', code)
         self.assertIn('dg_rpg_apply("world", dg_rpg_world_stance)', code)
