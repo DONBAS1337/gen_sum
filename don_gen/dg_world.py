@@ -198,6 +198,7 @@ def ensure(state):
     world.setdefault("closed_days", [])
     world.setdefault("decisions", [])
     world.setdefault("event", None)
+    world.setdefault("preparations", {})
     for plot in PLOT_ORDER:
         track = world["tracks"].setdefault(plot, {})
         track.setdefault("stage", 0)
@@ -231,6 +232,19 @@ def _branch_context(state, plot):
         connections.append(u"В лагере растёт раздражение: люди помнят недавние неудачи.")
     if world["knowledge"] > 70:
         connections.append(u"Накопленные знания позволяют заметить детали, которые раньше ускользали.")
+    prep = world["preparations"].get(plot, 0)
+    if prep >= 12:
+        connections.append(u"Ты заранее подготовился к этой истории: практические действия и долгие задания дают больше вариантов.")
+    social = state.get("social", {})
+    bonds = social.get("bonds", {})
+    if plot == "festival" and bonds.get("dv:mi", 0) < 0:
+        connections.append(u"Мику и Алиса пока не договорились между собой; их конфликт осложняет концерт.")
+    if plot == "radio" and bonds.get("el:sh", 0) < 12:
+        connections.append(u"Шурик и Электроник стали хуже понимать друг друга, что затрудняет исследования.")
+    if plot == "lake" and social.get("personal", {}).get("un", 0) >= 2:
+        connections.append(u"Доверительный разговор с Леной подсказал путь к старой тропе.")
+    if plot == "council" and social.get("personal", {}).get("sl", 0) >= 2:
+        connections.append(u"Славя уже умеет делегировать часть обязанностей — решения совета стали свободнее.")
     return lead + u" " + u" ".join(connections)
 
 
@@ -297,6 +311,14 @@ def make_event(state):
     if state.get("source", "vanilla").startswith("7dl:"):
         hero_intro += u" В этой смене отношения с Мику развиваются в варианте 7ДЛ."
     event["story"] = hero_intro + u"\n\nПогода: " + weather(state)[1] + u". " + weather(state)[2] + u"\n\n" + event["story"]
+    # Preparation earned by FREE actions, missions, and personal stories can
+    # unlock a distinct outcome that scripted dialogue choices alone cannot.
+    prepared = world["preparations"].get(arc, 0) if arc != "daily" else 0
+    if prepared >= 12:
+        event["story"] += u"\n\nТы заранее подготовил почву для этой встречи. Теперь можно использовать выполненную работу."
+        event["choices"].append({"key":"prepared",
+            "text":u"Использовать результаты собственных дел и долгосрочных поручений",
+            "metric":"resources","delta":8,"stat":"skill","stat_gain":1,"affinity":6})
     # Player skills unlock a fourth way to resolve world events.
     if state["stats"]["skill"] >= 12 or state["stats"]["curiosity"] >= 12:
         event["choices"].append({"key": "specialist", "text": u"Использовать свои навыки и найти компромисс",
@@ -343,6 +365,10 @@ def choose(state, choice_key):
     world[selected["metric"]] = clamp(world[selected["metric"]] + selected["delta"])
     if choice_key == "independent":
         world["morale"] = clamp(world["morale"] - 3)
+    if choice_key == "prepared":
+        # Prepared story resolution is a consumed investment, not a free farm.
+        world["preparations"][event["arc"]] = clamp(world["preparations"].get(event["arc"], 0) - 12)
+        world["morale"] = clamp(world["morale"] + 4)
     if choice_key == "support":
         world["resources"] = clamp(world["resources"] - 2)
     if choice_key == "investigate":
@@ -383,7 +409,8 @@ def _conclusion(state, event, choice, option):
         "support": u"Ты не оставляешь никого наедине с проблемой. Вместо спора вы вместе находите первый практический шаг. Не всё решается сразу, зато люди уже готовы продолжать. ",
         "investigate": u"Ты не спешишь соглашаться с самым очевидным объяснением. Находится новая деталь, которая меняет отношение ребят к происходящему. Теперь дальнейшие решения придётся принимать с её учётом. ",
         "independent": u"Ты берёшь ответственность на себя. Не всем нравится твой рискованный метод, но событие сдвигается с места, и об этом ещё будут спорить. ",
-        "specialist": u"Ты используешь опыт и находишь неожиданное техническое решение. Оно спасает часть ресурсов и оставляет ребятам возможность договориться. "
+        "specialist": u"Ты используешь опыт и находишь неожиданное техническое решение. Оно спасает часть ресурсов и оставляет ребятам возможность договориться. ",
+        "prepared": u"Ранее выполненные поручения и подготовка дают тебе реальное преимущество. Вместо импровизации ты приносишь готовый результат, и собеседник видит, что предыдущие дни прошли не зря. "
     }
     if event["arc"] != "daily" and ensure(state)["tracks"][event["arc"]]["stage"] >= 5:
         ending = story_status(state, event["arc"])
@@ -395,7 +422,8 @@ def _conclusion(state, event, choice, option):
             u"Твой выбор: «" + option["text"] + u"». " +
             u"Отношения с " + person + u": +" + unicode_value(option["affinity"]) +
             u", " + {"support": u"сплочённость лагеря", "investigate": u"знания",
-                     "independent": u"свобода инициативы", "specialist": u"ресурсы"}[choice] +
+                     "independent": u"свобода инициативы", "specialist": u"ресурсы",
+                     "prepared": u"ресурсы"}[choice] +
             u": +" + unicode_value(option["delta"]) + u"." + epilogue)
 
 
@@ -454,6 +482,7 @@ def world_report(state):
     world = ensure(state)
     return {
         "weather": weather(state)[1],
+        "preparations": world["preparations"],
         "morale": world["morale"], "knowledge": world["knowledge"],
         "freedom": world["freedom"], "resources": world["resources"],
         "tracks": [(PLOTS[key]["name"], story_status(state, key)) for key in PLOT_ORDER],
