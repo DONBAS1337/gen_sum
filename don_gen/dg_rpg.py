@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import uuid
+import dg_dialogue
 
 try:
     text_type = unicode
@@ -89,7 +90,8 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "affinity": dict((npc[0], 0) for npc in NPCS),
         "met": [], "milestones": [], "journal": [], "event": u"Вы приехали в Совёнок. Впереди целая смена.",
         "visits": {}, "finished": False, "ai_scenes": [],
-        "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": []
+        "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": [],
+        "dialogue_history": [], "dialogue_counts": {}
     }
     return state
 
@@ -110,7 +112,9 @@ def validate(state):
     state.setdefault("activity_counts", {"help": 0, "explore": 0})
     state.setdefault("quests_done", [])
     state.setdefault("route_events_done", [])
-    if len(state.get("journal", [])) > 500 or len(state.get("ai_scenes", [])) > 80:
+    state.setdefault("dialogue_history", [])
+    state.setdefault("dialogue_counts", {})
+    if len(state.get("journal", [])) > 500 or len(state.get("ai_scenes", [])) > 80 or len(state["dialogue_history"]) > 100:
         raise ValueError("Oversized save")
     return state
 
@@ -278,6 +282,56 @@ def activity(state, action, who=None):
     return state
 
 
+
+def conversation(state, who, topic_index, stance):
+    """One full two-choice, no-network dialogue with a meaningful outcome."""
+    validate(state)
+    if state["finished"] or who not in NPC_NAMES or where_is(state, who) != state["place"]:
+        raise ValueError("Character is not here")
+    if state["energy"] < 8:
+        _journal(state, u"Вы устали. Сначала отдохните, а потом продолжите беседу.")
+        return None
+    outcome = dg_dialogue.outcome(state, who, topic_index, stance)
+    day_key = "%d:%s" % (state["day"], who)
+    repeated = state["dialogue_counts"].get(day_key, 0)
+    first_meeting = who not in state["met"]
+    if first_meeting:
+        state["met"].append(who)
+    # Prevent farming unlimited reputation without stopping roleplay.
+    gain = outcome["affinity"] if repeated == 0 else 1
+    if first_meeting:
+        gain += 2
+    stat_gain = 2 if repeated == 0 else 0
+    state["affinity"][who] = min(100, state["affinity"][who] + gain)
+    state["stats"][outcome["stat"]] += stat_gain
+    state["energy"] -= 8
+    state["dialogue_counts"][day_key] = repeated + 1
+    scene = {
+        "day": state["day"], "slot": state["slot"], "who": who,
+        "topic": outcome["topic"], "stance": stance,
+        "text": outcome["text"], "affinity_gain": gain
+    }
+    state["dialogue_history"].append(scene)
+    state["dialogue_history"] = state["dialogue_history"][-80:]
+    score = state["affinity"][who]
+    new_milestones = []
+    for threshold in MILESTONES:
+        key = who + ":" + str(threshold)
+        if score >= threshold and key not in state["milestones"]:
+            state["milestones"].append(key)
+            new_milestones.append(threshold)
+    event = u"%s · %s. Отношения: +%d (всего %d/100). %s: +%d." % (
+        NPC_NAMES[who], outcome["topic"], gain, score,
+        {"kindness": u"Доброта", "curiosity": u"Любознательность", "skill": u"Навык"}[outcome["stat"]], stat_gain
+    )
+    if new_milestones:
+        event += u" Открыта веха рута (%s)." % u", ".join(str(x) for x in new_milestones)
+    _journal(state, event)
+    _check_quests(state)
+    _tick(state)
+    return scene
+
+
 def append_ai_scene(state, who, text):
     if who not in NPC_NAMES:
         raise ValueError("Unknown character")
@@ -302,6 +356,7 @@ def summary_for_ai(state, who, intent):
         "relation": route_label(state["affinity"][who]), "player_action": intent,
         "recent_journal": state["journal"][-10:],
         "recent_scenes": state["ai_scenes"][-3:],
+        "recent_dialogue": state["dialogue_history"][-6:],
         "route_milestones": available_route_events(state, who),
         "completed_route_events": [v for v in state["route_events_done"] if v.startswith(who + ":")]
     }
