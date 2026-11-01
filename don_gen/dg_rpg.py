@@ -626,8 +626,12 @@ def asset_path(root, game_id, kind, key):
         if key not in PLACE_NAMES:
             raise ValueError("Unknown location")
     elif kind == "sprite":
+        # Legacy read-only sprite cache compatibility. New generation disabled.
         if key not in NPC_NAMES:
             raise ValueError("Unknown character")
+    elif kind in ("cg", "cg18"):
+        if not isinstance(key, text_type) or not re.match(r"^[a-f0-9]{40}$",key):
+            raise ValueError("Invalid cinematic scene key")
     else:
         raise ValueError("Unknown asset type")
     return "_rpg/assets/%s/%s_%s.png" % (game_id, kind, key)
