@@ -751,6 +751,7 @@ screen dg_rpg_journal:
         textbutton u"Разговоры" style "dg_navlink" selected view == "talks" action SetScreenVariable("view", "talks")
         textbutton u"AI-сцены" style "dg_navlink" selected view == "ai" action SetScreenVariable("view", "ai")
         textbutton u"Хроника мира" style "dg_navlink" selected view == "world" action SetScreenVariable("view", "world")
+        textbutton u"Люди и слухи" style "dg_navlink" selected view == "social" action SetScreenVariable("view", "social")
     hbox:
         xpos 95 ypos 295 spacing 45
         frame:
@@ -783,6 +784,16 @@ screen dg_rpg_journal:
                                   u"Пропущено" if item["status"] == "missed" else u"Событие сыграно")) style "dg_meta" size 23
                             text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
                             null height 12
+                    elif view == "social":
+                        text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_meta" size 25 color "#ffe5a0"
+                        if not dg_rpg_state["social"]["rumours"]:
+                            text u"Пока ничего необычного. Новые слухи появляются со временем." style "dg_text" size 25
+                        for item in dg_rpg_state["social"]["rumours"][::-1]:
+                            text (u"День %d" % item["day"]) style "dg_meta" size 22
+                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 850
+                        text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_meta" size 25 color "#ffe5a0"
+                        for who, name in dg_social.NAMES.items():
+                            text (name + u": " + str(dg_rpg_state["social"]["personal"].get(who, 0)) + u"/3 этапов") style "dg_text" size 24
                     else:
                         if not dg_rpg_state["ai_scenes"]:
                             text u"Пока нет AI-сцен. Они создаются вручную через кнопку персонажа." style "dg_text" size 28
@@ -798,6 +809,18 @@ screen dg_rpg_journal:
                 mousewheel True scrollbars "vertical" ysize 610
                 vbox:
                     spacing 13
+                    if view == "social":
+                        text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_meta" size 25 color "#ffdf98"
+                        for a, b, initial, caption, description in dg_social.PAIR_DEFS:
+                            text (caption + u": " + str(dg_social.bond(dg_rpg_state, a, b))) style "dg_text" size 25
+                        null height 14
+                        text u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ" style "dg_meta" size 25
+                        for item in dg_social.quest_list(dg_rpg_state):
+                            text (item["title"] + u": " +
+                                  (u"Не принято" if item["status"] == "available"
+                                   else u"В процессе" if item["status"] == "active"
+                                   else u"Готово" if item["status"] == "completed" else u"Просрочено")) style "dg_text" size 23
+                        null height 15
                     text u"ХАРАКТЕРИСТИКИ" style "dg_meta" size 25
                     text (u"Энергия: %d/100" % dg_rpg_state["energy"]) style "dg_text" size 26
                     text (u"Любознательность: %d · Доброта: %d · Навык: %d" %
@@ -983,6 +1006,33 @@ label dg_rpg_loop:
         jump dg_rpg_world_label
     if dg_rpg_cmd == "activity":
         $ dg_rpg_apply(dg_rpg_value)
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "free":
+        call screen dg_rpg_free_input
+        if _return:
+            $ dg_rpg_apply("free", _return)
+            call screen dg_rpg_action_result(dg_rpg_last_action)
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "contracts":
+        call screen dg_rpg_contracts
+        if _return:
+            $ dg_contract_cmd, dg_contract_id = _return
+            if dg_contract_cmd == "accept":
+                $ dg_rpg_apply("contract", dg_contract_id)
+                $ dg_rpg_contract_result = {"title": u"ПОРУЧЕНИЕ ПРИНЯТО", "text": dg_rpg_last_contract}
+                call screen dg_rpg_action_result(dg_rpg_contract_result)
+            elif dg_contract_cmd == "travel":
+                $ dg_rpg_apply("move", dg_contract_id)
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "personal":
+        $ dg_rpg_focus = dg_rpg_value
+        if dg_social.personal_scene(dg_rpg_state, dg_rpg_focus):
+            call screen dg_rpg_personal(dg_rpg_focus)
+            if _return:
+                $ dg_rpg_personal_stance = _return
+                $ dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))
+                $ dg_rpg_personal_result = {"title": dg_rpg_last_personal["title"], "text": dg_rpg_last_personal["text"]}
+                call screen dg_rpg_action_result(dg_rpg_personal_result)
         jump dg_rpg_loop
     if dg_rpg_cmd == "talk":
         $ dg_rpg_focus = dg_rpg_value
