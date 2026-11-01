@@ -413,6 +413,8 @@ def choose(state, choice_key):
     world["resolved"] = world["resolved"][-130:]
     world["event"] = None
     conclusion = _conclusion(state, event, choice_key, selected)
+    import dg_narrative
+    conclusion = dg_narrative.decorate_outcome(state,event,choice_key,conclusion)
     world["chronicle"].append({"day": state["day"], "title": event["title"],
                                 "text": conclusion, "arc": arc, "status": "resolved"})
     world["chronicle"] = world["chronicle"][-150:]
