@@ -281,7 +281,7 @@ def npc_daily(state):
         return None
     # A deterministic pair interacts without waiting for the player.
     index = (day + int(state["id"][:4], 16)) % len(PAIR_DEFS)
-    if not state.get("mystery", {}).get("yulia_discovered") and "uv" in PAIR_DEFS[index][:2]:
+    if "uv" in PAIR_DEFS[index][:2]:
         index = (index + 1) % len(PAIR_DEFS)
     a,b,baseline,title,story = PAIR_DEFS[index]
     key = _pair(a,b)
