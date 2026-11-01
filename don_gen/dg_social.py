@@ -103,6 +103,15 @@ QUESTS = {
 }
 
 
+# Steps require place + action TYPE + contextual words; generic "Помочь" is not enough.
+QUEST_HINTS = {
+    "rehearsal": ((u"репет",u"музык",u"мику"),(u"оборуд",u"сцен",u"свет",u"аппарат"),(u"концерт",u"сцен",u"площад")),
+    "archive": ((u"запис",u"архив",u"книг"),(u"устрой",u"прибор",u"запис"),(u"подсказ",u"озер",u"след")),
+    "shore": ((u"берег",u"озер",u"троп"),(u"путь",u"расчист",u"троп"),(u"прогул",u"правил",u"троп")),
+    "team": ((u"задач",u"отряд",u"дежур"),(u"дежур",u"обед",u"столов"),(u"игр",u"соревн",u"спорт"))
+}
+
+
 def _pair(a, b):
     return ":".join(sorted((a, b)))
 
@@ -215,7 +224,7 @@ def accept(state, ident):
     return u"Задание принято: %s. Первый шаг: %s." % (title, steps[0][2])
 
 
-def quest_steps(state, place, action):
+def quest_steps(state, place, action, description):
     social = ensure(state)
     feedback = []
     for ident, record in social["quests"].items():
@@ -227,6 +236,8 @@ def quest_steps(state, place, action):
             continue
         needed_place, needed_action, objective = steps[index]
         if place != needed_place or action != needed_action:
+            continue
+        if not any(keyword in description.lower() for keyword in QUEST_HINTS[ident][index]):
             continue
         record["step"] += 1
         if record["step"] == len(steps):
@@ -384,7 +395,7 @@ def action(state, text, nearby):
                    u"Поступок меняет подготовку к следующему лагерному событию%s.") % (
                    location,person,parsed["original"],
                    u" (+%d)" % impact if impact else u", но повторение уже не даёт награды")
-    notes=quest_steps(state,place,intent)
+    notes=quest_steps(state,place,intent,parsed["original"])
     if notes:
         narration+=u"\n\n"+u"\n".join(notes)
     dg_world.refresh_open_event(state)
