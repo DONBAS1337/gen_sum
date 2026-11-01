@@ -78,15 +78,33 @@ init 1001 python:
             raise ValueError("AI returned invalid scene length")
         return story.strip()
 
-    DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"
-    # Coordinates grounded in the supplied 1920 x 1080 Sovyonok top-down map.
+    DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"  # legacy optional image
+    DG_MAP_ATLAS = "mods/don_gen/images/don_gen_atlas.png"
+    DG_MAP_PIN_IDLE = im.Scale("mods/don_gen/images/map_idle.png", 42, 42)
+    DG_MAP_PIN_HOVER = im.Scale("mods/don_gen/images/map_hover.png", 53, 53)
+    DG_MAP_PIN_SELECTED = im.Scale("mods/don_gen/images/map_selected.png", 47, 47)
+    DG_MAP_BADGE_STORY = im.Scale("mods/don_gen/images/map_story.png", 29, 29)
+    DG_MAP_BADGE_QUEST = im.Scale("mods/don_gen/images/map_quest.png", 27, 27)
+    DG_MAP_BADGE_MEET = im.Scale("mods/don_gen/images/map_encounter.png", 29, 29)
+    DG_MAP_BADGE_NPC = im.Scale("mods/don_gen/images/map_character.png", 32, 32)
+    # 1920x1080 hot zones matching the new illustrated 16:9 art (not text labels).
     DG_RPG_MAP_PINS = (
-        ("gate", 382, 392), ("square", 855, 395),
-        ("cabins", 733, 190), ("canteen", 885, 496),
-        ("library", 1080, 270), ("clubs", 454, 485),
-        ("stage", 905, 110), ("beach", 1170, 720),
-        ("lake", 1010, 897), ("forest", 506, 135),
-        ("infirmary", 880, 337), ("sports", 1310, 515)
+        ("gate",175,640), ("parking",85,595), ("square",944,558),
+        ("cabins",735,278), ("cabins_south",615,733),
+        ("canteen",1302,530), ("canteen_veranda",1283,625),
+        ("library",1339,310), ("clubs",472,400), ("clubhouse",388,520),
+        ("stage",1048,170), ("outdoor_stage",1108,250),
+        ("beach",1425,802), ("lake",1010,928), ("forest",240,190),
+        ("forest_path",380,338), ("infirmary",1122,480), ("sports",1570,450),
+        ("music",450,225), ("administration",812,488), ("showers",640,572),
+        ("washrooms",574,486), ("kitchen",1360,620), ("storage",1490,548),
+        ("gym",1528,389), ("volleyball",1685,552), ("football",1812,604),
+        ("badminton",1671,305), ("boathouse",1105,815), ("pier",1208,854),
+        ("beachhouse",1590,726), ("island",697,949),
+        ("island_far",1462,952), ("old_camp",387,853),
+        ("campfire",518,790), ("radio",1115,363),
+        ("headquarters",943,459), ("laundry",603,639),
+        ("warehouse",1524,655)
     )
 
     DG_RPG_SPRITE_HINTS = {
@@ -115,7 +133,34 @@ init 1001 python:
         "lake": "bg ext_boathouse_day",
         "forest": "bg ext_path_day",
         "infirmary": "bg int_aidpost_day",
-        "sports": "bg ext_playground_day"
+        "sports": "bg ext_playground_day",
+        "parking": "bg ext_camp_entrance_day",
+        "music": "bg ext_clubs_day",
+        "clubhouse": "bg ext_clubs_day",
+        "administration": "bg ext_houses_day",
+        "showers": "bg ext_houses_day",
+        "washrooms": "bg ext_houses_day",
+        "kitchen": "bg int_dining_hall_people_day",
+        "storage": "bg ext_dining_hall_away_day",
+        "gym": "bg ext_playground_day",
+        "volleyball": "bg ext_playground_day",
+        "football": "bg ext_playground_day",
+        "badminton": "bg ext_playground_day",
+        "canteen_veranda": "bg ext_dining_hall_away_day",
+        "cabins_south": "bg ext_houses_day",
+        "boathouse": "bg ext_boathouse_day",
+        "pier": "bg ext_boathouse_day",
+        "beachhouse": "bg ext_beach_day",
+        "island": "bg ext_boathouse_day",
+        "island_far": "bg ext_boathouse_day",
+        "old_camp": "bg ext_houses_day",
+        "campfire": "bg ext_polyana_day",
+        "forest_path": "bg ext_path_day",
+        "radio": "bg ext_clubs_day",
+        "headquarters": "bg ext_square_day",
+        "laundry": "bg ext_houses_day",
+        "outdoor_stage": "bg ext_stage_normal_day",
+        "warehouse": "bg ext_clubs_day"
     }
 
     def dg_rpg_bg():
@@ -124,6 +169,8 @@ init 1001 python:
         if custom and renpy.loadable(custom):
             return Image(custom)
         name = DG_RPG_BG.get(place)
+        if not name and (place.startswith("cabin_") or place == "cabins_south"):
+            name = DG_RPG_BG.get("cabins")
         if name in dg_runtime.original_images:
             return dg_runtime.original_images[name]
         return Solid("#173039")
@@ -378,52 +425,104 @@ style dg_map_pin_text is dg_text:
 
 screen dg_rpg_map:
     modal True
-    if renpy.loadable(DG_RPG_MAP_IMAGE):
+    default dg_map_hover = None
+    # Custom generated DON-GEN map is preferred, legacy supplied map is fallback.
+    if renpy.loadable(DG_MAP_ATLAS):
+        add im.Scale(DG_MAP_ATLAS, 1920, 1080)
+    elif renpy.loadable(DG_RPG_MAP_IMAGE):
         add DG_RPG_MAP_IMAGE
     else:
-        add Solid("#94a65d")
-        text u"Для красивой карты добавьте файл: game/mods/don_gen/images/camp_map.png" style "dg_text" xpos 350 ypos 800 size 25
-    # Translucent header keeps the original map clearly visible.
-    frame:
-        background Solid("#10252de9")
-        xpos 0 ypos 0 xsize 1920 ysize 108
-        hbox:
-            xpos 95 ypos 22 spacing 36
-            text u"DON-GEN · СОВЁНОК" style "dg_meta" size 26
-            text (u"День %d/%d · %s · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"], dg_rpg.SLOTS[dg_rpg_state["slot"]], dg_world.weather(dg_rpg_state)[1])) style "dg_text" size 27
-            text (u"Вы сейчас: " + dg_rpg.PLACE_NAMES[dg_rpg_state["place"]]) style "dg_text" size 27 color "#ffe8a1"
-    textbutton u"ЗАКРЫТЬ КАРТУ" style "dg_map_pin" xpos 1620 ypos 25 action Return(None)
-    # Geographic points match the supplied map. Click any point for free travel.
+        add Solid("#78976b")
+    add Solid("#10202919")
+    # Small graphics are clickable; labels appear ONLY in the hover information card.
     for slug, px, py in DG_RPG_MAP_PINS:
-        $ loc_name = dg_rpg.PLACE_NAMES[slug]
         $ story_here = dg_world.event_at(dg_rpg_state, slug)
         $ quest_here = dg_social.quest_at(dg_rpg_state, slug)
         $ incident_here = dg_social.incident_at(dg_rpg_state, slug)
-        $ others = dg_rpg.at_place(dg_rpg_state, slug)
-        vbox:
-            xpos px
-            ypos py
-            spacing 3
-            textbutton (u"◆ " + loc_name if dg_rpg_state["place"] == slug else u"● " + loc_name) style "dg_map_pin" action Return(slug)
-            if story_here:
-                textbutton u"★ СЮЖЕТ" style "dg_map_pin" text_color "#ffdd88" action Return(slug)
-            if quest_here:
-                text u"▣ ПОРУЧЕНИЕ" style "dg_text" size 18 color "#aaffc2"
-            if incident_here:
-                text u"⚑ ВСТРЕЧА NPC" style "dg_text" size 18 color "#fbe6ad"
-            if others:
-                frame:
-                    background Solid("#10252dc9")
-                    padding (8, 3)
-                    text (u", ".join(person for who, person in others)) style "dg_text" size 18 color "#ffe8a1" xmaximum 240
+        $ locals_here = dg_rpg.at_place(dg_rpg_state, slug)
+        imagebutton:
+            idle (DG_MAP_PIN_SELECTED if dg_rpg_state["place"] == slug else DG_MAP_PIN_IDLE)
+            hover DG_MAP_PIN_HOVER
+            xpos px ypos py
+            focus_mask True
+            hovered SetScreenVariable("dg_map_hover", slug)
+            unhovered SetScreenVariable("dg_map_hover", None)
+            action Return(("cabins", slug) if slug in ("cabins", "cabins_south") else ("go", slug))
+        if story_here:
+            add DG_MAP_BADGE_STORY xpos (px + 30) ypos (py - 12)
+        if quest_here:
+            add DG_MAP_BADGE_QUEST xpos (px - 13) ypos (py - 18)
+        if incident_here:
+            add DG_MAP_BADGE_MEET xpos (px + 26) ypos (py + 28)
+        if locals_here:
+            # Character illustrations on the atlas, not a string of names.
+            for index, pair in enumerate(locals_here[:3]):
+                $ who = pair[0]
+                $ mini = dg_rpg_sprite(who)
+                if mini is not None:
+                    add Transform(mini, zoom=0.068) xpos (px - 5 + index * 31) ypos (py + 33)
+                else:
+                    add DG_MAP_BADGE_NPC xpos (px + index * 24) ypos (py + 33)
     frame:
-        background Solid("#10252de0")
-        xpos 30 ypos 1010 xsize 1860 ysize 64
+        background Solid("#102632ec")
+        xpos 0 ypos 0 xsize 1920 ysize 94
+        padding (68, 21)
         hbox:
-            xpos 30 ypos 14 spacing 30
-            text u"● Выберите место: переход не расходует время" style "dg_text" size 22
-            text u"◆ — ваше местоположение" style "dg_text" size 22 color "#ffe8a1"
-            text u"★ Сюжет · ▣ Поручение · ⚑ NPC-встреча" style "dg_text" size 21 color "#ffe19b"
+            spacing 38
+            text u"DON-GEN  /  КАРТА ЛАГЕРЯ" style "dg_meta" size 26 color "#f5edda"
+            text (u"День %d/%d · %s · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"],
+                   dg_rpg.SLOTS[dg_rpg_state["slot"]], dg_world.weather(dg_rpg_state)[1])) style "dg_text" size 24
+    textbutton u"ЗАКРЫТЬ" style "dg_map_pin" xpos 1690 ypos 19 action Return(("close", None))
+    frame:
+        background Solid("#102632ed")
+        xpos 32 ypos 940 xsize 890 ysize 117
+        padding (25, 12)
+        vbox:
+            spacing 8
+            if dg_map_hover in dg_rpg.PLACE_NAMES:
+                text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_text" size 32 color "#ffe2aa"
+                $ hover_people = dg_rpg.at_place(dg_rpg_state, dg_map_hover)
+                text (u"Здесь: " + u", ".join(name for code, name in hover_people) if hover_people else u"Никого из знакомых поблизости") style "dg_text" size 23
+            else:
+                text u"НАВЕДИ НА МАРКЕР · нажми для перехода" style "dg_meta" size 26 color "#ffe2aa"
+                text u"Карта доступна свободно: путешествие не тратит время." style "dg_text" size 23
+    frame:
+        background Solid("#102632ed")
+        xpos 1020 ypos 950 xsize 850 ysize 102
+        padding (24, 10)
+        hbox:
+            spacing 14
+            add DG_MAP_BADGE_STORY
+            text u"История" style "dg_text" size 20
+            add DG_MAP_BADGE_QUEST
+            text u"Поручение" style "dg_text" size 20
+            add DG_MAP_BADGE_MEET
+            text u"Встреча" style "dg_text" size 20
+
+screen dg_rpg_cabins(region):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#0b1b24ed")
+    frame:
+        background Solid("#14313df4")
+        align (0.5, 0.5) xsize 1670 ysize 860 padding (38, 33)
+        vbox:
+            spacing 18
+            text u"ЖИЛАЯ ЗОНА · ДОМИКИ" style "dg_title" size 53 color "#ffdcab"
+            text u"Здесь можно посетить общий двор или любой из 31 домика. Все точки доступны независимо от сюжетного расписания." style "dg_text" size 26 xmaximum 1510
+            hbox:
+                spacing 35
+                textbutton u"ОБЩИЙ ДВОР" style "dg_primary" action Return(("go", region))
+                textbutton u"НАЗАД НА КАРТУ" style "dg_act" action Return(("close", None))
+            viewport:
+                mousewheel True
+                scrollbars "vertical"
+                ysize 615
+                grid 8 4:
+                    spacing 9
+                    for cabin_number in range(1, 32):
+                        textbutton (u"Домик %02d" % cabin_number) style "dg_map_pin" text_size 23 action Return(("go", "cabin_%02d" % cabin_number))
+                    null
 
 screen dg_rpg_hub:
     modal True
@@ -1173,10 +1272,13 @@ label dg_rpg_loop:
         jump dg_rpg_loop
     if dg_rpg_cmd == "map":
         call screen dg_rpg_map
+        $ dg_map_result = _return
+        if isinstance(dg_map_result, tuple) and len(dg_map_result) == 2 and dg_map_result[0] == "cabins":
+            call screen dg_rpg_cabins(dg_map_result[1])
+            $ dg_map_result = _return
         # A Ren'Py context/splashscreen sentinel is NOT a valid location ID.
-        # Only an explicit ("go", known_place) result authorizes movement.
-        if isinstance(_return, tuple) and len(_return) == 2 and _return[0] == "go" and _return[1] in dg_rpg.PLACE_NAMES:
-            $ dg_rpg_apply("move", _return[1])
+        if isinstance(dg_map_result, tuple) and len(dg_map_result) == 2 and dg_map_result[0] == "go" and dg_map_result[1] in dg_rpg.PLACE_NAMES:
+            $ dg_rpg_apply("move", dg_map_result[1])
             if dg_world.event_at(dg_rpg_state, dg_rpg_state["place"]):
                 jump dg_rpg_world_label
         jump dg_rpg_loop
