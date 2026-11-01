@@ -5,6 +5,7 @@ init 1001 python:
     import os
     import logging
     import dg_rpg
+    import dg_dialogue
     import dg_backend
 
     def dg_rpg_root():
@@ -30,12 +31,25 @@ init 1001 python:
             dg_rpg.activity(state, "talk", arg)
         elif action == "route":
             dg_rpg.route_event(state, arg[0], arg[1])
+        elif action == "conversation":
+            store.dg_rpg_last_scene = dg_rpg.conversation(state, arg[0], arg[1], arg[2])
         else:
             dg_rpg.activity(state, action)
         dg_rpg.save(dg_rpg_root(), state)
         store.dg_rpg_state = state
         logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
+
+    DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"
+    # Coordinates grounded in the supplied 1920 x 1080 Sovyonok top-down map.
+    DG_RPG_MAP_PINS = (
+        ("gate", 382, 392), ("square", 855, 395),
+        ("cabins", 733, 190), ("canteen", 885, 496),
+        ("library", 1080, 270), ("clubs", 454, 485),
+        ("stage", 905, 110), ("beach", 1170, 720),
+        ("lake", 1010, 897), ("forest", 506, 135),
+        ("infirmary", 880, 337), ("sports", 1310, 515)
+    )
 
     DG_RPG_SPRITE_HINTS = {
         "sl": u"blonde girl, long braids, blue eyes, red pioneer neckerchief",
@@ -81,10 +95,11 @@ init 1001 python:
         if custom and renpy.loadable(custom):
             return Image(custom)
         # Native Ren'Py displayables are already resolved in the private vanilla archive.
-        candidates = sorted(name for name in dg_runtime.original_images
-                            if name.startswith(who + " ") and " pioneer " in (" " + name + " "))
+        candidates = [name for name in dg_runtime.original_images
+                      if name.startswith(who + " ") and " pioneer " in (" " + name + " ")]
         if not candidates:
-            candidates = sorted(name for name in dg_runtime.original_images if name.startswith(who + " "))
+            candidates = [name for name in dg_runtime.original_images if name.startswith(who + " ")]
+        candidates.sort()
         return dg_runtime.original_images[candidates[0]] if candidates else None
 
     def dg_rpg_scene_generate(who, intent):
@@ -101,7 +116,7 @@ init 1001 python:
                         root, os.path.join(dg_rpg_root(), "_source_cache"),
                         state["source"].split(":", 1)[1],
                         dg_rpg.NPC_NAMES[who] + u" " + intent,
-                        mode="divergent", day=min(state["day"], 7),
+                        mode="divergent", day=(state["day"] if state["day"] <= 7 else 7),
                         limit=3, max_chars=7000)
                 except (IOError, OSError, ValueError, TypeError):
                     pass
@@ -246,26 +261,58 @@ screen dg_rpg_setup:
             if not dg_valid:
                 text u"Заполните имя/предысторию, возраст 14–80, смена 1–120 дней." style "dg_ink_small" size 20 color "#b22e1f"
 
+# Map pins are drawn over the actual user-provided camp plan when installed.
+# This layout also works without the PNG: the legend remains navigable.
+style dg_map_pin is dg_act:
+    background Solid("#102932ee")
+    hover_background Solid("#466755f5")
+    selected_background Solid("#ad8034e8")
+    padding (10, 6)
+style dg_map_pin_text is dg_text:
+    size 23
+    color "#f8eed1"
+    hover_color "#ffe899"
+    outlines [(1, "#051119", 0, 1)]
+
 screen dg_rpg_map:
     modal True
-    add Solid("#122c31")
-    use dg_chrome(u"КАРТА СОВЁНКА", Return(None))
-    text u"Карта лагеря" style "dg_title" xpos 120 ypos 120 size 70
-    text (u"Вы находитесь: " + dg_rpg.PLACE_NAMES[dg_rpg_state["place"]]) style "dg_sub" xpos 120 ypos 205
-    # Schematic clickable map, not an assertion about canonical geography.
+    if renpy.loadable(DG_RPG_MAP_IMAGE):
+        add DG_RPG_MAP_IMAGE
+    else:
+        add Solid("#94a65d")
+        text u"Для красивой карты добавьте файл: game/mods/don_gen/images/camp_map.png" style "dg_text" xpos 350 ypos 800 size 25
+    # Translucent header keeps the original map clearly visible.
     frame:
-        background Solid("#24473c")
-        xpos 90 ypos 280 xsize 1740 ysize 645
-    for slug, place_name, x, y in dg_rpg.PLACES:
-        $ inhabitants = dg_rpg.at_place(dg_rpg_state, slug)
+        background Solid("#10252de9")
+        xpos 0 ypos 0 xsize 1920 ysize 108
+        hbox:
+            xpos 95 ypos 22 spacing 36
+            text u"DON-GEN · СОВЁНОК" style "dg_meta" size 26
+            text (u"День %d/%d · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"], dg_rpg.SLOTS[dg_rpg_state["slot"]])) style "dg_text" size 27
+            text (u"Вы сейчас: " + dg_rpg.PLACE_NAMES[dg_rpg_state["place"]]) style "dg_text" size 27 color "#ffe8a1"
+    textbutton u"ЗАКРЫТЬ КАРТУ" style "dg_map_pin" xpos 1620 ypos 25 action Return(None)
+    # Geographic points match the supplied map. Click any point for free travel.
+    for slug, px, py in DG_RPG_MAP_PINS:
+        $ loc_name = dg_rpg.PLACE_NAMES[slug]
+        $ others = dg_rpg.at_place(dg_rpg_state, slug)
         vbox:
-            xpos 100 + int(x * 16.5)
-            ypos 250 + int(y * 6.0)
-            spacing 2
-            textbutton (u"● " + place_name if dg_rpg_state["place"] == slug else place_name) style "dg_navlink" action Return(slug)
-            if inhabitants:
-                text (u", ".join(n[1] for n in inhabitants)) style "dg_small" size 20 color "#f8d88f" xmaximum 235
-    text u"Схематичная карта · персонажи перемещаются по распорядку дня." style "dg_small" xpos 150 ypos 970
+            xpos px
+            ypos py
+            spacing 3
+            textbutton (u"◆ " + loc_name if dg_rpg_state["place"] == slug else u"● " + loc_name) style "dg_map_pin" action Return(slug)
+            if others:
+                frame:
+                    background Solid("#10252dc9")
+                    padding (8, 3)
+                    text (u", ".join(person for who, person in others)) style "dg_text" size 18 color "#ffe8a1" xmaximum 240
+    frame:
+        background Solid("#10252de0")
+        xpos 30 ypos 1010 xsize 1860 ysize 64
+        hbox:
+            xpos 30 ypos 14 spacing 30
+            text u"● Выберите место: переход не расходует время" style "dg_text" size 22
+            text u"◆ — ваше местоположение" style "dg_text" size 22 color "#ffe8a1"
+            text u"Под названиями показаны NPC по расписанию" style "dg_text" size 22
 
 screen dg_rpg_hub:
     modal True
@@ -324,12 +371,63 @@ screen dg_rpg_hub:
                             text (person + u" · %d/100 · %s" % (dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 30
                             hbox:
                                 spacing 16
-                                textbutton u"Поговорить" style "dg_navlink" action Return(("talk", who)) sensitive not dg_rpg_state["finished"]
+                                textbutton u"Диалог · выборы" style "dg_navlink" action Return(("talk", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"AI-сцена" style "dg_navlink" action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"Спрайт" style "dg_navlink" action Return(("sprite", who)) sensitive not dg_rpg_state["finished"]
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"Сюжетный этап рута" style "dg_navlink" action Return(("route", who))
             text u"Разговоры и активности меняют время и отношения локально. AI-сцены вызываются только вручную." style "dg_small" size 23
+
+
+screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#07121add")
+    $ speaking = dg_rpg.NPC_NAMES[who]
+    $ portrait = dg_rpg_sprite(who)
+    if portrait is not None:
+        add portrait at dg_rpg_portrait_transform xpos 70 ypos 130
+    if phase == "topics":
+        $ scene = dg_dialogue.opening(dg_rpg_state, who)
+    elif phase == "choice":
+        $ scene = dg_dialogue.topic(dg_rpg_state, who, topic_index)
+    else:
+        $ scene = dg_dialogue.outcome(dg_rpg_state, who, topic_index, stance)
+    frame:
+        background Solid("#102530f4")
+        xpos 530 ypos 115 xsize 1320 ysize 860
+        padding (43, 35)
+        vbox:
+            spacing 17
+            hbox:
+                spacing 32
+                text speaking style "dg_title" size 50 color "#ffe19b"
+                text (u"ДЕНЬ %d · %s" % (dg_rpg_state["day"], dg_rpg.PLACE_NAMES[dg_rpg_state["place"]])) style "dg_meta" size 23
+            text (scene.get("title", u"Разговор с " + speaking)) style "dg_sub" size 32
+            frame:
+                background Solid("#061824b7")
+                padding (24, 18)
+                xsize 1212 ysize 406
+                viewport:
+                    mousewheel True
+                    scrollbars "vertical"
+                    ysize 363
+                    text dg_literal(scene["text"]) style "dg_text" size 30 xmaximum 1145
+            if phase == "topics":
+                text u"О ЧЁМ ПОГОВОРИТЬ?" style "dg_meta" size 23
+            elif phase == "choice":
+                text u"ЧТО ВЫ ОТВЕТИТЕ?" style "dg_meta" size 23
+            else:
+                text (u"Изменение отношений: +%d · %s: +%d" %
+                      (dg_rpg_last_scene["affinity_gain"] if dg_rpg_last_scene else 0,
+                       {"support": u"Доброта", "curious": u"Любознательность", "bold": u"Навык"}[stance],
+                       2 if dg_rpg_last_scene and dg_rpg_last_scene["affinity_gain"] > 1 else 0)) style "dg_text" size 25 color "#ffe2a1"
+            if phase != "result":
+                for choice_id, caption in scene["options"]:
+                    textbutton dg_literal(caption) style "dg_navlink" text_size 27 action Return(choice_id)
+                textbutton u"Завершить разговор без выбора" style "dg_navlink" text_size 24 action Return(None)
+            else:
+                textbutton u"Закончить встречу" style "dg_primary" text_size 33 action Return("done")
 
 screen dg_rpg_journal:
     modal True
@@ -346,7 +444,7 @@ screen dg_rpg_journal:
                 mousewheel True scrollbars "vertical" ysize 620
                 vbox:
                     spacing 16
-                    for row in reversed(dg_rpg_state["journal"]):
+                    for row in dg_rpg_state["journal"][::-1]:
                         text (u"День %d · %s" % (row["day"], dg_rpg.SLOTS[row["slot"]])) style "dg_meta"
                         text dg_literal(row["text"]) style "dg_text" size 26 xmaximum 740
         frame:
@@ -357,12 +455,12 @@ screen dg_rpg_journal:
                 mousewheel True scrollbars "vertical" ysize 620
                 vbox:
                     spacing 13
-                    for who, name in sorted(dg_rpg.NPC_NAMES.items()):
+                    for who, name, morning, daytime, evening, night in dg_rpg.NPCS:
                         text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 26
                     null height 25
                     text u"ЗАДАНИЯ" style "dg_meta"
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):
-                        text (u"%s: %d/%d%s" % (title, min(progress, goal), goal, u" ✓" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 25
+                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" ✓" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 25
 
 screen dg_rpg_route_choice(who):
     modal True
@@ -473,7 +571,20 @@ label dg_rpg_loop:
         $ dg_rpg_apply(dg_rpg_value)
         jump dg_rpg_loop
     if dg_rpg_cmd == "talk":
-        $ dg_rpg_apply("talk", dg_rpg_value)
+        $ dg_rpg_focus = dg_rpg_value
+        if dg_rpg_state["energy"] < 8:
+            $ dg_rpg_apply("rest")
+            jump dg_rpg_loop
+        call screen dg_rpg_dialogue(dg_rpg_focus, "topics")
+        if _return is None:
+            jump dg_rpg_loop
+        $ dg_rpg_talk_topic = int(_return)
+        call screen dg_rpg_dialogue(dg_rpg_focus, "choice", dg_rpg_talk_topic)
+        if _return is None:
+            jump dg_rpg_loop
+        $ dg_rpg_talk_stance = _return
+        $ dg_rpg_apply("conversation", (dg_rpg_focus, dg_rpg_talk_topic, dg_rpg_talk_stance))
+        call screen dg_rpg_dialogue(dg_rpg_focus, "result", dg_rpg_talk_topic, dg_rpg_talk_stance)
         jump dg_rpg_loop
     if dg_rpg_cmd == "route":
         $ dg_rpg_focus = dg_rpg_value
