@@ -149,7 +149,24 @@ def personal_scene(state, who):
     if stage >= 3 or state["affinity"].get(who, 0) < GATES[stage]:
         return None
     chapter = PERSONAL[who][stage]
-    return {"npc":who,"stage":stage,"title":chapter[0],"text":chapter[1],
+    history = social["personal_choices"].get(who, [])
+    memory = u""
+    if history:
+        previous = history[-1]
+        memory = {
+            "support":u"После предыдущей встречи герой помнит, что ты предпочёл поддержать собеседника. Теперь ему легче попросить тебя о помощи.",
+            "question":u"Твои прежние прямые вопросы заставили собеседника переосмыслить свои мотивы. Сегодня прежний разговор получает продолжение.",
+            "initiative":u"О твоём неожиданном предложении ещё вспоминают в лагере. Собеседник хочет понять, готов ли ты снова рискнуть."
+        }[previous]
+    social_bonds = social["bonds"]
+    if who in ("mi","dv") and social_bonds.get(_pair("mi","dv"),0)<-10:
+        memory += u" Отношения Мику и Алисы сейчас напряжённые, и это влияет на их решения."
+    if who in ("sh","el") and social_bonds.get(_pair("sh","el"),0)>=45:
+        memory += u" Шурик и Электроник уже научились лучше понимать друг друга; теперь они обсуждают общие решения."
+    if state["world"]["morale"]<30:
+        memory += u" Неудачи последних дней сделали настроение лагеря тревожнее."
+    return {"npc":who,"stage":stage,"title":chapter[0],
+            "text":chapter[1]+(u"\n\n"+memory if memory else u""),
             "choices":ANSWERS,"affinity":state["affinity"][who]}
 
 
