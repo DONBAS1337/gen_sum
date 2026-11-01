@@ -1772,12 +1772,22 @@ screen dg_rpg_read_scene(scene_text):
 label dg_rpg_vn_text(scene_text, who=None):
     $ renpy.hide_screen("dg_scene")
     scene expression dg_rpg_bg()
-    if who is not None and dg_rpg_sprite(who) is not None:
-        show expression dg_rpg_sprite(who) as dg_vn_character at right
     $ dg_rpg_vn_lines = dg_rpg_vn_pages(scene_text)
+    $ dg_rpg_vn_secondary_code = dg_rpg_vn_secondary(who, scene_text)
     $ dg_rpg_vn_line_index = 0
     while dg_rpg_vn_line_index < len(dg_rpg_vn_lines):
-        $ dg_rpg_vn_line = dg_literal(dg_rpg_vn_lines[dg_rpg_vn_line_index])
+        $ dg_rpg_vn_raw = dg_rpg_vn_lines[dg_rpg_vn_line_index]
+        $ dg_rpg_vn_emotion = dg_visual.mood(dg_rpg_vn_raw)
+        $ dg_rpg_vn_distance = dg_visual.distance(dg_rpg_vn_raw)
+        if who is not None:
+            $ dg_rpg_vn_primary_sprite = dg_rpg_sprite(who, dg_rpg_vn_emotion, dg_rpg_vn_distance)
+            if dg_rpg_vn_primary_sprite is not None:
+                show expression dg_rpg_vn_primary_sprite as dg_vn_character at right
+        if dg_rpg_vn_secondary_code is not None:
+            $ dg_rpg_vn_secondary_sprite = dg_rpg_sprite(dg_rpg_vn_secondary_code, dg_rpg_vn_emotion, "normal")
+            if dg_rpg_vn_secondary_sprite is not None:
+                show expression dg_rpg_vn_secondary_sprite as dg_vn_secondary at left
+        $ dg_rpg_vn_line = dg_literal(dg_rpg_vn_raw)
         "[dg_rpg_vn_line]"
         $ dg_rpg_vn_line_index += 1
     return
