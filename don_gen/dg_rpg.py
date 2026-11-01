@@ -136,7 +136,19 @@ def where_is(state, who):
         return "square"
     if slot == 1 and state["day"] % 4 == 0 and who in ("dv", "us"):
         return "sports"
-    return schedule[slot + 2]
+    target = schedule[slot + 2]
+    # Weather may change plans of NPCs; only on days after arrival and in daylight.
+    if state["day"] > 1 and slot in (1, 2):
+        conditions = dg_world.weather(state)[0]
+        if conditions == "rain" and target in ("beach", "lake", "sports", "stage", "forest"):
+            if who in ("mi", "el", "sh"):
+                return "clubs"
+            if who in ("un", "mz"):
+                return "library"
+            return "canteen"
+        if conditions == "heat" and target == "sports":
+            return "beach"
+    return target
 
 
 def at_place(state, place=None):
