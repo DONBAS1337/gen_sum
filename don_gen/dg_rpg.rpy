@@ -1598,12 +1598,11 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True):
     if cg_possible:
         menu:
             "Продолжить историю":
-                $ _return = None
+                return None
             "Посмотреть или создать CG":
-                $ _return = "cg"
+                return "cg"
     else:
-        $ _return = None
-    return
+        return None
 
 label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
     if phase == "topics":
@@ -1618,8 +1617,8 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
     $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
     $ dg_rpg_vn_options.append((u"Написать свою реплику · AI", "custom"))
     $ dg_rpg_vn_options.append((u"Завершить разговор", None))
-    $ _return = renpy.display_menu(dg_rpg_vn_options)
-    return
+    $ dg_rpg_vn_selected = renpy.display_menu(dg_rpg_vn_options)
+    return dg_rpg_vn_selected
 
 label dg_rpg_main:
     $ dg_setup()
