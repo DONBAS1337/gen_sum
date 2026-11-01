@@ -17,6 +17,47 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Parse installer and smoke-test paths with spaces, private assets, backup, repeat install
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path (Get-Location) "install.ps1"), [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.ToString() }
+            throw "install.ps1 contains PowerShell parser errors"
+          }
+          $root = Join-Path $env:RUNNER_TEMP "DON-GEN installer smoke"
+          $game = Join-Path $root "Everlasting Summer"
+          $assets = Join-Path $root "Local Private Assets"
+          New-Item -ItemType Directory -Force -Path (Join-Path $game "game") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $assets "maps") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $assets "cg") | Out-Null
+          Set-Content -LiteralPath (Join-Path $game "game/archive.rpa") -Value "test"
+          Set-Content -LiteralPath (Join-Path $assets "maps/map_default.png") -Value "mock image"
+          Set-Content -LiteralPath (Join-Path $assets "maps/map_icon_mi.png") -Value "mock icon"
+          Set-Content -LiteralPath (Join-Path $assets "cg/example.png") -Value "mock CG"
+          $hash = "0123456789abcdef0123456789abcdef01234567"
+          '{"' + $hash + '":"mods/don_gen/images/gen_assets/cg/example.png"}' |
+            Set-Content -LiteralPath (Join-Path $assets "cg_index.json")
+          & ./install.ps1 -GameDir $game -AssetsDir $assets
+          $mod = Join-Path $game "game/mods/don_gen"
+          if (-not (Test-Path -LiteralPath (Join-Path $mod "dg_rpg.rpy"))) { throw "Mod not installed" }
+          if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_default.png"))) { throw "Missing imported map" }
+          if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_icon_mi.png"))) { throw "Missing imported icon" }
+          if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/cg/example.png"))) { throw "Missing imported curated CG" }
+          Set-Content -LiteralPath (Join-Path $mod "comfy_workflow_background_api.json") -Value '{"test":true}'
+          Set-Content -LiteralPath (Join-Path $mod "dg_old.rpyc") -Value "stale bytecode"
+          & ./install.ps1 -GameDir $game -AssetsDir $assets
+          if (-not (Test-Path -LiteralPath (Join-Path $mod "comfy_workflow_background_api.json"))) { throw "User workflow was deleted" }
+          if (Test-Path -LiteralPath (Join-Path $mod "dg_old.rpyc")) { throw "Stale compiled script retained" }
+          if (-not (Get-ChildItem -LiteralPath (Join-Path $game "DON-GEN-backups") -Directory)) {
+            # Backups live at the Everlasting Summer root, not inside game.
+            throw "Missing backup"
+          }
+          Write-Host "PowerShell parser / private asset installer smoke checks OK"
       - name: Compile all standalone Python modules
         run: python -m compileall -q don_gen
       - name: Verify code is readable by Python 2.7 grammar (Ren'Py 7.x)
