@@ -77,7 +77,7 @@ class ReportedTracebacks(unittest.TestCase):
         for expected in ('label dg_rpg_vn_text(scene_text, who=None):',
                          'scene expression dg_rpg_bg()',
                          '"[dg_rpg_vn_line]"',
-                         'label dg_rpg_vn_choice(story_text, choice_pairs):',
+                         'label dg_rpg_vn_choice(story_text, choice_pairs, who=None):',
                          'renpy.display_menu',
                          'call dg_rpg_vn_dialogue(dg_rpg_focus, "topics")',
                          'call dg_rpg_vn_scene(dg_runtime.app.result, True, dg_rpg_focus)',
