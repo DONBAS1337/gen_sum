@@ -835,6 +835,27 @@ screen dg_rpg_free_input:
                 textbutton u"ОТМЕНА" style "dg_act" action Return(None)
     key "K_ESCAPE" action Return(None)
 
+screen dg_rpg_action_result(result):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#081c27f0")
+    frame:
+        background Solid("#13323a")
+        align (0.5, 0.5)
+        xsize 1380 ysize 810
+        padding (48, 39)
+        vbox:
+            spacing 22
+            text dg_literal(result.get("title", u"ТВОЙ ПОСТУПОК")) style "dg_title" size 49 color "#ffe5a0"
+            frame:
+                background Solid("#071a25")
+                padding (22, 18)
+                xsize 1265 ysize 535
+                viewport:
+                    mousewheel True scrollbars "vertical" ysize 490
+                    text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
+            textbutton u"Вернуться в лагерь" style "dg_primary" action Return(None)
+
 screen dg_rpg_npc_incident:
     modal True
     add dg_rpg_bg()
