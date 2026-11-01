@@ -100,6 +100,19 @@ init 1001 python:
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
         elif action == "remember_narrative":
             dg_narrative.remember_scene(state, arg[0], arg[1])
+        elif action == "spontaneous":
+            who=arg
+            if state["finished"] or (who is not None and dg_rpg.where_is(state,who)!=state["place"]):
+                raise ValueError("Encounter unavailable")
+            if state["energy"]<4:
+                raise ValueError("Not enough energy")
+            key="%d:%d:%s:%s" % (state["day"],state["slot"],state["place"],who or "-")
+            state.setdefault("surprise_counts",{})
+            state["surprise_counts"][key]=state["surprise_counts"].get(key,0)+1
+            state["energy"]-=4
+            dg_rpg._journal(state,u"Неожиданная встреча: %s." %
+                            (dg_rpg.NPC_NAMES[who] if who else dg_rpg.PLACE_NAMES[state["place"]]))
+            dg_rpg._tick(state)
         elif action == "cg_record":
             if dg_art.marker(state,arg) is None:
                 raise ValueError("CG access denied")
@@ -973,6 +986,7 @@ screen dg_rpg_hub:
             if not dg_rpg_state["finished"]:
                 textbutton u"СВОБОДНОЕ ДЕЙСТВИЕ · написать свой поступок" style "dg_primary" action Return(("free", None))
                 textbutton u"ГИБРИДНАЯ СЦЕНА · действие + реакция AI" style "dg_act" action Return(("hybrid", None))
+                textbutton u"СЛУЧАЙНАЯ СИТУАЦИЯ ЗДЕСЬ" style "dg_act" action Return(("surprise", None)) sensitive dg_rpg_state["energy"] >= 4
                 textbutton u"ПОРУЧЕНИЯ · длинные задания" style "dg_act" action Return(("contracts", None))
             textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
             textbutton u"ГАЛЕРЕЯ CG · иллюстрации смены" style "dg_act" action Return(("cg_gallery", None))
@@ -1014,6 +1028,7 @@ screen dg_rpg_hub:
                             hbox:
                                 spacing 26
                                 textbutton u"Особая AI-сцена" style "dg_navlink" text_size 23 action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
+                                textbutton u"Неожиданная встреча" style "dg_navlink" text_size 23 action Return(("surprise", who)) sensitive (not dg_rpg_state["finished"] and dg_rpg_state["energy"] >= 4)
                             if dg_social.personal_scene(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
@@ -1871,6 +1886,21 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "activity":
         $ dg_rpg_apply(dg_rpg_value)
         jump dg_rpg_loop
+    if dg_rpg_cmd == "surprise":
+        $ dg_rpg_focus = dg_rpg_value
+        $ dg_rpg_spontaneous = dg_narrative.spontaneous(dg_rpg_state,dg_rpg_focus)
+        call dg_rpg_vn_scene(dg_rpg_spontaneous["text"],False,dg_rpg_focus,dg_rpg_spontaneous["id"])
+        menu:
+            "Ответить своим действием / репликой":
+                $ dg_rpg_hybrid_mode = "npc" if dg_rpg_focus is not None else "free"
+                $ dg_rpg_hybrid_who = dg_rpg_focus
+                $ dg_rpg_hybrid_topic = None
+                jump dg_rpg_hybrid_entry
+            "Послушать и продолжить день":
+                $ dg_rpg_apply("spontaneous",dg_rpg_focus)
+                jump dg_rpg_loop
+            "Уйти, не вмешиваясь":
+                jump dg_rpg_loop
     if dg_rpg_cmd == "hybrid":
         $ dg_rpg_hybrid_mode = "free"
         $ dg_rpg_hybrid_who = None
