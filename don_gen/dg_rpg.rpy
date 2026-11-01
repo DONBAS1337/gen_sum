@@ -8,6 +8,7 @@ init 1001 python:
     import dg_dialogue
     import dg_world
     import dg_social
+    import dg_hybrid
     import dg_backend
 
     def dg_rpg_root():
@@ -43,6 +44,8 @@ init 1001 python:
             store.dg_rpg_last_personal = dg_rpg.personal_choice(state, arg[0], arg[1])
         elif action == "incident":
             store.dg_rpg_last_incident = dg_rpg.social_encounter(state, arg)
+        elif action == "hybrid":
+            store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
         elif action == "contract":
             store.dg_rpg_last_contract = dg_rpg.accept_contract(state, arg)
         else:
@@ -51,6 +54,29 @@ init 1001 python:
         store.dg_rpg_state = state
         logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
+
+    def dg_rpg_hybrid_preview(mode, action, who=None):
+        current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
+        store.dg_rpg_hybrid_plan = dg_hybrid.preview(current, action, mode, who)
+        logging.getLogger("don_gen").info(
+            "Hybrid preview mode=%s day=%d valid=%s", mode, current["day"],
+            store.dg_rpg_hybrid_plan["status"] == "ready")
+
+    def dg_rpg_hybrid_generate(plan):
+        # The background worker ONLY generates a text string. No save writes.
+        current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
+        instructions, prompt = dg_hybrid.build_request(current, plan)
+        app = dg_runtime.app
+        if not app.models:
+            app.refresh_models()
+        model = dg_backend.default_model(app.models, persistent.dg_model)
+        app.set_status(u"Пишем сцену с зафиксированным игровым исходом…")
+        story = app.client.generate(instructions, prompt, model=model,
+                                    effort=dg_backend.DEFAULT_EFFORT,
+                                    fast_mode=persistent.dg_fast_mode)
+        if not isinstance(story, basestring) or len(story.strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
+            raise ValueError("AI returned invalid scene length")
+        return story.strip()
 
     DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"
     # Coordinates grounded in the supplied 1920 x 1080 Sovyonok top-down map.
@@ -464,6 +490,7 @@ screen dg_rpg_hub:
                 textbutton u"Отдохнуть / пропустить время" style "dg_act" action Return(("activity", "rest"))
             if not dg_rpg_state["finished"]:
                 textbutton u"СВОБОДНОЕ ДЕЙСТВИЕ · написать свой поступок" style "dg_primary" action Return(("free", None))
+                textbutton u"ГИБРИДНАЯ СЦЕНА · действие + реакция AI" style "dg_act" action Return(("hybrid", None))
                 textbutton u"ПОРУЧЕНИЯ · длинные задания" style "dg_act" action Return(("contracts", None))
             textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
             textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
@@ -492,6 +519,7 @@ screen dg_rpg_hub:
                                 spacing 16
                                 textbutton u"Диалог · выборы" style "dg_navlink" action Return(("talk", who)) sensitive (not dg_rpg_state["finished"] and dg_rpg_state["energy"] >= 8)
                                 textbutton u"AI-сцена" style "dg_navlink" action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
+                                textbutton u"Своя реплика + AI" style "dg_navlink" text_size 23 action Return(("hybrid_npc", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"Спрайт" style "dg_navlink" action Return(("sprite", who)) sensitive not dg_rpg_state["finished"]
                             if dg_social.personal_scene(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"★ ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
@@ -501,6 +529,110 @@ screen dg_rpg_hub:
 
 
 # Player-defined actions are resolved by a transparent local interpreter.
+screen dg_rpg_hybrid_input(mode, who=None):
+    modal True
+    default action_text = u""
+    add dg_rpg_bg()
+    add Solid("#041622ee")
+    frame:
+        background Solid("#142f3df8")
+        align (0.5, 0.5) xsize 1430 ysize 790
+        padding (53, 43)
+        vbox:
+            spacing 26
+            text (u"СВОЯ РЕПЛИКА" if mode == "npc" else u"СВОЙ ПОСТУПОК В СЮЖЕТЕ" if mode == "world" else u"СВОБОДНОЕ ДЕЙСТВИЕ + AI") style "dg_title" size 54 color "#ffe0a2"
+            text (u"Что именно ты говоришь собеседнику? Модель напишет реакцию, а движок потратит только время и энергию." if mode == "npc"
+                  else u"Опиши свой вариант решения события. Движок определит допустимый результат до запроса к AI." if mode == "world"
+                  else u"Опиши действие героя своими словами. Сначала увидишь его реальные последствия, и лишь затем можно вызвать AI.") style "dg_text" size 28 xmaximum 1275
+            frame:
+                background Solid("#081b27")
+                padding (23, 22)
+                xsize 1290 ysize 125
+                input:
+                    value ScreenVariableInputValue("action_text")
+                    style "dg_rpg_edit_input"
+                    length 320
+                    xmaximum 1200
+                    default_focus True
+            text u"Сначала локальный движок проверит действие. AI НЕ сможет назначить награды, изменить день, NPC или историю вместо движка." style "dg_text" size 25 xmaximum 1260
+            text u"Если команда непонятна, она не тратит время и не отправляется модели. Для обычных действий AI можно вообще не вызывать." style "dg_text" size 24 color "#b9d4d6" xmaximum 1260
+            hbox:
+                spacing 40
+                textbutton u"ПРОВЕРИТЬ ПОСЛЕДСТВИЯ" style "dg_primary" sensitive bool(action_text.strip()) action Return(action_text.strip())
+                textbutton u"ОТМЕНА" style "dg_act" action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+screen dg_rpg_hybrid_review(plan):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#071a25ef")
+    frame:
+        background Solid("#13313df9")
+        align (0.5, 0.5) xsize 1420 ysize 865
+        padding (50, 39)
+        vbox:
+            spacing 19
+            text u"ПОСЛЕДСТВИЯ ПРОВЕРЕНЫ ДВИЖКОМ" style "dg_title" size 43 color "#ffe0a2"
+            if plan["status"] != "ready":
+                text dg_literal(plan["message"]) style "dg_text" size 30 xmaximum 1270
+                text u"Никаких изменений сохранения не сделано." style "dg_text" size 24
+                textbutton u"ИЗМЕНИТЬ ТЕКСТ" style "dg_primary" action Return("retry")
+                textbutton u"ОТМЕНИТЬ" style "dg_act" action Return("cancel")
+            else:
+                text dg_literal(u"Твоё действие: " + plan["action"]) style "dg_text" size 29 xmaximum 1265
+                frame:
+                    background Solid("#071d27")
+                    padding (21, 14)
+                    xsize 1300 ysize 305
+                    viewport:
+                        mousewheel True scrollbars "vertical" ysize 265
+                        text dg_literal(plan["result"]["text"]) style "dg_text" size 29 xmaximum 1215
+                text u"РЕАЛЬНЫЕ ИЗМЕНЕНИЯ ПОСЛЕ ПОДТВЕРЖДЕНИЯ" style "dg_meta" size 23
+                frame:
+                    background Solid("#172a29")
+                    padding (18, 15)
+                    xsize 1300 ysize 125
+                    viewport:
+                        mousewheel True scrollbars "vertical" ysize 90
+                        vbox:
+                            spacing 5
+                            if plan["effects"]:
+                                for item in plan["effects"]:
+                                    text dg_literal(item) style "dg_text" size 25
+                            else:
+                                text u"Изменения мира не предусмотрены." style "dg_text" size 25
+                text u"Ни один эффект пока не применён. Можно сыграть локально или заказать только художественный текст." style "dg_text" size 23 xmaximum 1260
+                hbox:
+                    spacing 25
+                    textbutton u"AI · СЦЕНА + ЭФФЕКТЫ" style "dg_primary" action Return("ai")
+                    textbutton u"ЛОКАЛЬНО · БЕЗ AI" style "dg_act" action Return("local")
+                hbox:
+                    spacing 38
+                    textbutton u"ИЗМЕНИТЬ" style "dg_navlink" action Return("retry")
+                    textbutton u"ОТМЕНА" style "dg_navlink" action Return("cancel")
+
+screen dg_rpg_hybrid_read(entry):
+    modal True
+    add dg_rpg_bg()
+    add Solid("#071621ec")
+    frame:
+        background Solid("#14313beb")
+        align (0.5, 0.5) xsize 1530 ysize 900
+        padding (53, 38)
+        vbox:
+            spacing 19
+            text (u"AI-СЦЕНА" if entry["narrated_by_ai"] else u"СЦЕНА БЕЗ AI") style "dg_title" size 45 color "#ffe2a3"
+            frame:
+                background Solid("#071b28")
+                padding (23, 19)
+                xsize 1410 ysize 545
+                viewport:
+                    mousewheel True scrollbars "vertical" ysize 490
+                    text dg_literal(entry["scene"] if entry["scene"] else entry["result"]) style "dg_text" size 29 xmaximum 1330
+            text u"ИГРОВЫЕ ПОСЛЕДСТВИЯ · зафиксированы движком, а не моделью" style "dg_meta" size 22
+            text dg_literal(u" · ".join(entry["effects"]) if entry["effects"] else u"Показатели не менялись.") style "dg_text" size 24 xmaximum 1390
+            textbutton u"ПРОДОЛЖИТЬ" style "dg_primary" action Return(None)
+
 screen dg_rpg_free_input:
     modal True
     default action_text = u""
@@ -691,6 +823,8 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
             if phase != "result":
                 for choice_id, caption in scene["options"]:
                     textbutton dg_literal(caption) style "dg_navlink" text_size 27 action Return(choice_id)
+                if phase == "topics":
+                    textbutton u"НАПИСАТЬ СВОЮ РЕПЛИКУ · AI-РЕАКЦИЯ" style "dg_navlink" text_size 25 action Return("custom")
                 textbutton u"Завершить разговор без выбора" style "dg_navlink" text_size 24 action Return(None)
             else:
                 textbutton u"Закончить встречу" style "dg_primary" text_size 33 action Return("done")
@@ -753,6 +887,7 @@ screen dg_rpg_world_event:
                                 textbutton dg_literal(choice["text"]) style "dg_navlink" text_size 26 xmaximum 1165 action Return(choice["key"])
                 else:
                     text u"Для сюжетного выбора нужно 8 энергии. Сначала отдохни." style "dg_text" size 27 color "#ffe19b"
+                textbutton u"НАПИСАТЬ СВОЁ ДЕЙСТВИЕ · гибридная сцена" style "dg_navlink" text_size 25 sensitive (dg_rpg_state["energy"] >= 8) action Return("custom")
                 textbutton u"Вернуться в лагерь (решение можно принять позже)" style "dg_navlink" text_size 24 action Return(None)
     else:
         text u"На этом месте сегодня больше нет активных событий." style "dg_text" xpos 500 ypos 500
@@ -1052,6 +1187,14 @@ label dg_rpg_loop:
     if dg_rpg_cmd == "activity":
         $ dg_rpg_apply(dg_rpg_value)
         jump dg_rpg_loop
+    if dg_rpg_cmd == "hybrid":
+        $ dg_rpg_hybrid_mode = "free"
+        $ dg_rpg_hybrid_who = None
+        jump dg_rpg_hybrid_entry
+    if dg_rpg_cmd == "hybrid_npc":
+        $ dg_rpg_hybrid_mode = "npc"
+        $ dg_rpg_hybrid_who = dg_rpg_value
+        jump dg_rpg_hybrid_entry
     if dg_rpg_cmd == "free":
         call screen dg_rpg_free_input
         if _return:
@@ -1093,6 +1236,10 @@ label dg_rpg_loop:
         if dg_rpg_state["energy"] < 8:
             jump dg_rpg_loop
         call screen dg_rpg_dialogue(dg_rpg_focus, "topics")
+        if _return == "custom":
+            $ dg_rpg_hybrid_mode = "npc"
+            $ dg_rpg_hybrid_who = dg_rpg_focus
+            jump dg_rpg_hybrid_entry
         if _return is None:
             jump dg_rpg_loop
         $ dg_rpg_talk_topic = int(_return)
@@ -1147,8 +1294,48 @@ label dg_rpg_world_label:
     if not dg_world.event_at(dg_rpg_state, dg_rpg_state["place"]):
         jump dg_rpg_loop
     call screen dg_rpg_world_event
+    if _return == "custom":
+        $ dg_rpg_hybrid_mode = "world"
+        $ dg_rpg_hybrid_who = None
+        jump dg_rpg_hybrid_entry
     if _return:
         $ dg_rpg_world_stance = _return
         $ dg_rpg_apply("world", dg_rpg_world_stance)
         call screen dg_rpg_world_result(dg_rpg_last_world)
+    jump dg_rpg_loop
+
+
+# Hybrid turn lifecycle: PREVIEW (offline, pure) -> explicit AI/local choice
+# -> generation (text only, worker thread) -> verified COMMIT (main thread).
+label dg_rpg_hybrid_entry:
+    call screen dg_rpg_hybrid_input(dg_rpg_hybrid_mode, dg_rpg_hybrid_who)
+    if not _return:
+        jump dg_rpg_loop
+    $ dg_rpg_hybrid_action_text = _return
+    $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who)
+    jump dg_rpg_hybrid_review_label
+
+label dg_rpg_hybrid_review_label:
+    call screen dg_rpg_hybrid_review(dg_rpg_hybrid_plan)
+    if _return == "retry":
+        jump dg_rpg_hybrid_entry
+    if _return == "cancel" or not _return:
+        jump dg_rpg_loop
+    if _return == "local":
+        $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, None))
+        call screen dg_rpg_hybrid_read(dg_rpg_hybrid_entry)
+        jump dg_rpg_loop
+    if _return == "ai":
+        if not dg_runtime.app.client.authenticated():
+            call dg_connect
+            if not dg_runtime.app.client.authenticated():
+                jump dg_rpg_hybrid_review_label
+        $ dg_run("chapter", dg_rpg_hybrid_generate, dg_rpg_hybrid_plan)
+        if dg_runtime.app.error:
+            call screen dg_error
+            jump dg_rpg_hybrid_review_label
+        $ dg_rpg_hybrid_scene = dg_runtime.app.result
+        $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, dg_rpg_hybrid_scene))
+        call screen dg_rpg_hybrid_read(dg_rpg_hybrid_entry)
+        jump dg_rpg_loop
     jump dg_rpg_loop
