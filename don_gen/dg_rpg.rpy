@@ -541,8 +541,14 @@ screen dg_rpg_world_event:
                         text dg_literal(active["story"]) style "dg_text" size 29 xmaximum 1168
                 text u"КАК ТЫ ПОСТУПИШЬ? РЕШЕНИЕ ИЗМЕНИТ СЛЕДУЮЩИЕ ДНИ" style "dg_meta" size 22 color "#ffda91"
                 if dg_rpg_state["energy"] >= 8:
-                    for choice in active["choices"]:
-                        textbutton dg_literal(choice["text"]) style "dg_navlink" text_size 26 xmaximum 1230 action Return(choice["key"])
+                    viewport:
+                        ysize 225
+                        mousewheel True
+                        scrollbars "vertical"
+                        vbox:
+                            spacing 9
+                            for choice in active["choices"]:
+                                textbutton dg_literal(choice["text"]) style "dg_navlink" text_size 26 xmaximum 1165 action Return(choice["key"])
                 else:
                     text u"Для сюжетного выбора нужно 8 энергии. Сначала отдохни." style "dg_text" size 27 color "#ffe19b"
                 textbutton u"Вернуться в лагерь (решение можно принять позже)" style "dg_navlink" text_size 24 action Return(None)
@@ -587,6 +593,7 @@ screen dg_rpg_journal:
         textbutton u"События" style "dg_navlink" selected view == "timeline" action SetScreenVariable("view", "timeline")
         textbutton u"Разговоры" style "dg_navlink" selected view == "talks" action SetScreenVariable("view", "talks")
         textbutton u"AI-сцены" style "dg_navlink" selected view == "ai" action SetScreenVariable("view", "ai")
+        textbutton u"Хроника мира" style "dg_navlink" selected view == "world" action SetScreenVariable("view", "world")
     hbox:
         xpos 95 ypos 295 spacing 45
         frame:
@@ -611,6 +618,14 @@ screen dg_rpg_journal:
                             text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
                             text (u"Отношения +%d" % item["affinity_gain"]) style "dg_text" size 22 color "#ffe19b"
                             null height 12
+                    elif view == "world":
+                        if not dg_rpg_state["world"]["chronicle"]:
+                            text u"Лагерные истории только начинаются. Посетите место события дня и примите решение." style "dg_text" size 28 xmaximum 850
+                        for item in dg_rpg_state["world"]["chronicle"][::-1]:
+                            text (u"День %d · %s · %s" % (item["day"], item["title"],
+                                  u"Пропущено" if item["status"] == "missed" else u"Событие сыграно")) style "dg_meta" size 23
+                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
+                            null height 12
                     else:
                         if not dg_rpg_state["ai_scenes"]:
                             text u"Пока нет AI-сцен. Они создаются вручную через кнопку персонажа." style "dg_text" size 28
@@ -631,7 +646,19 @@ screen dg_rpg_journal:
                     text (u"Любознательность: %d · Доброта: %d · Навык: %d" %
                           (dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"],
                            dg_rpg_state["stats"]["skill"])) style "dg_text" size 23 xmaximum 680
-                    null height 10
+                    null height 12
+                    text u"СОСТОЯНИЕ ЛАГЕРЯ" style "dg_meta" size 25 color "#ffdf98"
+                    text (u"Сплочённость: %d/100 · Знания: %d/100" %
+                          (dg_rpg_state["world"]["morale"], dg_rpg_state["world"]["knowledge"])) style "dg_text" size 23
+                    text (u"Свобода: %d/100 · Ресурсы: %d/100" %
+                          (dg_rpg_state["world"]["freedom"], dg_rpg_state["world"]["resources"])) style "dg_text" size 23
+                    null height 12
+                    text u"СЮЖЕТНЫЕ ЛИНИИ" style "dg_meta" size 25
+                    for plot in dg_world.PLOT_ORDER:
+                        text (dg_world.PLOTS[plot]["name"] + u" · " +
+                              str(dg_rpg_state["world"]["tracks"][plot]["stage"]) + u"/5") style "dg_text" size 25 color "#ffe4a1"
+                        text dg_world.story_status(dg_rpg_state, plot) style "dg_text" size 21 xmaximum 680
+                    null height 15
                     text u"ОТНОШЕНИЯ" style "dg_meta"
                     for who, name, morning, daytime, evening, night in dg_rpg.NPCS:
                         text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 25
