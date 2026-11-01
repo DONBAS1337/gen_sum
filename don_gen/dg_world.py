@@ -328,7 +328,9 @@ def make_event(state):
         event["choices"].append({"key": "specialist", "text": u"Использовать свои навыки и найти компромисс",
                                   "metric": "resources", "delta": 7, "stat": "skill",
                                   "stat_gain": 1, "affinity": 5})
-    return event
+    # Only scene framing varies; event IDs, NPCs, choices and mechanics are locked.
+    import dg_narrative
+    return dg_narrative.decorate_event(state,event)
 
 
 def prepare(state):
@@ -339,6 +341,10 @@ def prepare(state):
         return None
     if event is None or event.get("day") != state["day"]:
         world["event"] = make_event(state)
+    elif event is not None and "narrative" not in event:
+        # Upgrade currently open events created in previous versions.
+        import dg_narrative
+        world["event"] = dg_narrative.decorate_event(state,event)
     return world["event"]
 
 
