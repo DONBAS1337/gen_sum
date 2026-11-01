@@ -576,13 +576,14 @@ screen dg_rpg_artist_settings:
         align (0.5, 0.5) xsize 1460 ysize 775 padding (46, 37)
         vbox:
             spacing 23
-            text u"ГЕНЕРАЦИЯ ФОНОВ И СПРАЙТОВ" style "dg_title" size 49 color "#ffe1aa"
+            text u"ГЕНЕРАЦИЯ ФОНОВ И CG" style "dg_title" size 49 color "#ffe1aa"
             text u"Выбери, кто создаёт изображения. На обычные разговоры и механику RPG эта настройка не влияет." style "dg_text" size 29 xmaximum 1330
             textbutton u"ОБЛАЧНЫЙ ГЕНЕРАТОР" style "dg_primary" selected getattr(persistent, "dg_rpg_art_provider", "cloud") != "comfy" action SetField(persistent, "dg_rpg_art_provider", "cloud")
             textbutton u"COMFYUI · 127.0.0.1:8188" style "dg_primary" selected getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" action SetField(persistent, "dg_rpg_art_provider", "comfy")
-            text u"Нужен ComfyUI на 8188 и API workflow: comfy_workflow_api.json; можно отдельно comfy_workflow_background_api.json и comfy_workflow_sprite_api.json." style "dg_text" size 25 xmaximum 1320
-            text u"В поле текстового промпта workflow укажи __DG_PROMPT__. Для спрайтов потребуется отдельный workflow с прозрачностью, иначе они будут отклонены." style "dg_text" size 24 xmaximum 1300
-            text u"Локальный сервис с интерфейсом 8189 не используется автоматически: его API не проверен. Генерация идёт прямо в ComfyUI 8188." style "dg_text" size 24 color "#c0dbd7" xmaximum 1300
+            text u"ComfyUI 8188: comfy_workflow_background_api.json для фонов, comfy_workflow_cg_api.json для CG, comfy_workflow_cg18_api.json для взрослых CG." style "dg_text" size 25 xmaximum 1320
+            text u"Подстановки __DG_PROMPT__ и __DG_NEGATIVE__. Seed у Anima берётся как число прямо из KSampler и обновляется автоматически. Спрайты не генерируются." style "dg_text" size 24 xmaximum 1300
+            text u"Генерация только вручную, если фона или CG нет; ранее созданные изображения читаются из кэша. Сервис 8189 не используется." style "dg_text" size 23 color "#c0dbd7" xmaximum 1300
+            textbutton (u"Приоритет: сгенерированные" if getattr(persistent, "dg_prefer_generated", True) else u"Приоритет: оригинальные") style "dg_act" action SetField(persistent, "dg_prefer_generated", not getattr(persistent, "dg_prefer_generated", True))
             textbutton u"ЗАКРЫТЬ" style "dg_act" action Return(None)
 
 screen dg_rpg_adult_settings:
@@ -810,7 +811,11 @@ screen dg_rpg_hub:
             textbutton (u"Художник: ComfyUI локально" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Художник: облачный") style "dg_act" action Return(("artist", None))
             textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
             if not dg_rpg_state["finished"]:
-                textbutton u"Создать фон локации (AI)" style "dg_act" action Return(("background", dg_rpg_state["place"]))
+                $ bg_state = dg_rpg_bg_status()
+                if bg_state["status"] == "missing":
+                    textbutton u"Сгенерировать отсутствующий фон" style "dg_act" action Return(("background", dg_rpg_state["place"]))
+                else:
+                    text (u"Фон: " + (u"сгенерированный" if bg_state["status"] == "generated" else u"оригинальный")) style "dg_small" size 23
             textbutton u"Вернуться к выбору смены" style "dg_act" action Return(("exit", None))
     frame:
         background Solid("#11232ce0")
@@ -835,7 +840,7 @@ screen dg_rpg_hub:
                                 textbutton u"Диалог · выборы" style "dg_navlink" action Return(("talk", who)) sensitive (not dg_rpg_state["finished"] and dg_rpg_state["energy"] >= 8)
                                 textbutton u"AI-сцена" style "dg_navlink" action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"Своя реплика + AI" style "dg_navlink" text_size 23 action Return(("hybrid_npc", who)) sensitive not dg_rpg_state["finished"]
-                                textbutton u"Спрайт" style "dg_navlink" action Return(("sprite", who)) sensitive not dg_rpg_state["finished"]
+                                text u"Спрайт: из ресурсов игры" style "dg_small" size 20
                             if dg_social.personal_scene(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
@@ -934,6 +939,38 @@ screen dg_rpg_hybrid_review(plan):
                     textbutton u"ИЗМЕНИТЬ" style "dg_navlink" action Return("retry")
                     textbutton u"ОТМЕНА" style "dg_navlink" action Return("cancel")
 
+screen dg_rpg_cg_art(plan):
+    modal True
+    $ resource = dg_rpg_cg_status(plan)
+    if resource["status"] in ("generated","builtin") and resource["path"]:
+        if resource["status"] == "builtin":
+            add Image(resource["path"])
+        else:
+            add im.Scale(resource["path"],1920,1080)
+    else:
+        add dg_rpg_bg()
+        add Solid("#071827dd")
+        frame:
+            background Solid("#102b37f8")
+            align (0.5,0.5) xsize 1400 ysize 685 padding (52,40)
+            vbox:
+                spacing 25
+                text u"ИЛЛЮСТРАЦИЯ СЦЕНЫ · CG" style "dg_title" size 49 color "#ffe4a6"
+                text dg_literal(plan["title"]) style "dg_text" size 31 xmaximum 1220
+                text u"Для этого события иллюстрация пока не найдена. Можно продолжить чтение без генерации или создать CG вручную." style "dg_text" size 29 xmaximum 1210
+                text (u"Отдельный взрослый CG (только 18+ AU)" if plan["kind"]=="cg18" else u"Обычный CG, широкий кадр 16:9") style "dg_text" size 25 color "#e3c691"
+                textbutton u"СОЗДАТЬ CG ВЫБРАННЫМ ГЕНЕРАТОРОМ" style "dg_primary" action Return("generate")
+    frame:
+        background Solid("#0b2332e6")
+        xpos 55 ypos 30 xsize 1130 ysize 115 padding (24,14)
+        hbox:
+            spacing 18
+            text u"DON-GEN · CG" style "dg_meta" size 28 color "#ffe7aa"
+            text dg_literal(plan["title"]) style "dg_text" size 25 xmaximum 830
+    if resource["status"] in ("generated","builtin"):
+        textbutton u"ПЕРЕГЕНЕРИРОВАТЬ ВРУЧНУЮ" style "dg_map_pin" xpos 1290 ypos 32 action Return("generate")
+    textbutton u"ПРОДОЛЖИТЬ БЕЗ ГЕНЕРАЦИИ" style "dg_map_pin" xpos 1330 ypos 971 action Return(None)
+
 screen dg_rpg_hybrid_read(entry):
     modal True
     add dg_rpg_bg()
@@ -954,6 +991,7 @@ screen dg_rpg_hybrid_read(entry):
                     text dg_literal(entry["scene"] if entry["scene"] else entry["result"]) style "dg_text" size 29 xmaximum 1330
             text u"ИГРОВЫЕ ПОСЛЕДСТВИЯ · зафиксированы движком, а не моделью" style "dg_meta" size 22
             text dg_literal(u" · ".join(entry["effects"]) if entry["effects"] else u"Показатели не менялись.") style "dg_text" size 24 xmaximum 1390
+            textbutton u"Иллюстрация сцены · CG (необязательно)" style "dg_act" action Return("cg")
             textbutton u"ПРОДОЛЖИТЬ" style "dg_primary" action Return(None)
 
 screen dg_rpg_free_input:
@@ -995,7 +1033,7 @@ screen dg_rpg_free_input:
                 textbutton u"ОТМЕНА" style "dg_act" action Return(None)
     key "K_ESCAPE" action Return(None)
 
-screen dg_rpg_action_result(result):
+screen dg_rpg_action_result(result, cg_worthy=False):
     modal True
     add dg_rpg_bg()
     add Solid("#081c27f0")
@@ -1014,6 +1052,8 @@ screen dg_rpg_action_result(result):
                 viewport:
                     mousewheel True scrollbars "vertical" ysize 490
                     text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
+            if cg_worthy:
+                textbutton u"Иллюстрировать событие (CG)" style "dg_act" action Return("cg")
             textbutton u"Вернуться в лагерь" style "dg_primary" action Return(None)
 
 screen dg_rpg_npc_incident:
@@ -1247,6 +1287,7 @@ screen dg_rpg_world_result(result):
             text (u"Лагерь: сплочённость %d · знания %d · свобода %d · ресурсы %d" %
                   (dg_rpg_state["world"]["morale"], dg_rpg_state["world"]["knowledge"],
                    dg_rpg_state["world"]["freedom"], dg_rpg_state["world"]["resources"])) style "dg_text" size 26 color "#ffe19b"
+            textbutton u"Создать / посмотреть CG сцены" style "dg_act" action Return("cg")
             textbutton u"Продолжить историю" style "dg_primary" action Return(None)
 
 screen dg_rpg_journal:
@@ -1439,6 +1480,7 @@ screen dg_rpg_read_scene(scene_text):
             ysize 640
             mousewheel True scrollbars "vertical"
             text dg_literal(scene_text) style "dg_ink_small" size 30 xmaximum 1240
+    textbutton u"Иллюстрировать сцену (CG)" style "dg_primary" xpos 1120 ypos 955 action Return("cg")
 
 label dg_rpg_main:
     $ dg_setup()
