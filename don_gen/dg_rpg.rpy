@@ -12,6 +12,7 @@ init 1001 python:
     import dg_backend
     import dg_comfy
     import dg_adult
+    import dg_art
 
     def dg_rpg_root():
         return dg_runtime.app.library.root
@@ -190,29 +191,75 @@ init 1001 python:
         "warehouse": "bg ext_clubs_day"
     }
 
+    DG_RPG_EXACT_BG = ("square","gate","cabins","canteen","library","clubs",
+                       "stage","beach","lake","forest","infirmary","sports")
+
+    def dg_rpg_bg_native(place):
+        # The 12 stock scene locations have their own verified vanilla BG.
+        # Other 58 locations reuse a generic fallback, not a dedicated asset.
+        if place not in DG_RPG_EXACT_BG:
+            return None
+        name = DG_RPG_BG.get(place)
+        return name if name in dg_runtime.original_images else None
+
+    def dg_rpg_bg_status():
+        place = dg_rpg_state["place"]
+        native = dg_rpg_bg_native(place)
+        return dg_art.resolve(dg_rpg_root(), dg_rpg_state["id"],
+                              "background", place, native,
+                              getattr(persistent,"dg_prefer_generated",True))
+
     def dg_rpg_bg():
         place = dg_rpg_state["place"]
-        custom = dg_rpg.asset_path(dg_rpg_root(), dg_rpg_state["id"], "background", place)
-        if custom and renpy.loadable(custom):
-            return Image(custom)
+        available = dg_rpg_bg_status()
+        if available["status"] == "generated" and renpy.loadable(available["path"]):
+            return Image(available["path"])
+        if available["status"] == "builtin":
+            return dg_runtime.original_images[available["path"]]
+        # Fallback scenery is shown while specific visual art is absent.
         name = DG_RPG_BG.get(place)
-        if not name and (place.startswith("cabin_") or place == "cabins_south"):
-            name = DG_RPG_BG.get("cabins")
         if name in dg_runtime.original_images:
             return dg_runtime.original_images[name]
         return Solid("#173039")
 
     def dg_rpg_sprite(who):
-        custom = dg_rpg.asset_path(dg_rpg_root(), dg_rpg_state["id"], "sprite", who)
-        if custom and renpy.loadable(custom):
-            return Image(custom)
-        # Native Ren'Py displayables are already resolved in the private vanilla archive.
+        # No sprite synthesis: use stock game sprite / previously imported assets.
         candidates = [name for name in dg_runtime.original_images
                       if name.startswith(who + " ") and " pioneer " in (" " + name + " ")]
         if not candidates:
             candidates = [name for name in dg_runtime.original_images if name.startswith(who + " ")]
         candidates.sort()
         return dg_runtime.original_images[candidates[0]] if candidates else None
+
+    def dg_rpg_cg_builtin(plan):
+        index_path = os.path.join(renpy.config.gamedir,"mods","don_gen",
+                                  "images","gen_assets","cg_index.json")
+        if not os.path.isfile(index_path):
+            return None
+        try:
+            with open(index_path,"rb") as handle:
+                dictionary=json.loads(handle.read().decode("utf-8"))
+            target=dg_art.approve_cg_lookup(dg_rpg_root(),dictionary,plan["key"])
+            return target if target and renpy.loadable(target) else None
+        except (IOError,OSError,ValueError,TypeError):
+            return None
+
+    def dg_rpg_cg_for(source, title, description, who=None, action=u""):
+        state=dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
+        explicit_adult=bool(dg_adult.classify_sensitive(action))
+        # A mature AU CG is never inferred merely from the 18+ toggle.
+        return dg_art.scene_plan(state, source, title, description, who,
+                                 adult_requested=explicit_adult)
+
+    def dg_rpg_cg_status(plan):
+        if plan is None:
+            return {"status":"missing","path":None,"generate":False}
+        state=dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"])
+        if dg_art.marker(state,plan) is None:
+            return {"status":"missing","path":None,"generate":False}
+        return dg_art.resolve(dg_rpg_root(),state["id"],plan["kind"],
+                              plan["key"],dg_rpg_cg_builtin(plan),
+                              getattr(persistent,"dg_prefer_generated",True))
 
     def dg_rpg_scene_generate(who, intent):
         # Called via dg_runtime.app.start(), never on the screen rendering thread.
@@ -259,49 +306,47 @@ init 1001 python:
         return story_text
 
     def dg_rpg_art_generate(kind, key):
-        state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
+        # All image generation is explicit, no invisible image requests.
+        state=dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"])
         if kind == "background":
             if key not in dg_rpg.PLACE_NAMES:
                 raise ValueError("Unknown location")
-            label = dg_rpg.PLACE_NAMES[key]
-            prompt = (
-                u"Wide anime background in the hand-painted visual novel style of Everlasting Summer, "
-                u"the Sovyonok summer camp, warm 1980s summer aesthetic, no text, no people, "
-                u"no UI, composition suitable for dialogue and sprites, daytime. "
-                u"Location: " + label + u"."
-            )
-            transparent = False
-        elif kind == "sprite":
-            if key not in dg_rpg.NPC_NAMES:
-                raise ValueError("Unknown character")
-            label = dg_rpg.NPC_NAMES[key]
-            prompt = (
-                u"FULL BODY character sprite for a 2D anime visual novel in the hand-drawn "
-                u"Everlasting Summer summer camp style. Character: " + label + u". "
-                u"Appearance: " + DG_RPG_SPRITE_HINTS.get(key, u"expressive anime features") + u". "
-                u"Recognizable consistent hair, face and pioneer outfit, neutral standing pose, "
-                u"single centered character, clear outline, fully visible head and feet, "
-                u"NO scenery, NO props, NO text, transparent alpha background."
-            )
-            transparent = True
+            if key != state["place"]:
+                raise ValueError("Player moved before background request")
+            prompt=dg_art.background_prompt(state,key)
+            asset_key=key
+        elif kind in ("cg","cg18"):
+            if not isinstance(key,dict) or key.get("kind") != kind:
+                raise ValueError("Incorrect cinematic scene request")
+            if dg_art.marker(state,key) is None:
+                raise ValueError("Adult scene not permitted or unrecognized")
+            prompt=dg_art.cg_prompt(state,key)
+            asset_key=key["key"]
         else:
-            raise ValueError("Unknown asset type")
-        if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy":
-            workflow_dir = os.path.join(renpy.config.gamedir, "mods", "don_gen")
-            custom_workflow = os.path.join(workflow_dir, "comfy_workflow_%s_api.json" % kind)
-            workflow = (custom_workflow if os.path.isfile(custom_workflow)
-                        else os.path.join(workflow_dir, "comfy_workflow_api.json"))
-            logging.getLogger("don_gen").info("Local ComfyUI image request kind=%s key=%s", kind, key)
-            dg_runtime.app.set_status(u"Локальный ComfyUI: создаём изображение…")
-            data = dg_comfy.generate(workflow, prompt, kind)
-            return dg_rpg.save_asset(dg_rpg_root(), state["id"], kind, key, data)
-        app = dg_runtime.app
-        logging.getLogger("don_gen").info("AI image request kind=%s key=%s", kind, key)
-        app.set_status(u"Рисуем %s…" % (u"фон" if kind == "background" else u"спрайт"))
-        data = app.client.generate_background(prompt,
-                                              references=app.catalog.get("background_references") if kind == "background" else None,
-                                              transparent=transparent)
-        return dg_rpg.save_asset(dg_rpg_root(), state["id"], kind, key, data)
+            raise ValueError("Sprite generation disabled: use stock assets")
+        if getattr(persistent,"dg_rpg_art_provider","cloud") == "comfy":
+            workflow_dir=os.path.join(renpy.config.gamedir,"mods","don_gen")
+            dedicated=os.path.join(workflow_dir,"comfy_workflow_%s_api.json" % kind)
+            fallback=os.path.join(workflow_dir,"comfy_workflow_background_api.json")
+            generic=os.path.join(workflow_dir,"comfy_workflow_api.json")
+            if kind=="cg18" and not os.path.isfile(dedicated):
+                raise ValueError("Adult CG requires comfy_workflow_cg18_api.json")
+            workflow=(dedicated if os.path.isfile(dedicated) else
+                      fallback if os.path.isfile(fallback) else generic)
+            dg_runtime.app.set_status(u"ComfyUI: создаём иллюстрацию…")
+            data=dg_comfy.generate(workflow,prompt,kind,
+                                   negative_prompt=dg_art.NEGATIVE)
+        else:
+            if kind=="cg18":
+                raise ValueError("Adult CG is available only with explicit local ComfyUI workflow")
+            app=dg_runtime.app
+            app.set_status(u"Рисуем фон…" if kind=="background" else u"Рисуем CG…")
+            data=app.client.generate_background(prompt,transparent=False)
+        # Existing files are overwritten only after a validated PNG is ready.
+        relative=dg_rpg.save_asset(dg_rpg_root(),state["id"],kind,asset_key,data)
+        logging.getLogger("don_gen").info("Art saved type=%s key=%s path=%s",kind,asset_key,relative)
+        return relative
+
 
 default dg_rpg_state = None
 default dg_rpg_focus = None
