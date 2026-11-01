@@ -151,6 +151,19 @@ class WorldDirectorTests(unittest.TestCase):
         self.assertIn(u"Игорь", dg_world.current(self.state)["story"])
         self.assertIn(u"Музыкант", dg_world.current(self.state)["story"])
 
+    def test_weather_changes_npc_evening_schedule(self):
+        state = copy.deepcopy(self.state)
+        rainy = None
+        for day in range(2, 121):
+            state["day"] = day
+            if dg_world.weather(state)[0] == "rain" and day % 3 != 0:
+                rainy = day
+                break
+        self.assertIsNotNone(rainy)
+        state["slot"] = 2
+        self.assertEqual(dg_rpg.where_is(state, "mi"), "clubs")
+        self.assertIn(dg_world.weather(state)[1], [entry[1] for entry in dg_world.WEATHER])
+
     def test_ui_has_editor_and_world_story_and_diary(self):
         directory = os.path.join(os.path.dirname(__file__), "..", "don_gen")
         with open(os.path.join(directory, "dg_rpg.rpy"), "rb") as source:
