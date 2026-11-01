@@ -194,6 +194,40 @@ def decorate_dialogue(state,who,phase,scene,topic_index=0,stance=None):
     updated["narrative"]=c
     return updated
 
+def spontaneous(state,who=None):
+    """One freeform encounter at the current location, before any player choice.
+
+    It is safe to present without changing the simulation. A separate action
+    in the RPG engine spends time only after the player participates.
+    """
+    import dg_rpg
+    dg_rpg.validate(state)
+    if state["finished"]:
+        raise ValueError("The camp shift is complete")
+    if who is not None:
+        if who not in dg_rpg.NPC_NAMES or dg_rpg.where_is(state,who)!=state["place"]:
+            raise ValueError("NPC is no longer here")
+    count=state.get("surprise_counts",{}).get(
+        "%d:%d:%s:%s" % (state["day"],state["slot"],state["place"],who or "-"),0)
+    identity="spontaneous:%s:%d" % (who or "place",count)
+    c=context(state,"spontaneous",who,identity)
+    name=PERSONA[who][0] if who else dg_rpg.PLACE_NAMES[state["place"]]
+    if who:
+        lead=(u"Случайная встреча с %s. %s %s. " %
+              (name,name,c["character_hook"]))
+    else:
+        lead=(u"На территории «%s» происходит что-то, что не входит в обычный распорядок. " %
+              name)
+    body=(u"Всё начинается с небольшой подробности: %s. "
+          u"За событием скрывается %s. "
+          u"Но затем оказывается, что %s. "
+          u"Ситуация не решена: герой может выслушать, вмешаться своим действием "
+          u"или оставить развитие событий другим.") % (
+           c["physical_detail"],c["motivation"],c["unexpected_twist"])
+    return {"id":identity,"who":who,"text":lead+body,
+            "title":u"Неожиданная встреча" if who else u"Неожиданность в лагере",
+            "narrative":c}
+
 def memo(state):
     return state.setdefault("narrative_cache",{})
 
