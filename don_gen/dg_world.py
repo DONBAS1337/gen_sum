@@ -338,6 +338,17 @@ def prepare(state):
     return world["event"]
 
 
+
+def refresh_open_event(state):
+    """Recompute options after off-menu preparations without reopening closed day."""
+    world=ensure(state)
+    active=world.get("event")
+    if active is not None and active.get("day")==state["day"] and state["day"] not in world["closed_days"]:
+        world["event"]=make_event(state)
+    return world.get("event")
+
+
+
 def current(state):
     event = prepare(state)
     if event is None:
