@@ -302,6 +302,11 @@ def parse(text):
                if any(re.search(r"(?<!\w)" + re.escape(stem), lowered, re.UNICODE) for stem in stems)]
     if len(targets) > 1:
         targets = sorted(targets)
+    # Do not pretend an unknown *named* interlocutor is a known camp NPC.
+    # Generic "с ребятами" remains valid, but "с Марсианами" will not.
+    if not targets and selected == "mediate" and re.search(
+            u"(?<!\\w)[сС]\\s+([А-ЯЁ][а-яёА-ЯЁ-]+)", text, re.UNICODE):
+        return None
     return {"intent":selected,"target":targets[0] if len(targets)==1 else None,
             "ambiguous":len(targets)>1,"original":text}
 
