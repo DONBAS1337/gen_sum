@@ -1643,8 +1643,10 @@ screen dg_rpg_read_scene(scene_text):
 
 # Narration now uses Everlasting Summer's own Ren'Py say window.
 # This is a label, not a custom fullscreen paper-like Screen.
-label dg_rpg_vn_text(scene_text):
+label dg_rpg_vn_text(scene_text, who=None):
     scene expression dg_rpg_bg()
+    if who is not None and dg_rpg_sprite(who) is not None:
+        show expression dg_rpg_sprite(who) as dg_vn_character at right
     $ dg_rpg_vn_lines = dg_rpg_vn_pages(scene_text)
     $ dg_rpg_vn_line_index = 0
     while dg_rpg_vn_line_index < len(dg_rpg_vn_lines):
@@ -1653,8 +1655,8 @@ label dg_rpg_vn_text(scene_text):
         $ dg_rpg_vn_line_index += 1
     return
 
-label dg_rpg_vn_scene(scene_text, cg_possible=True):
-    call dg_rpg_vn_text(scene_text)
+label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None):
+    call dg_rpg_vn_text(scene_text, who)
     if cg_possible:
         menu:
             "Продолжить историю":
@@ -1664,8 +1666,8 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True):
     else:
         return None
 
-label dg_rpg_vn_choice(story_text, choice_pairs):
-    call dg_rpg_vn_text(story_text)
+label dg_rpg_vn_choice(story_text, choice_pairs, who=None):
+    call dg_rpg_vn_text(story_text, who)
     $ dg_rpg_vn_selected = renpy.display_menu([(dg_literal(caption), key) for key, caption in choice_pairs])
     if dg_rpg_vn_selected == "__cancel__":
         return None
@@ -1678,7 +1680,7 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
         $ dg_rpg_vn_dlg = dg_dialogue.topic(dg_rpg_state, who, topic_index)
     else:
         $ dg_rpg_vn_dlg = dg_dialogue.outcome(dg_rpg_state, who, topic_index, stance)
-    call dg_rpg_vn_text(dg_rpg_vn_dlg["text"])
+    call dg_rpg_vn_text(dg_rpg_vn_dlg["text"], who)
     if phase == "result":
         return
     $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
@@ -1840,12 +1842,12 @@ label dg_rpg_loop:
         if dg_social.personal_scene(dg_rpg_state, dg_rpg_focus):
             $ dg_personal_current = dg_social.personal_scene(dg_rpg_state,dg_rpg_focus)
             $ dg_personal_choices = list(dg_personal_current["choices"]) + [("__cancel__", u"Вернуться позже")]
-            call dg_rpg_vn_choice(dg_personal_current["text"], dg_personal_choices)
+            call dg_rpg_vn_choice(dg_personal_current["text"], dg_personal_choices, dg_rpg_focus)
             if _return:
                 $ dg_rpg_personal_stance = _return
                 $ dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))
                 $ dg_rpg_personal_result = {"title": dg_rpg_last_personal["title"], "text": dg_rpg_last_personal["text"]}
-                call dg_rpg_vn_scene(dg_rpg_personal_result["text"])
+                call dg_rpg_vn_scene(dg_rpg_personal_result["text"], True, dg_rpg_focus)
                 if _return == "cg":
                     $ dg_cg_plan = dg_rpg_cg_for("personal", dg_rpg_personal_result["title"], dg_rpg_personal_result["text"], dg_rpg_focus)
                     jump dg_rpg_cg_label
@@ -1880,7 +1882,7 @@ label dg_rpg_loop:
         $ dg_rpg_route_level = dg_rpg.available_route_events(dg_rpg_state, dg_rpg_focus)[0][0]
         $ dg_route_intro = dg_dialogue.route_intro(dg_rpg_state, dg_rpg_focus, dg_rpg_route_level)
         $ dg_route_choices = list(dg_route_intro["options"]) + [("__cancel__", u"Вернуться позже")]
-        call dg_rpg_vn_choice(dg_route_intro["text"], dg_route_choices)
+        call dg_rpg_vn_choice(dg_route_intro["text"], dg_route_choices, dg_rpg_focus)
         if _return:
             $ dg_rpg_route_stance = _return
             $ dg_rpg_apply("route", (dg_rpg_focus, dg_rpg_route_stance))
@@ -1901,7 +1903,7 @@ label dg_rpg_loop:
             call screen dg_error
         else:
             $ dg_rpg_open(dg_rpg_state["id"])
-            call dg_rpg_vn_scene(dg_runtime.app.result)
+            call dg_rpg_vn_scene(dg_runtime.app.result, True, dg_rpg_focus)
             if _return == "cg":
                 $ dg_cg_plan = dg_rpg_cg_for("ai", u"Особая сцена", dg_runtime.app.result, dg_rpg_focus, dg_rpg_intent)
                 jump dg_rpg_cg_label
@@ -1931,7 +1933,7 @@ label dg_rpg_world_label:
     $ dg_world_choices = [(choice["key"], choice["text"]) for choice in dg_world_active["choices"]]
     $ dg_world_choices.append(("custom", u"Написать своё действие · AI"))
     $ dg_world_choices.append(("__cancel__", u"Вернуться в лагерь"))
-    call dg_rpg_vn_choice(dg_world_active["story"], dg_world_choices)
+    call dg_rpg_vn_choice(dg_world_active["story"], dg_world_choices, dg_world_active["npc"])
     if _return == "custom":
         $ dg_rpg_hybrid_mode = "world"
         $ dg_rpg_hybrid_who = None
@@ -1940,7 +1942,7 @@ label dg_rpg_world_label:
     if _return:
         $ dg_rpg_world_stance = _return
         $ dg_rpg_apply("world", dg_rpg_world_stance)
-        call dg_rpg_vn_scene(dg_rpg_last_world["text"])
+        call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"])
         if _return == "cg":
             $ dg_cg_plan = dg_rpg_cg_for("world", dg_rpg_last_world["title"], dg_rpg_last_world["text"], dg_rpg_last_world.get("npc"))
             jump dg_rpg_cg_label
