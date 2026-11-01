@@ -245,6 +245,9 @@ init 1001 python:
             u"Верни только текст сцены без Markdown, программного кода и меню."
         )
         instructions += u" " + dg_adult.scene_policy(state, who)
+        violation = dg_adult.validate_action(state, intent, who)
+        if violation:
+            raise ValueError(violation)
         logging.getLogger("don_gen").info("AI scene request npc=%s day=%d", who, state["day"])
         app.set_status(u"Создаём особую сцену…")
         story_text = app.client.generate(instructions, json.dumps(context, ensure_ascii=False),
@@ -455,10 +458,10 @@ screen dg_rpg_setup:
     text u"Ваша история начинается здесь" style "dg_title" xpos 120 ypos 120 size 67
     frame:
         background DG_PAPER
-        padding (50, 32)
-        xpos 300 ypos 250 xsize 1320 ysize 715
+        padding (48, 28)
+        xpos 300 ypos 208 xsize 1320 ysize 826
         vbox:
-            spacing 15
+            spacing 9
             hbox:
                 spacing 65
                 vbox:
