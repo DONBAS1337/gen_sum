@@ -18,6 +18,16 @@ jobs:
           python-version: "3.11"
       - name: Compile all standalone Python modules
         run: python -m compileall -q don_gen
+      - name: Verify code is readable by Python 2.7 grammar (Ren'Py 7.x)
+        run: |
+          python -W ignore::DeprecationWarning - <<'PY'
+          from pathlib import Path
+          from lib2to3.refactor import RefactoringTool
+          parser = RefactoringTool([])
+          for path in Path("don_gen").glob("*.py"):
+              parser.refactor_string(path.read_text(encoding="utf-8") + "\n", str(path))
+              print("Py2 grammar OK:", path)
+          PY
       - name: Test DON-GEN core and standalone layout
         run: python -m unittest discover -s tests -p 'test_don_gen*.py' -v
       - name: Verify no legacy imports in standalone package
