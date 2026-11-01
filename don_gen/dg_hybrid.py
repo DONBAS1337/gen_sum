@@ -159,14 +159,14 @@ def preview(state, action, mode="free", who=None, topic=None):
             raise ValueError("Invalid conversation topic")
         topic = int(topic)
     action=_clean_action(action)
-    violation=dg_adult.validate_action(state, action, who)
-    if violation:
-        return {"status":"unknown","message":violation,"mode":mode,
-                "action":action,"who":who,"topic":topic}
-    # Migrate only a COPY; previews must never change the currently saved game.
+    # Validate policy on the COPIED, migrated world; preview has no writes.
     source=copy.deepcopy(state)
     import dg_rpg
     dg_rpg.validate(source)
+    violation=dg_adult.validate_action(source, action, who)
+    if violation:
+        return {"status":"unknown","message":violation,"mode":mode,
+                "action":action,"who":who,"topic":topic}
     baseline=fingerprint(source)
     after,result=_simulate(source,action,mode,who)
     if result.get("status")!="done":
