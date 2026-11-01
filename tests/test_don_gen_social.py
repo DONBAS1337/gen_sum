@@ -33,6 +33,7 @@ class SocialSandboxTests(unittest.TestCase):
             self.assertEqual(len(data["choices"]),3)
 
     def test_personal_arc_works_through_rpg_and_unlocks_plots(self):
+        self.state["social"]["incident"]["status"]="resolved"
         st=self.state
         dg_rpg.move(st,"stage")
         st["affinity"]["mi"]=9
@@ -81,6 +82,7 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(len(loaded["social"]["actions"]),3)
 
     def test_free_action_text_and_unrecognized_command(self):
+        self.state["social"]["incident"]["status"]="resolved"
         st=self.state
         day,slot,energy=st["day"],st["slot"],st["energy"]
         for text in (u"Поговорить с Марсианами о луне" ,u"Сделать бессмысленное действие с Леной и Мику"):
@@ -95,6 +97,7 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(st["slot"],1)
 
     def test_absent_target_no_time_cost_and_no_farming(self):
+        self.state["social"]["incident"]["status"]="resolved"
         st=self.state
         self.assertEqual(dg_rpg.free_action(st,u"Помочь Мику")["status"],"unknown")
         self.assertEqual(st["slot"],0)
@@ -114,7 +117,7 @@ class SocialSandboxTests(unittest.TestCase):
         for _ in range(4):
             dg_rpg.activity(st,"rest")
         self.assertEqual(st["day"],2)
-        self.assertEqual(len(st["social"]["rumours"]),1)
+        self.assertEqual(len(st["social"]["rumours"]),2)
         first=copy.deepcopy(st["social"]["rumours"])
         dg_social.ensure(st)
         dg_social.npc_daily(st)
@@ -122,6 +125,7 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(len(st["social"]["daily_seen"]),1)
 
     def test_mediation_shifts_npc_npc_relationship(self):
+        self.state["social"]["incident"]["status"]="resolved"
         st=self.state
         before=dg_social.bond(st,"dv","mi")
         dg_rpg.move(st,"stage")
