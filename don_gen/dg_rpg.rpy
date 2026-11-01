@@ -1736,6 +1736,9 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None, scene_identity=Non
     if scene_identity is not None:
         call dg_rpg_narrate("result",who,scene_identity,scene_text)
         $ scene_text = _return
+    # The optional CG must depict the actual visible narrative, not the
+    # shorter scripted fallback that was replaced by the narrator.
+    $ store.dg_rpg_last_narrated_text = scene_text
     call dg_rpg_vn_text(scene_text, who)
     if cg_possible:
         menu:
@@ -1956,7 +1959,7 @@ label dg_rpg_loop:
                 $ dg_rpg_incident_result = {"title":dg_rpg_last_incident["title"],"text":dg_rpg_last_incident["text"]}
                 call dg_rpg_vn_scene(dg_rpg_incident_result["text"], True, None, "incident_outcome:%d:%s" % (dg_rpg_state["day"],dg_rpg_incident_choice))
                 if _return == "cg":
-                    $ dg_cg_plan = dg_rpg_cg_for("incident", dg_rpg_incident_result["title"], dg_rpg_incident_result["text"], None)
+                    $ dg_cg_plan = dg_rpg_cg_for("incident", dg_rpg_incident_result["title"], dg_rpg_last_narrated_text, None)
                     jump dg_rpg_cg_label
         jump dg_rpg_loop
     if dg_rpg_cmd == "personal":
@@ -1971,7 +1974,7 @@ label dg_rpg_loop:
                 $ dg_rpg_personal_result = {"title": dg_rpg_last_personal["title"], "text": dg_rpg_last_personal["text"]}
                 call dg_rpg_vn_scene(dg_rpg_personal_result["text"], True, dg_rpg_focus, "personal_result:%s:%s:%d" % (dg_rpg_focus,dg_rpg_personal_stance,dg_rpg_state["day"]))
                 if _return == "cg":
-                    $ dg_cg_plan = dg_rpg_cg_for("personal", dg_rpg_personal_result["title"], dg_rpg_personal_result["text"], dg_rpg_focus)
+                    $ dg_cg_plan = dg_rpg_cg_for("personal", dg_rpg_personal_result["title"], dg_rpg_last_narrated_text, dg_rpg_focus)
                     jump dg_rpg_cg_label
         jump dg_rpg_loop
     if dg_rpg_cmd == "talk":
@@ -2071,7 +2074,7 @@ label dg_rpg_world_label:
         $ dg_rpg_apply("world", dg_rpg_world_stance)
         call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"], "outcome:"+dg_world_active["id"]+":"+dg_rpg_world_stance)
         if _return == "cg":
-            $ dg_cg_plan = dg_rpg_cg_for("world", dg_rpg_last_world["title"], dg_rpg_last_world["text"], dg_rpg_last_world.get("npc"))
+            $ dg_cg_plan = dg_rpg_cg_for("world", dg_rpg_last_world["title"], dg_rpg_last_narrated_text, dg_rpg_last_world.get("npc"))
             jump dg_rpg_cg_label
     jump dg_rpg_loop
 
