@@ -120,6 +120,7 @@ def ensure(state):
     social.setdefault("daily_seen", [])
     social.setdefault("rumours", [])
     social.setdefault("last_day_processed", state["day"])
+    social.setdefault("incident", None)
     return social
 
 
@@ -386,6 +387,102 @@ def action(state, text, nearby):
     return {"status":"done","text":narration,"intent":intent,"target":target,
             "quest_updates":notes,"arc":arc,"impact":impact}
 
+
+
+
+# Simultaneous, observable NPC-vs-NPC situations. An incident affects
+# where both characters are currently visible on the camp map.
+INCIDENT_PLACES=("stage","clubs","square","library","sports",
+                 "library","infirmary","lake")
+INCIDENT_CHOICES=(
+    ("mediate",u"Выслушать обоих и помочь договориться"),
+    ("support_a",u"Поддержать первого участника"),
+    ("support_b",u"Поддержать второго участника")
+)
+
+
+def prepare_incident(state):
+    social=ensure(state)
+    current=social.get("incident")
+    if state.get("finished"):
+        return None
+    if current is None or current["day"]!=state["day"]:
+        index=(state["day"]+int(state["id"][4:8],16))%len(PAIR_DEFS)
+        a,b,score,title,description=PAIR_DEFS[index]
+        social["incident"]={"day":state["day"],"pair":[a,b],
+                            "place":INCIDENT_PLACES[index],"title":title,
+                            "text":description,"status":"open"}
+    return social["incident"]
+
+
+def incident(state):
+    current=ensure(state).get("incident")
+    return current if current and current["day"]==state["day"] and current["status"]=="open" and not state.get("finished") else None
+
+
+def incident_at(state, place):
+    current=incident(state)
+    return current if current and current["place"]==place else None
+
+
+def resolve_incident(state, choice):
+    current=incident_at(state, state["place"])
+    if not current or choice not in dict(INCIDENT_CHOICES):
+        raise ValueError("No encounter or unsupported choice")
+    if state["energy"]<9:
+        raise ValueError("Not enough energy")
+    social=ensure(state)
+    world=dg_world.ensure(state)
+    a,b=current["pair"]
+    key=_pair(a,b)
+    state["energy"]-=9
+    if choice=="mediate":
+        bond_gain=10
+        world["morale"]=clamp(world["morale"]+4)
+        state["stats"]["kindness"]+=2
+        state["affinity"][a]=clamp(state["affinity"][a]+4)
+        state["affinity"][b]=clamp(state["affinity"][b]+4)
+        outcome=u"Ты даёшь каждому высказаться и находишь общее решение. Они не обязаны стать лучшими друзьями, но теперь способны работать вместе."
+    else:
+        preferred=a if choice=="support_a" else b
+        other=b if preferred==a else a
+        bond_gain=-5
+        state["affinity"][preferred]=clamp(state["affinity"][preferred]+7)
+        state["affinity"][other]=clamp(state["affinity"][other]-2)
+        world["freedom"]=clamp(world["freedom"]+2)
+        outcome=u"Ты открыто поддерживаешь %s. %s благодарит тебя, а %s чувствует себя оставленным без поддержки. Этот спор ещё даст о себе знать." % (
+            NAMES[preferred], NAMES[preferred], NAMES[other])
+    social["bonds"][key]=max(-100,min(100,social["bonds"][key]+bond_gain))
+    current["status"]="resolved"
+    current["choice"]=choice
+    current["bond_delta"]=bond_gain
+    arc="festival" if _pair(a,b)==_pair("dv","mi") else "radio" if _pair(a,b)==_pair("el","sh") else "council"
+    preps=world.setdefault("preparations",{})
+    preps[arc]=clamp(preps.get(arc,0)+4)
+    dg_world.refresh_open_event(state)
+    narrative=u"%s\n\n%s\n\nОтношения между персонажами: %+d, теперь %+d." % (
+        current["text"],outcome,bond_gain,social["bonds"][key])
+    social["rumours"].append({"day":state["day"],"a":a,"b":b,
+                             "text":narrative,"delta":bond_gain})
+    social["rumours"]=social["rumours"][-90:]
+    return {"title":current["title"],"text":narrative,"pair":current["pair"],"delta":bond_gain}
+
+
+def missed_incident(state):
+    current=incident(state)
+    if not current:
+        return None
+    social=ensure(state)
+    a,b=current["pair"]
+    key=_pair(a,b)
+    delta = -3 if social["bonds"][key]<0 else 1
+    social["bonds"][key]=max(-100,min(100,social["bonds"][key]+delta))
+    current["status"]="missed"
+    text=u"Пока ты был занят, %s и %s решили вопрос самостоятельно. Ты не повлиял на их спор; их отношения изменились на %+d." % (
+        NAMES[a],NAMES[b],delta)
+    social["rumours"].append({"day":state["day"],"a":a,"b":b,"text":text,"delta":delta})
+    social["rumours"]=social["rumours"][-90:]
+    return text
 
 
 def quest_at(state, place):
