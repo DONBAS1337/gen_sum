@@ -79,7 +79,8 @@ class WorldDirectorTests(unittest.TestCase):
         for _ in range(4):
             dg_rpg.activity(self.state, "rest")
         self.assertEqual(self.state["day"], 2)
-        self.assertEqual(self.state["world"]["morale"], old_morale - 2)
+        npc_change = 1 if self.state["social"]["rumours"][-1]["delta"] > 0 else -1
+        self.assertEqual(self.state["world"]["morale"], old_morale - 2 + npc_change)
         self.assertEqual(self.state["world"]["chronicle"][0]["status"], "missed")
         self.assertNotEqual(dg_world.current(self.state)["id"], initial["id"])
 
