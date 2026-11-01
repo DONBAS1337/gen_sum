@@ -68,8 +68,8 @@ PLOTS = {
              u"Ты предлагаешь идти вместе, не торопясь и не рискуя.",
              u"Ты изучаешь рисунок и берег, замечая необычные детали.",
              u"Ты решаешь пройти тропу самостоятельно и доложить остальным."),
-            (u"Забытый указатель", u"За деревьями находится старый столб с выцветшим названием. Юля будто знает, что за ним скрывается, но говорит загадками.",
-             u"Ты терпеливо выслушиваешь Юлю и Лену.",
+            (u"Забытый указатель", u"За деревьями обнаруживается старый столб с выцветшим названием. На влажной земле заметны странные следы, как будто здесь только что прошёл кто-то незнакомый.",
+             u"Ты терпеливо выслушиваешь Лену и внимательно исследуешь необычные следы.",
              u"Ты сравниваешь название с найденной схемой лагеря.",
              u"Ты идёшь дальше по указателю, пока другие раздумывают."),
             (u"Письмо без адресата", u"В щели между досками лежит записка о чьём-то давнем обещании вернуться к озеру. Ни имени, ни даты нет.",
@@ -283,6 +283,10 @@ def make_event(state):
                  "title": title, "story": situation, "choices": choices}
     else:
         daily_index = _seed(state["id"], day, "daily") % len(DAILY_MOTIFS)
+        if not state.get("mystery", {}).get("yulia_discovered", False):
+            # Never reveal the mystical figure through a random daytime vignette.
+            if DAILY_MOTIFS[daily_index][1] == "uv":
+                daily_index = (daily_index + 1) % len(DAILY_MOTIFS)
         selected = DAILY_MOTIFS[daily_index]
         place, who, title, lead = selected
         prior = world["decisions"][-1]["stance"] if world["decisions"] else ""
@@ -304,10 +308,10 @@ def make_event(state):
     hero = state["hero"]
     if day == 1:
         hero_intro = u"Ты — %s, %d лет. Предыстория: %s. Впервые знакомишься с жизнью Совёнка." % (
-            hero["name"], hero["age"], hero["background"])
+            hero["name"], hero["age"], hero["background"][:850])
     else:
         hero_intro = u"%s (%d лет) вспоминает, каким непривычным казался лагерь в первый день. %s" % (
-            hero["name"], hero["age"], hero["background"])
+            hero["name"], hero["age"], hero["background"][:850])
     if state.get("source", "vanilla").startswith("7dl:"):
         hero_intro += u" В этой смене отношения с Мику развиваются в варианте 7ДЛ."
     event["story"] = hero_intro + u"\n\nПогода: " + weather(state)[1] + u". " + weather(state)[2] + u"\n\n" + event["story"]
