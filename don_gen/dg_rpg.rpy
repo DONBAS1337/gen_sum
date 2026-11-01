@@ -1735,6 +1735,7 @@ screen dg_rpg_read_scene(scene_text):
 # Narration now uses Everlasting Summer's own Ren'Py say window.
 # This is a label, not a custom fullscreen paper-like Screen.
 label dg_rpg_vn_text(scene_text, who=None):
+    $ renpy.hide_screen("dg_scene")
     scene expression dg_rpg_bg()
     if who is not None and dg_rpg_sprite(who) is not None:
         show expression dg_rpg_sprite(who) as dg_vn_character at right
@@ -1814,7 +1815,9 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
 
 label dg_rpg_main:
     $ dg_setup()
-    $ dg_place("gate")
+    # The old DG place screen paints a gate image on the screens layer,
+    # covering Ren'Py master-layer backgrounds and actor sprites.
+    $ renpy.hide_screen("dg_scene")
 label dg_rpg_picker_label:
     call screen dg_rpg_picker
     $ dg_rpg_cmd, dg_rpg_value = _return
