@@ -610,7 +610,7 @@ screen dg_rpg_hub:
                     xsize 855
                     vbox:
                         spacing 8
-                        text (u"★ СЕГОДНЯ: " + day_event["title"]) style "dg_text" size 29 color "#ffe5a0"
+                        text (u"СЕГОДНЯ: " + day_event["title"]) style "dg_text" size 29 color "#ffe5a0"
                         text (u"Место события: " + dg_rpg.PLACE_NAMES[day_event["place"]] + u" · линия: " +
                               (dg_world.PLOTS[day_event["arc"]]["name"] if day_event["arc"] != "daily" else u"лагерные истории")) style "dg_text" size 22
                         textbutton (u"НАЧАТЬ СОБЫТИЕ" if dg_rpg_state["place"] == day_event["place"] else u"ОТПРАВИТЬСЯ К СОБЫТИЮ") style "dg_navlink" action Return(("world", None) if dg_rpg_state["place"] == day_event["place"] else ("world_travel", day_event["place"]))
@@ -633,7 +633,7 @@ screen dg_rpg_hub:
                     xsize 855
                     vbox:
                         spacing 7
-                        text (u"⚑ СИТУАЦИЯ МЕЖДУ NPC: " + active_incident["title"]) style "dg_text" size 28 color "#ffe5a0"
+                        text (u"ВСТРЕЧА МЕЖДУ NPC: " + active_incident["title"]) style "dg_text" size 28 color "#ffe5a0"
                         textbutton u"ВМЕШАТЬСЯ В СОБЫТИЕ" style "dg_navlink" action Return(("incident", None)) sensitive dg_rpg_state["energy"] >= 9
             if not dg_rpg_state["finished"]:
                 text u"ПОВСЕДНЕВНЫЕ ЗАНЯТИЯ" style "dg_meta"
@@ -677,7 +677,7 @@ screen dg_rpg_hub:
                                 textbutton u"Своя реплика + AI" style "dg_navlink" text_size 23 action Return(("hybrid_npc", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"Спрайт" style "dg_navlink" action Return(("sprite", who)) sensitive not dg_rpg_state["finished"]
                             if dg_social.personal_scene(dg_rpg_state, who) and not dg_rpg_state["finished"]:
-                                textbutton u"★ ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
+                                textbutton u"ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"Сюжетный этап рута" style "dg_navlink" action Return(("route", who))
             text u"Разговоры и активности меняют время и отношения локально. AI-сцены вызываются только вручную." style "dg_small" size 23
@@ -869,7 +869,7 @@ screen dg_rpg_npc_incident:
             padding (49, 40)
             vbox:
                 spacing 23
-                text u"⚑ СОБЫТИЕ МЕЖДУ ПЕРСОНАЖАМИ" style "dg_meta" size 25 color "#ffe5a0"
+                text u"СОБЫТИЕ МЕЖДУ ПЕРСОНАЖАМИ" style "dg_meta" size 25 color "#ffe5a0"
                 text dg_literal(event["title"]) style "dg_title" size 51
                 frame:
                     background Solid("#071a24")
@@ -1032,7 +1032,7 @@ screen dg_rpg_world_event:
             padding (39, 25)
             vbox:
                 spacing 8
-                text (u"★ ЖИВОЙ СЮЖЕТ · ДЕНЬ %d" % dg_rpg_state["day"]) style "dg_meta" size 24 color "#ffdd98"
+                text (u"ЖИВОЙ СЮЖЕТ · ДЕНЬ %d" % dg_rpg_state["day"]) style "dg_meta" size 24 color "#ffdd98"
                 text dg_literal(active["title"]) style "dg_title" size 48
                 text (dg_rpg.PLACE_NAMES[active["place"]] + u" · " +
                       (dg_world.PLOTS[active["arc"]]["name"] if active["arc"] != "daily" else u"Повседневная история")) style "dg_sub" size 27
@@ -1198,7 +1198,7 @@ screen dg_rpg_journal:
                     null height 18
                     text u"ЗАДАНИЯ" style "dg_meta"
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):
-                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" ✓" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 24
+                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" (готово)" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 24
 
 screen dg_rpg_route_choice(who):
     modal True
