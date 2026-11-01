@@ -823,8 +823,7 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
             if phase != "result":
                 for choice_id, caption in scene["options"]:
                     textbutton dg_literal(caption) style "dg_navlink" text_size 27 action Return(choice_id)
-                if phase == "topics":
-                    textbutton u"НАПИСАТЬ СВОЮ РЕПЛИКУ · AI-РЕАКЦИЯ" style "dg_navlink" text_size 25 action Return("custom")
+                textbutton u"НАПИСАТЬ СВОЮ РЕПЛИКУ · AI-РЕАКЦИЯ" style "dg_navlink" text_size 25 action Return("custom")
                 textbutton u"Завершить разговор без выбора" style "dg_navlink" text_size 24 action Return(None)
             else:
                 textbutton u"Закончить встречу" style "dg_primary" text_size 33 action Return("done")
@@ -1244,6 +1243,10 @@ label dg_rpg_loop:
             jump dg_rpg_loop
         $ dg_rpg_talk_topic = int(_return)
         call screen dg_rpg_dialogue(dg_rpg_focus, "choice", dg_rpg_talk_topic)
+        if _return == "custom":
+            $ dg_rpg_hybrid_mode = "npc"
+            $ dg_rpg_hybrid_who = dg_rpg_focus
+            jump dg_rpg_hybrid_entry
         if _return is None:
             jump dg_rpg_loop
         $ dg_rpg_talk_stance = _return
