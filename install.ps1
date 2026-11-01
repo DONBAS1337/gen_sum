@@ -43,8 +43,8 @@ if (Test-Path -LiteralPath $Dest) {
 
 Copy-Item -Path (Join-Path $Source "*") -Destination $Dest -Force -Recurse
 # Remove only DON-GEN bytecode. Old Ren'Py bytecode can shadow updated .rpy/.py.
-Get-ChildItem -LiteralPath $Dest -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.Extension -in @(".rpyc", ".pyo") } |
+Get-ChildItem -LiteralPath $Dest -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -in @(".rpyc", ".pyo", ".pyc") } |
     Remove-Item -Force
 
 Write-Host ""
