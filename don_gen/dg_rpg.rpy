@@ -355,7 +355,7 @@ screen dg_rpg_map:
         hbox:
             xpos 95 ypos 22 spacing 36
             text u"DON-GEN · СОВЁНОК" style "dg_meta" size 26
-            text (u"День %d/%d · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"], dg_rpg.SLOTS[dg_rpg_state["slot"]])) style "dg_text" size 27
+            text (u"День %d/%d · %s · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"], dg_rpg.SLOTS[dg_rpg_state["slot"]], dg_world.weather(dg_rpg_state)[1])) style "dg_text" size 27
             text (u"Вы сейчас: " + dg_rpg.PLACE_NAMES[dg_rpg_state["place"]]) style "dg_text" size 27 color "#ffe8a1"
     textbutton u"ЗАКРЫТЬ КАРТУ" style "dg_map_pin" xpos 1620 ypos 25 action Return(None)
     # Geographic points match the supplied map. Click any point for free travel.
@@ -400,6 +400,7 @@ screen dg_rpg_hub:
         text dg_literal(u"%s, %d лет · %s" % (dg_rpg_state["hero"]["name"], dg_rpg_state["hero"]["age"], dg_rpg_state["hero"]["background"])) style "dg_sub" size 28
         text (u"Энергия: %d/100   ·   Любознательность: %d   ·   Доброта: %d   ·   Навык: %d" %
               (dg_rpg_state["energy"], dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["skill"])) style "dg_small"
+        text (u"Погода: " + dg_world.weather(dg_rpg_state)[1] + u" · Встречи и прогулки зависят от погоды") style "dg_small" size 23 color "#ffe3ae"
         $ day_event = dg_world.current(dg_rpg_state)
         if day_event:
             frame:
@@ -530,7 +531,7 @@ screen dg_rpg_finale:
                 scrollbars "vertical"
                 ysize 570
                 text dg_literal(dg_world.finale(dg_rpg_state)) style "dg_ink_small" size 30 xmaximum 1260
-            textbutton u"Вернуться к дневнику" style "dg_ink_act" action Return(None)
+            textbutton u"Вернуться в лагерь" style "dg_ink_act" action Return(None)
 
 screen dg_rpg_world_event:
     modal True
