@@ -14,6 +14,16 @@ init 1001 python:
     import dg_adult
     import dg_art
 
+    def dg_rpg_preview_height(value, low, high, base, chars_per_row, row_height):
+        # In Everlasting Summer's Ren'Py 7 store, 'min'/'max' may be unicode
+        # globals rather than Python built-ins. Avoid either in screen code.
+        height = base + len(value) // chars_per_row * row_height
+        if height < low:
+            return low
+        if height > high:
+            return high
+        return height
+
     def dg_rpg_root():
         return dg_runtime.app.library.root
 
@@ -76,10 +86,17 @@ init 1001 python:
 
     def dg_rpg_hybrid_preview(mode, action, who=None, topic=None):
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
-        store.dg_rpg_hybrid_plan = dg_hybrid.preview(current, action, mode, who, topic)
+        try:
+            plan = dg_hybrid.preview(current, action, mode, who, topic)
+        except (ValueError, TypeError, UnicodeError) as exc:
+            plan = {"status":"unknown","mode":mode,"message":unicode(exc),
+                    "action":u"","who":who,"topic":topic}
+        # Always publish a preview, including rejections. Follow-up screens
+        # must never access an undefined store variable after invalid input.
+        store.dg_rpg_hybrid_plan = plan
         logging.getLogger("don_gen").info(
             "Hybrid preview mode=%s day=%d valid=%s", mode, current["day"],
-            store.dg_rpg_hybrid_plan["status"] == "ready")
+            plan["status"] == "ready")
 
     def dg_rpg_hybrid_generate(plan):
         # The background worker ONLY generates a text string. No save writes.
@@ -363,6 +380,7 @@ init 1001 python:
         return relative
 
 
+default dg_rpg_hybrid_plan = None
 default dg_rpg_state = None
 default dg_rpg_focus = None
 
@@ -497,11 +515,11 @@ screen dg_rpg_edit_field(field, current):
                 frame:
                     background Solid("#081e29")
                     padding (22, 19)
-                    xsize 1310 ysize (min(365, max(195, 155 + len(editor_text) // 55 * 26)))
+                    xsize 1310 ysize (dg_rpg_preview_height(editor_text, 195, 365, 155, 55, 26))
                     viewport:
                         mousewheel True
                         scrollbars "vertical"
-                        ysize (min(325, max(155, 115 + len(editor_text) // 55 * 26)))
+                        ysize (dg_rpg_preview_height(editor_text, 155, 325, 115, 55, 26))
                         text dg_literal(editor_text if editor_text else u"Начни вводить историю — здесь появится читаемый перенос текста.") style "dg_text" size 29 xmaximum 1195
             else:
                 text (u"Введено символов: %d" % len(editor_text)) style "dg_text" size 23
@@ -894,10 +912,10 @@ screen dg_rpg_hybrid_input(mode, who=None):
             frame:
                 background Solid("#071e29")
                 padding (21, 18)
-                xsize 1370 ysize (min(310, max(140, 140 + len(action_text) // 80 * 24)))
+                xsize 1370 ysize (dg_rpg_preview_height(action_text, 140, 310, 140, 80, 24))
                 viewport:
                     mousewheel True scrollbars "vertical"
-                    ysize (min(270, max(100, 100 + len(action_text) // 80 * 24)))
+                    ysize (dg_rpg_preview_height(action_text, 100, 270, 100, 80, 24))
                     text dg_literal(action_text if action_text else u"Текст здесь будет переноситься автоматически, чтобы даже длинная реплика оставалась читаемой.") style "dg_text" size 27 xmaximum 1280
             text u"Любые игровые награды и изменения рассчитывает локальный движок. Модель отвечает только за повествование." style "dg_text" size 24 xmaximum 1310
             hbox:
@@ -1068,10 +1086,10 @@ screen dg_rpg_free_input:
             frame:
                 background Solid("#09242e")
                 padding (20, 15) xsize 1350
-                ysize (min(300, max(140, 140 + len(action_text) // 80 * 24)))
+                ysize (dg_rpg_preview_height(action_text, 140, 300, 140, 80, 24))
                 viewport:
                     mousewheel True scrollbars "vertical"
-                    ysize (min(260, max(100, 100 + len(action_text) // 80 * 24)))
+                    ysize (dg_rpg_preview_height(action_text, 100, 260, 100, 80, 24))
                     text dg_literal(action_text if action_text else u"Здесь будет показана длинная реплика с переносом строк.") style "dg_text" size 28 xmaximum 1260
             text u"Например: «Помочь Мику с репетицией». Неизвестное действие не расходует ход. Можно выбрать гибридную AI-сцену отдельно." style "dg_text" size 23 color "#b9d4d6" xmaximum 1290
             hbox:
@@ -1788,6 +1806,8 @@ label dg_rpg_hybrid_entry:
     jump dg_rpg_hybrid_review_label
 
 label dg_rpg_hybrid_review_label:
+    if not isinstance(dg_rpg_hybrid_plan, dict):
+        jump dg_rpg_hybrid_entry
     call screen dg_rpg_hybrid_review(dg_rpg_hybrid_plan)
     if _return == "retry":
         jump dg_rpg_hybrid_entry
