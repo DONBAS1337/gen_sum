@@ -36,8 +36,12 @@ def fingerprint(state):
     return hashlib.sha256(text).hexdigest()
 
 def _clean_action(action):
+    # Ren'Py 7/Python 2 ScreenVariableInputValue can return an 8-bit str.
+    # Normalize at the boundary; never reject a legitimate user input.
+    if isinstance(action, bytes):
+        action = action.decode("utf-8")
     if not isinstance(action, text_type):
-        raise ValueError("Action must be unicode text")
+        raise ValueError("Action must be text")
     action = action.strip()
     if not action or len(action) > MAX_ACTION or any(ord(c) < 32 for c in action):
         raise ValueError("Action is empty, multiline or too long")
@@ -254,8 +258,10 @@ def commit(state, plan, scene_text=None):
     if outcome.get("status")!="done" or fingerprint(after)!=plan["after"]:
         raise ValueError("Action results no longer match the approved preview")
     if scene_text is not None:
+        if isinstance(scene_text, bytes):
+            scene_text=scene_text.decode("utf-8")
         if not isinstance(scene_text,text_type):
-            raise ValueError("Model must return unicode text")
+            raise ValueError("Model must return text")
         scene_text=scene_text.strip()
         if len(scene_text)<45 or len(scene_text)>MAX_SCENE:
             raise ValueError("Model scene too short or too long; game state unchanged")
