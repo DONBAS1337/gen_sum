@@ -38,6 +38,7 @@ class DialogueTests(unittest.TestCase):
                 self.assertEqual(len(set(answers)), 3)
 
     def test_conversation_updates_stats_affinity_and_journal(self):
+        self.state["social"]["incident"]["status"] = "resolved"
         dg_rpg.move(self.state, "clubs")
         self.assertEqual(dg_rpg.where_is(self.state, "mi"), "stage")
         self.state["slot"] = 1
@@ -57,6 +58,7 @@ class DialogueTests(unittest.TestCase):
         self.assertTrue(dg_rpg.summary_for_ai(loaded, "mi", u"Поговорить")["recent_dialogue"])
 
     def test_repeated_same_day_talk_has_diminishing_returns(self):
+        self.state["social"]["incident"]["status"] = "resolved"
         dg_rpg.move(self.state, "clubs")
         self.state["slot"] = 1
         dg_rpg.conversation(self.state, "el", 1, "curious")
