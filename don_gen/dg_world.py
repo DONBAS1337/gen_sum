@@ -268,6 +268,17 @@ def make_event(state):
                               "metric": metric, "delta": delta, "stat": stat,
                               "stat_gain": gain, "affinity": affinity}
                              for index, (key, label, metric, delta, stat, gain, affinity) in enumerate(OPTIONS)]}
+    # Character identity and selected canon profile enter story context, not only a stat sheet.
+    hero = state["hero"]
+    if day == 1:
+        hero_intro = u"Ты — %s, %d лет. Предыстория: %s. Впервые знакомишься с жизнью Совёнка." % (
+            hero["name"], hero["age"], hero["background"])
+    else:
+        hero_intro = u"%s (%d лет) вспоминает, каким непривычным казался лагерь в первый день. %s" % (
+            hero["name"], hero["age"], hero["background"])
+    if state.get("source", "vanilla").startswith("7dl:"):
+        hero_intro += u" В этой смене отношения с Мику развиваются в варианте 7ДЛ."
+    event["story"] = hero_intro + u"\n\n" + event["story"]
     # Player skills unlock a fourth way to resolve world events.
     if state["stats"]["skill"] >= 12 or state["stats"]["curiosity"] >= 12:
         event["choices"].append({"key": "specialist", "text": u"Использовать свои навыки и найти компромисс",
