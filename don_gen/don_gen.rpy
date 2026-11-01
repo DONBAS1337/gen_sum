@@ -620,62 +620,60 @@ screen dg_login():
 screen dg_home():
     modal True
     $ stories = dg_runtime.app.stories
-    vbox:
-        at dg_enter(0)
-        xpos 120
-        ypos 150
-        text u"DON-GEN" style "dg_title"
-    frame:
-        at dg_enter(1)
-        style "dg_box"
-        xpos 60
-        ypos 300
-        xsize 1800
-        ysize 596
-        hbox:
-            spacing 60
-            vbox:
-                xsize 1040
-                spacing 14
-                if stories:
-                    text u"ВАШИ ИСТОРИИ" style "dg_meta"
-                    viewport:
-                        mousewheel True
-                        draggable False
-                        scrollbars "vertical"
-                        style_prefix "gs"
-                        ysize 420
-                        vbox:
-                            spacing 18
-                            for number, story in enumerate(stories):
-                                button:
-                                    style "dg_row"
-                                    action Return(("story", story["id"]))
-                                    at dg_hover()
-                                    vbox:
-                                        spacing 2
-                                        text (u"%02d   ·   %s" % (number + 1, dg_date(story))) style "dg_meta"
-                                        text dg_literal(story["title"]) style "dg_row_text" xmaximum 900
-                else:
-                    text u"Пока здесь пусто." style "dg_sub" outlines []
-                    text u"Первая история появится, как только вы опишете её начало. Одной-двух фраз достаточно: рассказчик подхватит." style "dg_text" outlines [] xmaximum 900
-            vbox:
-                at dg_enter(2)
-                xsize 552
-                spacing 18
-                textbutton u"Начать новую историю" style "dg_primary" action Return(("new", None))
-                textbutton u"Открытый мир · RPG" style "dg_act" action Return(("rpg", None))
-                null height 14
-                textbutton u"Настройки" style "dg_act" action Return(("settings", None))
-                textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diagnostics", None))
-                textbutton u"Сохранения игры" style "dg_act" action ShowMenu("load")
-                textbutton u"Выйти" style "dg_act" action Return(("exit", None))
-    if dg_runtime.app.library.list_warnings:
-        use dg_narrator(u"Часть историй не удалось открыть, их файлы сохранены. Остальные — здесь.")
-    elif stories:
-        use dg_narrator(u"История открывается с первой главы. Место, где вы остановились, хранится в обычных сохранениях игры.")
+    if renpy.loadable("mods/don_gen/images/don_gen_atlas.png"):
+        add im.Scale("mods/don_gen/images/don_gen_atlas.png", 1920, 1080)
     else:
-        use dg_narrator(u"Здесь будут храниться ваши истории. Начните первую.")
+        add Solid("#142e35")
+    add Solid("#081b28d8")
+    use dg_chrome(u"ГЛАВНОЕ МЕНЮ")
+    frame:
+        background Solid("#102c39e9")
+        xpos 95 ypos 132 xsize 1740 ysize 825
+        padding (52, 38)
+        hbox:
+            spacing 57
+            vbox:
+                xsize 890 spacing 19
+                text u"DON-GEN" style "dg_title" size 108 color "#ffe0a0"
+                text u"ТВОЙ ЛАГЕРЬ. ТВОИ РЕШЕНИЯ." style "dg_meta" size 26 color "#f0cf97"
+                text u"Живой Совёнок: путешествия, персонажи со своими планами, нелинейные истории и свободные действия. AI описывает события, а мир помнит последствия." style "dg_text" size 29 xmaximum 840
+                null height 16
+                frame:
+                    background Solid("#21434cf2")
+                    padding (29, 25) xsize 855
+                    vbox:
+                        spacing 14
+                        text u"ОТКРЫТЫЙ МИР" style "dg_meta" size 26 color "#ffe1aa"
+                        textbutton u"Открытый мир · RPG" style "dg_primary" action Return(("rpg", None))
+                        text u"Свой герой · интерактивная карта · выборы и собственные поступки" style "dg_text" size 23 xmaximum 765
+                frame:
+                    background Solid("#18323bd9")
+                    padding (25, 20) xsize 855
+                    vbox:
+                        spacing 10
+                        text u"КЛАССИЧЕСКАЯ AI-ИСТОРИЯ" style "dg_meta" size 24
+                        textbutton u"Начать новую историю" style "dg_act" action Return(("new", None))
+                        text u"Режим глав с генерацией продолжения по выбранным ответам." style "dg_text" size 22
+            vbox:
+                xsize 635 spacing 18
+                text u"ТВОЯ БИБЛИОТЕКА" style "dg_title" size 43
+                frame:
+                    background Solid("#081f2bdc")
+                    padding (20, 16) xsize 630 ysize 404
+                    viewport:
+                        mousewheel True scrollbars "vertical" ysize 362
+                        vbox:
+                            spacing 11
+                            if not stories:
+                                text u"Здесь появятся главы классических AI-историй. Сохранённые RPG-смены находятся внутри «Открытого мира»." style "dg_text" size 25 xmaximum 550
+                            for number, story in enumerate(stories):
+                                textbutton dg_literal(u"%02d. %s" % (number + 1, story["title"][:70])) style "dg_row" action Return(("story", story["id"]))
+                textbutton u"НАСТРОЙКИ" style "dg_act" action Return(("settings", None))
+                textbutton u"ДИАГНОСТИКА" style "dg_act" action Return(("diagnostics", None))
+                textbutton u"СОХРАНЕНИЯ ИГРЫ" style "dg_act" action ShowMenu("load")
+                textbutton u"ВЫЙТИ" style "dg_act" action Return(("exit", None))
+    if dg_runtime.app.library.list_warnings:
+        use dg_narrator(u"Часть сохранённых историй не удалось открыть. Проверьте диагностику DON-GEN.")
 
 screen dg_new():
     modal True
