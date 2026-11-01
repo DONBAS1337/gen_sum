@@ -255,10 +255,19 @@ def remember_scene(state,key,text):
         raise ValueError("Invalid scene key")
     scenes=memo(state)
     scenes[key]={"text":text,"day":state["day"]}
-    # Limit disk/memory growth, keep newest scenes; keys are stable per episode.
-    while len(scenes)>48:
-        oldest=sorted(scenes, key=lambda k:(scenes[k]["day"],k))[0]
-        del scenes[oldest]
+    # Maintain a chronological LRU list; same-day entries must never be
+    # evicted according to their hash order.
+    order=state.setdefault("narrative_order",[])
+    order[:]=[item for item in order if item in scenes and item!=key]
+    order.append(key)
+    while len(order)>48:
+        oldest=order.pop(0)
+        if oldest in scenes:
+            del scenes[oldest]
+    # Migrate old saves which only contain the dictionary.
+    if len(scenes)>48:
+        for stale in sorted(scenes, key=lambda k:(scenes[k]["day"],k))[:len(scenes)-48]:
+            del scenes[stale]
     return text
 
 def request(state,kind,who,identity,source_text,choices=None,moment=None,source_reference=None):
