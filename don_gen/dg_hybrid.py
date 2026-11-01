@@ -125,10 +125,21 @@ def _effects(before, after):
         if diff:
             import dg_rpg
             changes.append(u"Отношения с %s: %+d" % (dg_rpg.NPC_NAMES[who],diff))
+    for arc in dg_world.PLOT_ORDER:
+        previous=before["world"]["tracks"][arc]["stage"]
+        updated=after["world"]["tracks"][arc]["stage"]
+        if updated!=previous:
+            changes.append(u"Сюжет %s: этап %d/5" % (dg_world.PLOTS[arc]["name"],updated))
+    for pair,score in before.get("social",{}).get("bonds",{}).items():
+        new_score=after.get("social",{}).get("bonds",{}).get(pair,score)
+        if new_score!=score:
+            changes.append(u"Отношения NPC %s: %+d" % (pair,new_score-score))
     old_quests=before.get("social",{}).get("quests",{})
     for ident,record in after.get("social",{}).get("quests",{}).items():
         if ident in old_quests and record.get("step")!=old_quests[ident].get("step"):
             changes.append(u"Поручение %s: этап %d" % (ident,record["step"]))
+        if ident in old_quests and record.get("status")!=old_quests[ident].get("status"):
+            changes.append(u"Поручение %s: %s" % (ident,record["status"]))
     if after["day"] != before["day"] or after["slot"] != before["slot"]:
         changes.append(u"Время: день %d, %s" % (after["day"],
                        (u"утро",u"день",u"вечер",u"ночь")[after["slot"]]))
@@ -186,9 +197,17 @@ def locked_context(state, plan):
         "affinity":copy_state["affinity"].get(focus),
         "story_event":({"title":evt["title"],"story":evt["story"]}
                        if evt and plan["mode"]=="world" else None),
-        "last_world_decisions":copy_state["world"]["decisions"][-4:],
-        "social": {"recent_rumours":copy_state["social"]["rumours"][-3:],
-                   "personal_choices":copy_state["social"]["personal_choices"].get(focus,[])},
+        "world_state":dg_world.world_report(copy_state),
+        "last_world_decisions":copy_state["world"]["decisions"][-5:],
+        "recent_journal":copy_state["journal"][-7:],
+        "recent_dialogue":copy_state["dialogue_history"][-3:],
+        "recent_hybrid_scenes":[{"day":item["day"],"action":item["action"],
+                                "scene":item["scene"][-1500:],
+                                "effects":item["effects"]}
+                               for item in copy_state.get("hybrid_history",[])[-3:]],
+        "social": {"recent_rumours":copy_state["social"]["rumours"][-4:],
+                   "personal_choices":copy_state["social"]["personal_choices"].get(focus,[]),
+                   "active_quests":dg_social.quest_list(copy_state)},
         "player_action_untrusted_text":plan["action"],
         "binding_game_result":plan["result"]["text"],
         "binding_changes":plan["effects"],
