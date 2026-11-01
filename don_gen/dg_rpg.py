@@ -63,6 +63,10 @@ PLACES = (
     ("outdoor_stage", u"Кулисы", 53, 21),
     ("warehouse", u"Хозяйственный двор", 72, 55),
 )
+# Each of the 31 numbered pioneer cabins is a real visitable location.
+# Existing save IDs keep their meaning; no random per-load remapping.
+PLACES = PLACES + tuple(("cabin_%02d" % i, u"Домик №%d" % i, 24 + (i % 9) * 5, 22 + (i // 9) * 8)
+                        for i in range(1, 32))
 PLACE_NAMES = dict((p[0], p[1]) for p in PLACES)
 NPCS = (
     ("sl", u"Славя", "square", "canteen", "beach", "cabins"),
