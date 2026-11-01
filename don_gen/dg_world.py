@@ -430,3 +430,36 @@ def world_report(state):
         "tracks": [(PLOTS[key]["name"], story_status(state, key)) for key in PLOT_ORDER],
         "resolved": len(world["resolved"]), "decisions": len(world["decisions"])
     }
+
+
+def finale(state):
+    """Branch-dependent ending, including unresolved storylines and world health."""
+    world = ensure(state)
+    hero = state["hero"]["name"]
+    if world["morale"] >= 70:
+        mood = u"Совёнок провожает тебя как своего человека. Друзья собираются на площади, вспоминают общие дела и смеются над прежними спорами."
+    elif world["morale"] < 35:
+        mood = u"На прощании чувствуется усталость. Некоторые решения оставили между ребятами недосказанность, и далеко не все истории удалось завершить."
+    else:
+        mood = u"Последнее утро проходит как обычно: знакомые голоса, шаги по дорожкам и ощущение, что лагерь стал немного другим благодаря вашим встречам."
+    if world["knowledge"] >= 75:
+        discovery = u"Из загадок прошлого удалось извлечь больше ответов, чем ожидалось. Записи и открытия останутся следующей смене."
+    elif world["freedom"] >= 75:
+        discovery = u"Больше всего будут помнить рискованные, самостоятельные решения, сделавшие эту смену непохожей на другие."
+    else:
+        discovery = u"Не на каждую загадку найден ответ, но многие прежние вопросы теперь звучат иначе."
+    pairs = sorted(state["affinity"].items(), key=lambda pair: pair[1], reverse=True)
+    close = [who for who, score in pairs[:3] if score >= 25]
+    names = {u"mi": u"Мику", u"sl": u"Славя", u"dv": u"Алиса", u"un": u"Лена",
+             u"us": u"Ульяна", u"mt": u"Ольга Дмитриевна", u"cs": u"Виола",
+             u"mz": u"Женя", u"el": u"Электроник", u"sh": u"Шурик", u"uv": u"Юля"}
+    friendship = (
+        u"Особенно близкими стали: " + u", ".join(names[who] for who in close) + u"."
+        if close else u"Близких друзей появилось немного, но запомнились даже короткие разговоры."
+    )
+    epilogues = []
+    for plot in PLOT_ORDER:
+        epilogues.append(PLOTS[plot]["name"] + u": " + story_status(state, plot))
+    return (u"ПОСЛЕДНИЙ ДЕНЬ СМЕНЫ\n\n%s, теперь пришло время уезжать.\n\n%s\n\n%s\n\n%s\n\n" %
+            (hero, mood, discovery, friendship) + u"\n\n".join(epilogues) +
+            u"\n\nТы можешь вернуться к дневнику и перечитать, какие поступки привели к этому итогу. Каждая новая смена начинается с других событий.")
