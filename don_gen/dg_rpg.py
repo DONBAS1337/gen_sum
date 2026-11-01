@@ -630,7 +630,7 @@ def asset_path(root, game_id, kind, key):
         if key not in NPC_NAMES:
             raise ValueError("Unknown character")
     elif kind in ("cg", "cg18"):
-        if not isinstance(key, text_type) or not re.match(r"^[a-f0-9]{40}$",key):
+        if not isinstance(key, (str, text_type)) or not re.match(r"^[a-f0-9]{40}$", key):
             raise ValueError("Invalid cinematic scene key")
     else:
         raise ValueError("Unknown asset type")
