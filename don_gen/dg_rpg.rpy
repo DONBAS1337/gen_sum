@@ -1097,13 +1097,13 @@ screen dg_rpg_hybrid_input(mode, who=None):
     modal True
     default action_text = u""
     add dg_rpg_bg()
-    add Solid("#041622ee")
+    add Solid("#041622d2")
     frame:
-        background Solid("#142f3df8")
-        align (0.5, 0.5) xsize 1490 ysize 940
-        padding (50, 32)
+        background Solid("#142f3de9")
+        align (0.5, 0.5) xsize 1490 ysize (890 if len(action_text) > 90 else 630)
+        padding (48, 31)
         vbox:
-            spacing 16
+            spacing 17
             text (u"СВОЯ РЕПЛИКА" if mode == "npc" else u"СВОЙ ПОСТУПОК В СЮЖЕТЕ" if mode == "world" else u"СВОБОДНОЕ ДЕЙСТВИЕ + AI") style "dg_title" size 53 color "#ffe0a2"
             text (u"Напиши, что говоришь собеседнику. Модель создаст реакцию без вымышленных наград." if mode == "npc"
                   else u"Свой вариант решения события. Движок определит допустимый исход до AI." if mode == "world"
@@ -1118,16 +1118,18 @@ screen dg_rpg_hybrid_input(mode, who=None):
                     length 4000
                     xmaximum 1290
                     default_focus True
-            text (u"ПРЕДПРОСМОТР ТВОЕГО ТЕКСТА · %d / 4000" % len(action_text)) style "dg_meta" size 22
-            frame:
-                background Solid("#071e29")
-                padding (21, 18)
-                xsize 1370 ysize (dg_rpg_preview_height(action_text, 140, 310, 140, 80, 24))
-                viewport:
-                    mousewheel True scrollbars "vertical"
-                    ysize (dg_rpg_preview_height(action_text, 100, 270, 100, 80, 24))
-                    text dg_literal(action_text if action_text else u"Текст здесь будет переноситься автоматически, чтобы даже длинная реплика оставалась читаемой.") style "dg_text" size 27 xmaximum 1280
-            text u"Любые игровые награды и изменения рассчитывает локальный движок. Модель отвечает только за повествование." style "dg_text" size 24 xmaximum 1310
+            text (u"СИМВОЛОВ · %d / 4000" % len(action_text)) style "dg_meta" size 22
+            if len(action_text) > 90:
+                text u"ПРЕДПРОСМОТР ДЛИННОГО ТЕКСТА" style "dg_meta" size 21
+                frame:
+                    background Solid("#071e29")
+                    padding (18, 15)
+                    xsize 1370 ysize (dg_rpg_preview_height(action_text, 155, 270, 150, 85, 22))
+                    viewport:
+                        mousewheel True scrollbars "vertical"
+                        ysize (dg_rpg_preview_height(action_text, 115, 230, 110, 85, 22))
+                        text dg_literal(action_text) style "dg_text" size 25 xmaximum 1280
+            text u"Сначала движок проверит действие и покажет последствия. Подтверждение — на следующем экране; модель пишет только текст сцены." style "dg_text" size 24 xmaximum 1310
             hbox:
                 spacing 38
                 textbutton u"ПРОВЕРИТЬ ПОСЛЕДСТВИЯ" style "dg_primary" sensitive bool(action_text.strip()) action Return(("submit", action_text.strip()))
