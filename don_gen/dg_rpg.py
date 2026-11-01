@@ -348,6 +348,8 @@ def story_choice(state, key):
     if state["finished"]:
         raise ValueError("The camp shift has ended")
     outcome = dg_world.choose(state, key)
+    if outcome["npc"] not in state["met"]:
+        state["met"].append(outcome["npc"])
     _journal(state, u"Сюжет: %s. %s" % (outcome["title"], outcome["text"][:360]))
     score = state["affinity"][outcome["npc"]]
     for threshold in MILESTONES:
