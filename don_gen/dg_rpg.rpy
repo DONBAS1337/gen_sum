@@ -973,87 +973,92 @@ screen dg_rpg_cabins(region):
 
 screen dg_rpg_hub:
     modal True
+    default dg_hub_tab = "story"
     add dg_rpg_bg()
-    add Solid("#051014b0")
+    add Solid("#05101491")
     $ nearby_sprites = dg_rpg.at_place(dg_rpg_state)
     if nearby_sprites:
-        $ portrait = dg_rpg_sprite(nearby_sprites[0][0])
+        $ portrait = dg_rpg_sprite(nearby_sprites[0][0], "normal", "normal")
         if portrait is not None:
             add portrait at dg_rpg_portrait_transform xpos 1080 ypos 160
     use dg_chrome(dg_rpg.PLACE_NAMES[dg_rpg_state["place"]])
+    frame:
+        background Solid("#0b2634da")
+        xpos 72 ypos 115 xsize 832 ysize 77 padding (22,13)
+        hbox:
+            spacing 24
+            textbutton u"ИСТОРИЯ" style "dg_navlink" text_color ("#ffdc96" if dg_hub_tab=="story" else "#c4d2d5") action SetScreenVariable("dg_hub_tab","story")
+            textbutton u"ДЕЙСТВИЯ" style "dg_navlink" text_color ("#ffdc96" if dg_hub_tab=="actions" else "#c4d2d5") action SetScreenVariable("dg_hub_tab","actions")
+            textbutton u"НАСТРОЙКИ" style "dg_navlink" text_color ("#ffdc96" if dg_hub_tab=="settings" else "#c4d2d5") action SetScreenVariable("dg_hub_tab","settings")
     viewport:
-        xpos 82 ypos 125 xsize 820 ysize 820
-        mousewheel True
-        scrollbars "vertical"
+        xpos 85 ypos 205 xsize 810 ysize 730
+        mousewheel True scrollbars "vertical"
         vbox:
-            spacing 12
-            xsize 770
-            text dg_rpg.camp_time(dg_rpg_state) style "dg_title" size 59
-            text dg_literal(u"%s, %d лет · %s" % (dg_rpg_state["hero"]["name"], dg_rpg_state["hero"]["age"], (dg_rpg_state["hero"]["background"][:155] + (u"…" if len(dg_rpg_state["hero"]["background"]) > 155 else u"")))) style "dg_sub" size 26
-            text (u"Энергия: %d/100   ·   Любознательность: %d   ·   Доброта: %d   ·   Навык: %d" %
-                  (dg_rpg_state["energy"], dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["skill"])) style "dg_small"
-            text (u"Погода: " + dg_world.weather(dg_rpg_state)[1] + u" · Встречи и прогулки зависят от погоды") style "dg_small" size 23 color "#ffe3ae"
-            $ day_event = dg_world.current(dg_rpg_state)
-            if day_event:
-                frame:
-                    background Solid("#1e3240ef")
-                    padding (22, 14)
-                    xsize 765
-                    vbox:
-                        spacing 8
-                        text (u"СЕГОДНЯ: " + day_event["title"]) style "dg_text" size 29 color "#ffe5a0"
-                        text (u"Место события: " + dg_rpg.PLACE_NAMES[day_event["place"]] + u" · линия: " +
-                              (dg_world.PLOTS[day_event["arc"]]["name"] if day_event["arc"] != "daily" else u"лагерные истории")) style "dg_text" size 22
-                        textbutton (u"НАЧАТЬ СОБЫТИЕ" if dg_rpg_state["place"] == day_event["place"] else u"ОТПРАВИТЬСЯ К СОБЫТИЮ") style "dg_navlink" action Return(("world", None) if dg_rpg_state["place"] == day_event["place"] else ("world_travel", day_event["place"]))
-            else:
-                frame:
-                    background Solid("#172b32df")
-                    padding (20, 15)
-                    xsize 765
-                    text (u"Событие дня завершено. Можно исследовать лагерь и общаться с ребятами." if not dg_rpg_state["finished"] else u"Смена завершена. Итоги приключений доступны в хронике.") style "dg_text" size 25
-            text dg_literal(dg_rpg_state["event"]) style "dg_small" size 22 xmaximum 850
-            if dg_rpg_state["finished"]:
-                textbutton u"ИТОГИ МОЕЙ СМЕНЫ" style "dg_primary" action Return(("finale", None))
-            else:
-                textbutton u"Открыть карту" style "dg_primary" action Return(("map", None))
-            $ active_incident = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
-            if active_incident:
-                frame:
-                    background Solid("#39412be8")
-                    padding (18, 13)
-                    xsize 765
-                    vbox:
-                        spacing 7
-                        text (u"ВСТРЕЧА МЕЖДУ NPC: " + active_incident["title"]) style "dg_text" size 28 color "#ffe5a0"
-                        textbutton u"ВМЕШАТЬСЯ В СОБЫТИЕ" style "dg_navlink" action Return(("incident", None)) sensitive dg_rpg_state["energy"] >= 9
-            if not dg_rpg_state["finished"]:
-                text u"ПОВСЕДНЕВНЫЕ ЗАНЯТИЯ" style "dg_meta"
-                hbox:
-                    spacing 23
-                    textbutton u"Осмотреться" style "dg_act" action Return(("activity", "explore"))
-                    textbutton u"Помочь" style "dg_act" action Return(("activity", "help"))
+            xsize 755 spacing 17
+            text dg_rpg.camp_time(dg_rpg_state) style "dg_title" size 50
+            text dg_literal(u"%s · %d лет" % (dg_rpg_state["hero"]["name"], dg_rpg_state["hero"]["age"])) style "dg_sub" size 26
+            text (u"Энергия %d/100 · Навык %d · Доброта %d · Любознательность %d" %
+                  (dg_rpg_state["energy"], dg_rpg_state["stats"]["skill"],
+                   dg_rpg_state["stats"]["kindness"],dg_rpg_state["stats"]["curiosity"])) style "dg_small" size 21
+            text (u"Погода: " + dg_world.weather(dg_rpg_state)[1]) style "dg_small" size 22 color "#ffe3ae"
+            if dg_hub_tab == "story":
+                $ day_event = dg_world.current(dg_rpg_state)
+                if day_event:
+                    frame:
+                        background Solid("#173443eb")
+                        xsize 745 padding (24,22)
+                        vbox:
+                            spacing 17
+                            text (u"СЕГОДНЯ · " + day_event["title"]) style "dg_text" size 32 color "#ffe5a0"
+                            text (u"Место: " + dg_rpg.PLACE_NAMES[day_event["place"]]) style "dg_text" size 25
+                            textbutton (u"НАЧАТЬ СОБЫТИЕ" if dg_rpg_state["place"] == day_event["place"] else u"К МЕСТУ СОБЫТИЯ") style "dg_primary" action Return(("world", None) if dg_rpg_state["place"] == day_event["place"] else ("world_travel", day_event["place"]))
+                else:
+                    text u"Сюжет дня завершён. Лагерь живёт дальше." style "dg_text" size 26
+                $ active_incident = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
+                if active_incident:
+                    frame:
+                        background Solid("#37432dd9")
+                        xsize 745 padding (21,18)
+                        vbox:
+                            spacing 13
+                            text (u"СЕЙЧАС · " + active_incident["title"]) style "dg_text" size 28 color "#ffe5a0"
+                            textbutton u"ВМЕШАТЬСЯ В СОБЫТИЕ" style "dg_navlink" action Return(("incident", None)) sensitive dg_rpg_state["energy"] >= 9
+                textbutton u"ОТКРЫТЬ КАРТУ ЛАГЕРЯ" style "dg_primary" action Return(("map", None))
+                if dg_rpg_state["finished"]:
+                    textbutton u"ИТОГИ МОЕЙ СМЕНЫ" style "dg_act" action Return(("finale", None))
+                else:
+                    textbutton u"СЛУЧАЙНАЯ СИТУАЦИЯ ЗДЕСЬ" style "dg_act" action Return(("surprise", None)) sensitive dg_rpg_state["energy"] >= 4
+                textbutton u"ДНЕВНИК · СВЯЗИ · ХРОНИКА" style "dg_act" action Return(("journal", None))
+                textbutton u"ГАЛЕРЕЯ CG" style "dg_act" action Return(("cg_gallery", None))
+            elif dg_hub_tab == "actions":
+                if not dg_rpg_state["finished"]:
+                    text u"СВОБОДА ДЕЙСТВИЙ" style "dg_meta" size 25 color "#ffe5a0"
+                    textbutton u"НАПИСАТЬ СОБСТВЕННЫЙ ПОСТУПОК" style "dg_primary" action Return(("hybrid", None))
+                    textbutton u"СВОБОДНОЕ ДЕЙСТВИЕ · ЛОКАЛЬНО" style "dg_act" action Return(("free", None))
+                    textbutton u"ПОРУЧЕНИЯ И ИССЛЕДОВАНИЯ" style "dg_act" action Return(("contracts", None))
+                    text u"ПОВСЕДНЕВНЫЕ ЗАНЯТИЯ" style "dg_meta" size 24
+                    hbox:
+                        spacing 20
+                        textbutton u"Осмотреться" style "dg_act" action Return(("activity", "explore"))
+                        textbutton u"Помочь" style "dg_act" action Return(("activity", "help"))
                     textbutton u"Заняться делом" style "dg_act" action Return(("activity", "practice"))
-                textbutton u"Отдохнуть / пропустить время" style "dg_act" action Return(("activity", "rest"))
-            if not dg_rpg_state["finished"]:
-                textbutton u"СВОБОДНОЕ ДЕЙСТВИЕ · написать свой поступок" style "dg_primary" action Return(("free", None))
-                textbutton u"ГИБРИДНАЯ СЦЕНА · действие + реакция AI" style "dg_act" action Return(("hybrid", None))
-                textbutton u"СЛУЧАЙНАЯ СИТУАЦИЯ ЗДЕСЬ" style "dg_act" action Return(("surprise", None)) sensitive dg_rpg_state["energy"] >= 4
-                textbutton u"ПОРУЧЕНИЯ · длинные задания" style "dg_act" action Return(("contracts", None))
-            textbutton u"Дневник, отношения и хроника" style "dg_act" action Return(("journal", None))
-            textbutton u"ГАЛЕРЕЯ CG · иллюстрации смены" style "dg_act" action Return(("cg_gallery", None))
-            textbutton (u"Режим истории: 18+ AU" if dg_adult.enabled(dg_rpg_state) else u"Режим истории: обычный") style "dg_act" action Return(("adult", None))
-            textbutton (u"Живые сцены: AI при входе в диалог" if getattr(persistent,"dg_auto_narrate",True) else u"Живые сцены: локальный режим") style "dg_act" action Return(("narrator",None))
-            textbutton (u"Художник: ComfyUI локально" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Художник: облачный") style "dg_act" action Return(("artist", None))
-            textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
-            if not dg_rpg_state["finished"]:
+                    textbutton u"Отдохнуть и пропустить время" style "dg_act" action Return(("activity", "rest"))
+                else:
+                    text u"Смена окончена. Твои решения остались в хронике." style "dg_text" size 27
+            else:
+                text u"ИГРА И ГЕНЕРАЦИЯ" style "dg_meta" size 25 color "#ffe5a0"
+                textbutton (u"Взрослая AU: включена" if dg_adult.enabled(dg_rpg_state) else u"Взрослая AU: выключена") style "dg_act" action Return(("adult", None))
+                textbutton (u"Живые сцены: автоматический AI" if getattr(persistent,"dg_auto_narrate",True) else u"Живые сцены: локально") style "dg_act" action Return(("narrator",None))
+                textbutton (u"Изображения: ComfyUI" if getattr(persistent, "dg_rpg_art_provider", "cloud") == "comfy" else u"Изображения: облачный генератор") style "dg_act" action Return(("artist", None))
                 $ bg_state = dg_rpg_bg_status()
-                if bg_state["status"] == "missing":
+                if not dg_rpg_state["finished"] and bg_state["status"] == "missing":
                     textbutton u"Сгенерировать отсутствующий фон" style "dg_act" action Return(("background", dg_rpg_state["place"]))
                 else:
-                    text (u"Фон: " + (u"сгенерированный" if bg_state["status"] == "generated" else u"оригинальный")) style "dg_small" size 23
-            textbutton u"Вернуться к выбору смены" style "dg_act" action Return(("exit", None))
+                    text (u"Фон: " + (u"сгенерированный" if bg_state["status"] == "generated" else u"оригинальный или подходящий")) style "dg_small" size 22
+                textbutton u"Диагностика DON-GEN" style "dg_act" action Return(("diag", None))
+                textbutton u"Вернуться к выбору смены" style "dg_act" action Return(("exit", None))
     frame:
-        background Solid("#11232ce0")
+        background Solid("#11232ccc")
         padding (28, 23)
         xpos 938 ypos 135 xsize 888 ysize 805
         vbox:
@@ -1084,7 +1089,7 @@ screen dg_rpg_hub:
                                 textbutton u"ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"Сюжетный этап рута" style "dg_navlink" action Return(("route", who))
-            text u"Разговоры и активности меняют время и отношения локально. AI-сцены вызываются только вручную." style "dg_small" size 23
+            text u"Выборы меняют мир локально. Живые сцены создаются по настройке рассказчика." style "dg_small" size 23
 
 
 # Player-defined actions are resolved by a transparent local interpreter.
