@@ -49,6 +49,20 @@ class WorldDirectorTests(unittest.TestCase):
         self.assertEqual(len(a["world"]["chronicle"]), 1)
         self.assertEqual(a["world"]["tracks"][first["arc"]]["stage"], 1)
 
+    def test_world_moves_on_even_if_player_ignores_every_event(self):
+        game = dg_rpg.new_game(u"Путешественник", 23, 39)
+        for _ in range(25):
+            for slot in range(4):
+                dg_rpg.activity(game, "rest")
+        total_progress = sum(game["world"]["tracks"][arc]["stage"] for arc in dg_world.PLOT_ORDER)
+        self.assertEqual(total_progress, 20)
+        self.assertTrue(all(track["choices"] == ["missed"] * 5
+                            for track in game["world"]["tracks"].values()))
+        self.assertIn(u"без твоего участия", dg_world.story_status(game, "festival"))
+        self.assertEqual(len(game["world"]["chronicle"]), 25)
+        self.assertEqual(game["day"], 26)
+        self.assertEqual(dg_world.current(game)["arc"], "daily")
+
     def test_story_decisions_persist_across_saves(self):
         target = dg_world.current(self.state)["place"]
         dg_rpg.move(self.state, target)
