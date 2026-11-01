@@ -58,6 +58,18 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(st["social"]["personal"]["mi"],3)
         self.assertIsNone(dg_social.personal_scene(st,"mi"))
 
+    def test_generic_help_cannot_complete_specific_quest(self):
+        st=self.state
+        dg_rpg.accept_contract(st,"rehearsal")
+        dg_rpg.move(st,"clubs")
+        result=dg_rpg.free_action(st,u"Помочь кому-нибудь")
+        self.assertEqual(result["status"],"done")
+        self.assertEqual(st["social"]["quests"]["rehearsal"]["step"],0)
+        # Correct contextual phrase in next slot should advance.
+        result=dg_rpg.free_action(st,u"Помочь с репетицией")
+        self.assertEqual(result["status"],"done")
+        self.assertEqual(st["social"]["quests"]["rehearsal"]["step"],1)
+
     def test_quest_three_steps_reward_and_persistent_save(self):
         st=self.state
         msg=dg_rpg.accept_contract(st,"rehearsal")
