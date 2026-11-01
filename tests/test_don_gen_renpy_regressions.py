@@ -74,16 +74,18 @@ class ReportedTracebacks(unittest.TestCase):
         self.assertIn('except (ValueError, TypeError, UnicodeError) as exc:',SCRIPT)
 
     def test_native_dialogue_used_for_all_story_paths(self):
-        for expected in ('label dg_rpg_vn_text(scene_text):',
+        for expected in ('label dg_rpg_vn_text(scene_text, who=None):',
                          'scene expression dg_rpg_bg()',
                          '"[dg_rpg_vn_line]"',
                          'label dg_rpg_vn_choice(story_text, choice_pairs):',
                          'renpy.display_menu',
                          'call dg_rpg_vn_dialogue(dg_rpg_focus, "topics")',
-                         'call dg_rpg_vn_scene(dg_runtime.app.result)',
-                         'call dg_rpg_vn_scene(dg_rpg_last_world["text"])',
+                         'call dg_rpg_vn_scene(dg_runtime.app.result, True, dg_rpg_focus)',
+                         'call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"])',
                          'call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])'):
             self.assertIn(expected,SCRIPT)
+        self.assertIn('show expression dg_rpg_sprite(who) as dg_vn_character at right',SCRIPT)
+        self.assertIn('__cancel__',SCRIPT)
         for outdated in ('call screen dg_rpg_read_scene(', 'call screen dg_rpg_world_result(',
                          'call screen dg_rpg_hybrid_read('):
             self.assertNotIn(outdated,SCRIPT)
