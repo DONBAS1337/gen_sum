@@ -14,6 +14,7 @@ import re
 
 import dg_social
 import dg_world
+import dg_adult
 
 try:
     text_type = unicode
@@ -158,6 +159,10 @@ def preview(state, action, mode="free", who=None, topic=None):
             raise ValueError("Invalid conversation topic")
         topic = int(topic)
     action=_clean_action(action)
+    violation=dg_adult.validate_action(state, action, who)
+    if violation:
+        return {"status":"unknown","message":violation,"mode":mode,
+                "action":action,"who":who,"topic":topic}
     # Migrate only a COPY; previews must never change the currently saved game.
     source=copy.deepcopy(state)
     import dg_rpg
@@ -229,7 +234,8 @@ INSTRUCTIONS = (
 )
 
 def build_request(state, plan):
-    return INSTRUCTIONS, json.dumps(locked_context(state,plan),ensure_ascii=False,
+    narrator_policy = dg_adult.scene_policy(state, plan.get("who") or plan["result"].get("who") or plan["result"].get("npc"))
+    return INSTRUCTIONS + u" " + narrator_policy, json.dumps(locked_context(state,plan),ensure_ascii=False,
                                     sort_keys=True)
 
 def commit(state, plan, scene_text=None):
