@@ -462,6 +462,9 @@ def free_action(state, requested):
     if state["finished"]:
         return {"status":"unknown","text":u"Смена уже завершена."}
     nearby=[who for who, name in at_place(state)]
+    violation=dg_adult.validate_action(state, requested)
+    if violation:
+        return {"status":"unknown","text":violation}
     result=dg_social.action(state, requested, nearby)
     if result["status"] != "done":
         return result
