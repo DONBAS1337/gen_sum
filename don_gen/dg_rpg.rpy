@@ -494,7 +494,7 @@ screen dg_rpg_hub:
                                 textbutton u"AI-сцена" style "dg_navlink" action Return(("ai", who)) sensitive not dg_rpg_state["finished"]
                                 textbutton u"Спрайт" style "dg_navlink" action Return(("sprite", who)) sensitive not dg_rpg_state["finished"]
                             if dg_social.personal_scene(dg_rpg_state, who) and not dg_rpg_state["finished"]:
-                                textbutton u"★ ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
+                                textbutton u"★ ЛИЧНАЯ ИСТОРИЯ" style "dg_navlink" text_size 24 text_color "#f8d995" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                             if dg_rpg.available_route_events(dg_rpg_state, who) and not dg_rpg_state["finished"]:
                                 textbutton u"Сюжетный этап рута" style "dg_navlink" action Return(("route", who))
             text u"Разговоры и активности меняют время и отношения локально. AI-сцены вызываются только вручную." style "dg_small" size 23
