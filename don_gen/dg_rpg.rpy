@@ -839,8 +839,8 @@ screen dg_rpg_map:
         # transparent idle hotspot, highlighted roof on hover.
         for cabin, bx, by in DG_MAP_USER_CABINS:
             imagebutton:
-                idle Solid("#ffffff01", 27, 26)
-                hover Solid("#ffe0a990", 27, 26)
+                idle Solid("#ffffff01", xysize=(27, 26))
+                hover Solid("#ffe0a990", xysize=(27, 26))
                 xpos bx ypos by
                 focus_mask False
                 hovered SetScreenVariable("dg_map_hover", cabin)
