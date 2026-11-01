@@ -118,9 +118,24 @@ class HybridTests(unittest.TestCase):
         dg_rpg.move(self.st,event["place"])
         original=copy.deepcopy(self.st)
         plan=dg_hybrid.preview(self.st,u"Притвориться космонавтом","world")
-        self.assertEqual(plan["status"],"unknown")
+        self.assertEqual(plan["status"],"ready")
         self.assertEqual(self.st,original)
+        self.assertEqual(plan["result"]["kind"],"unclassified_world")
         self.assertTrue(dg_world.current(self.st))
+        dg_hybrid.commit(self.st,plan)
+        self.assertTrue(dg_world.current(self.st))
+        self.assertEqual(len(self.st["world"]["decisions"]),0)
+        self.assertEqual(self.st["stats"],original["stats"])
+
+    def test_arbitrary_npc_freeform_and_nonsense_are_narrative_only(self):
+        plan=dg_hybrid.preview(self.st,u"вавыаываы","free")
+        self.assertEqual(plan["status"],"ready")
+        self.assertEqual(plan["result"]["kind"],"unclassified_free")
+        self.assertEqual(plan["effects"],[u"Энергия: -4",u"Время: день 1, день"])
+        before=copy.deepcopy(self.st)
+        dg_hybrid.commit(self.st,plan)
+        self.assertEqual(self.st["stats"],before["stats"])
+        self.assertEqual(self.st["affinity"],before["affinity"])
 
     def test_npc_custom_reply_does_not_invent_relationship_gain(self):
         who="mi"
