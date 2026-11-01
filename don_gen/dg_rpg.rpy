@@ -1143,7 +1143,8 @@ screen dg_rpg_journal:
                             text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 850
                         text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_meta" size 25 color "#ffe5a0"
                         for who, name in dg_social.NAMES.items():
-                            text (name + u": " + str(dg_rpg_state["social"]["personal"].get(who, 0)) + u"/3 этапов") style "dg_text" size 24
+                            if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
+                                text (name + u": " + str(dg_rpg_state["social"]["personal"].get(who, 0)) + u"/3 этапов") style "dg_text" size 24
                     else:
                         if not dg_rpg_state["ai_scenes"]:
                             text u"Пока нет AI-сцен. Они создаются вручную через кнопку персонажа." style "dg_text" size 28
@@ -1162,7 +1163,8 @@ screen dg_rpg_journal:
                     if view == "social":
                         text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_meta" size 25 color "#ffdf98"
                         for a, b, initial, caption, description in dg_social.PAIR_DEFS:
-                            text (caption + u": " + str(dg_social.bond(dg_rpg_state, a, b))) style "dg_text" size 25
+                            if dg_rpg_state.get("mystery", {}).get("yulia_discovered", False) or "uv" not in (a, b):
+                                text (caption + u": " + str(dg_social.bond(dg_rpg_state, a, b))) style "dg_text" size 25
                         null height 14
                         text u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ" style "dg_meta" size 25
                         for item in dg_social.quest_list(dg_rpg_state):
@@ -1191,7 +1193,8 @@ screen dg_rpg_journal:
                     null height 15
                     text u"ОТНОШЕНИЯ" style "dg_meta"
                     for who, name, morning, daytime, evening, night in dg_rpg.NPCS:
-                        text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 25
+                        if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
+                            text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 25
                     null height 18
                     text u"ЗАДАНИЯ" style "dg_meta"
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):
