@@ -1130,7 +1130,7 @@ screen dg_rpg_hybrid_input(mode, who=None):
             text u"Любые игровые награды и изменения рассчитывает локальный движок. Модель отвечает только за повествование." style "dg_text" size 24 xmaximum 1310
             hbox:
                 spacing 38
-                textbutton u"ПРОВЕРИТЬ ПОСЛЕДСТВИЯ" style "dg_primary" sensitive bool(action_text.strip()) action Return(action_text.strip())
+                textbutton u"ПРОВЕРИТЬ ПОСЛЕДСТВИЯ" style "dg_primary" sensitive bool(action_text.strip()) action Return(("submit", action_text.strip()))
                 textbutton u"ОТМЕНА" style "dg_act" action Return(None)
     key "K_ESCAPE" action Return(None)
 
@@ -2150,9 +2150,11 @@ label dg_rpg_world_label:
 # -> generation (text only, worker thread) -> verified COMMIT (main thread).
 label dg_rpg_hybrid_entry:
     call screen dg_rpg_hybrid_input(dg_rpg_hybrid_mode, dg_rpg_hybrid_who)
-    if not _return:
+    $ dg_rpg_hybrid_submission = _return
+    if not isinstance(dg_rpg_hybrid_submission, tuple) or len(dg_rpg_hybrid_submission) != 2 or dg_rpg_hybrid_submission[0] != "submit":
         jump dg_rpg_loop
-    $ dg_rpg_hybrid_action_text = _return
+    $ dg_rpg_hybrid_action_text = dg_rpg_hybrid_submission[1]
+    $ logging.getLogger("don_gen").info("Hybrid input submitted mode=%s chars=%d",dg_rpg_hybrid_mode,len(dg_rpg_hybrid_action_text))
     $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who, dg_rpg_hybrid_topic)
     jump dg_rpg_hybrid_review_label
 
