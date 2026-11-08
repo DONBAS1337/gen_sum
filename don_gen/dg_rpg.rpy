@@ -15,6 +15,7 @@ init 1001 python:
     import dg_art
     import dg_narrative
     import dg_visual
+    import dg_stage
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -81,6 +82,8 @@ init 1001 python:
 
     def dg_rpg_apply(action, arg=None):
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
+        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous"):
+            store.dg_rpg_scene_context = dg_stage.freeze(state)
         if action == "move":
             dg_rpg.move(state, arg)
         elif action == "talk":
@@ -134,6 +137,8 @@ init 1001 python:
             dg_rpg.activity(state, action)
         dg_rpg.save(dg_rpg_root(), state)
         store.dg_rpg_state = state
+        if action == "move":
+            store.dg_rpg_scene_context = dg_stage.freeze(state)
         logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
 
@@ -192,6 +197,11 @@ init 1001 python:
         # The worker only WRITES PROSE; world mechanics remain locked.
         state=dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"])
         app=dg_runtime.app
+        if kind == "result" and dg_rpg_scene_context is not None:
+            import copy
+            state = copy.deepcopy(state)
+            for key in ("day", "slot", "place"):
+                state[key] = dg_rpg_scene_context[key]
         ref=u""
         # Use the actual installed 7DL route text when available. If no 7DL
         # resources exist, the route-specific persona profile still applies.
@@ -211,7 +221,7 @@ init 1001 python:
                         "7DL context unavailable for auto scene",exc_info=True)
         instructions,prompt=dg_narrative.request(
             state,kind,who,identity,story,choices=choices,source_reference=ref)
-        instructions+=u" "+dg_adult.scene_policy(state,who)
+        instructions+=u" "+dg_adult.scene_policy(state,who)+u" "+dg_stage.FORMATTING
         if not app.models:
             app.refresh_models()
         model=dg_backend.default_model(app.models,persistent.dg_model)
@@ -371,32 +381,37 @@ init 1001 python:
     DG_RPG_EXACT_BG = ("square","gate","cabins","canteen","library","clubs",
                        "stage","beach","lake","forest","infirmary","sports")
 
+    def dg_rpg_visual_state():
+        if dg_rpg_stage_active and dg_rpg_scene_context is not None:
+            return dg_rpg_scene_context
+        return dg_rpg_state
+
     def dg_rpg_bg_native(place):
         # Prefer the actual location AND matching time of day when available.
         # Only exact 12 canonical locations block manual BG generation.
         if place not in DG_RPG_EXACT_BG:
             return None
-        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_state["slot"]):
+        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_visual_state()["slot"]):
             if name in dg_runtime.original_images:
                 return name
         return None
 
     def dg_rpg_bg_status():
-        place = dg_rpg_state["place"]
+        place = dg_rpg_visual_state()["place"]
         native = dg_rpg_bg_native(place)
         return dg_art.resolve(dg_rpg_root(), dg_rpg_state["id"],
                               "background", place, native,
                               getattr(persistent,"dg_prefer_generated",True))
 
     def dg_rpg_bg():
-        place = dg_rpg_state["place"]
+        place = dg_rpg_visual_state()["place"]
         available = dg_rpg_bg_status()
         if available["status"] == "generated" and renpy.loadable(available["path"]):
             return Image(available["path"])
         if available["status"] == "builtin":
             return dg_runtime.original_images[available["path"]]
         # Fallback scenery is shown while specific visual art is absent.
-        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_state["slot"]):
+        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_visual_state()["slot"]):
             if name in dg_runtime.original_images:
                 return dg_runtime.original_images[name]
         return Solid("#173039")
@@ -406,9 +421,6 @@ init 1001 python:
         # composition when the exact named pose is missing. No image generation.
         if who not in dg_rpg.NPC_NAMES:
             return None
-        custom = dg_rpg.asset_path(dg_rpg_root(),dg_rpg_state["id"],"sprite",who)
-        if renpy.loadable(custom):
-            return Image(custom)
         known = dg_visual.sprite_names(who,emotion,distance,
                                         dg_runtime.original_images.keys())
         exact=[name for name in known if
@@ -432,18 +444,39 @@ init 1001 python:
             sprite=dg_7dl_sprite_displayable(name)
             if sprite is not None:
                 return sprite
+        # Old generated portraits are a last fallback; they must not replace
+        # expressive canonical sprites when those are available.
+        custom = dg_rpg.asset_path(dg_rpg_root(),dg_rpg_state["id"],"sprite",who)
+        if renpy.loadable(custom):
+            return Image(custom)
         logging.getLogger("don_gen").warning("No original sprite found for npc=%s emotion=%s distance=%s",
                                              who,emotion,distance)
         return None
 
-    def dg_rpg_vn_secondary(who, text):
-        # Only actual nearby NPCs whose names are referenced are shown.
+    def dg_rpg_say_character(who):
         if who is None:
             return None
-        for code,name in dg_rpg.at_place(dg_rpg_state):
-            if code != who and name in text:
-                return code
-        return None
+        # Reuse the base game's Character and say screen whenever possible.
+        native = getattr(store, who, None) if who != "hero" else None
+        if isinstance(native, renpy.character.ADVCharacter):
+            return native
+        name = (dg_rpg_scene_context or {}).get("hero_name", dg_rpg_state["hero"]["name"]) if who == "hero" else dg_stage.NAMES[who]
+        return Character(dg_literal(name), who_color=dg_stage.COLORS.get(who, "#eeeeee"))
+
+    def dg_rpg_stage_actors(turns, cast_ids, turn):
+        # Update one actor's expression; narration does not make everybody cry/smile.
+        if turn["who"] in dg_stage.NAMES:
+            store.dg_rpg_actor_moods[turn["who"]] = dg_visual.mood(turn["text"])
+        visible = dg_stage.positions(cast_ids, turn["who"])
+        visible_ids = [who for who, x in visible]
+        for who in dg_stage.NAMES:
+            if who not in visible_ids:
+                renpy.hide("dg_actor_" + who)
+        for who, x in visible:
+            sprite = dg_rpg_sprite(who, dg_rpg_actor_moods.get(who, "normal"), "normal")
+            if sprite is not None:
+                renpy.show("dg_actor_" + who, what=Transform(sprite, xpos=x, xanchor=.5, ypos=1.0, yanchor=1.0),
+                           zorder=15 if who == turn["who"] else 10)
 
     def dg_rpg_cg_builtin(plan):
         index_path = os.path.join(renpy.config.gamedir,"mods","don_gen",
@@ -505,7 +538,7 @@ init 1001 python:
             u"Не выдумывай новые цифры характеристик, награды или местонахождение персонажей. "
             u"Верни только текст сцены без Markdown, программного кода и меню."
         )
-        instructions += u" " + dg_adult.scene_policy(state, who)
+        instructions += u" " + dg_adult.scene_policy(state, who) + u" " + dg_stage.FORMATTING
         violation = dg_adult.validate_action(state, intent, who)
         if violation:
             raise ValueError(violation)
@@ -564,6 +597,9 @@ init 1001 python:
 default dg_rpg_hybrid_plan = None
 default dg_rpg_state = None
 default dg_rpg_focus = None
+default dg_rpg_scene_context = None
+default dg_rpg_stage_active = False
+default dg_rpg_actor_moods = {}
 
 screen dg_rpg_picker:
     modal True
@@ -584,6 +620,12 @@ screen dg_rpg_picker:
             spacing 24
             text u"Продолжить историю" style "dg_rpg_heading"
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 xsize 976 ysize 580 mousewheel True draggable True scrollbars "vertical"
                 vbox:
                     xsize 936 spacing 16
@@ -675,6 +717,12 @@ screen dg_rpg_edit_field(field, current):
                     padding (22, 19)
                     xsize 1310 ysize (dg_rpg_preview_height(editor_text, 175, 300, 150, 55, 24))
                     viewport:
+                        viewport_xfill True
+                        vscrollbar_xsize 16
+                        vscrollbar_base_bar Solid("#0b2029")
+                        vscrollbar_thumb Solid("#6d918e")
+                        vscrollbar_unscrollable "hide"
+                        side_spacing 12
                         mousewheel True
                         scrollbars "vertical"
                         ysize (dg_rpg_preview_height(editor_text, 135, 260, 110, 55, 24))
@@ -702,6 +750,12 @@ screen dg_rpg_setup:
         fixed:
             xsize 1496 ysize 770
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 xsize 1496 ysize 644 mousewheel True scrollbars "vertical"
                 vbox:
                     xsize 1420 spacing 16
@@ -804,107 +858,98 @@ screen dg_rpg_adult_settings:
 screen dg_rpg_map:
     modal True
     default dg_map_hover = None
-    # Custom generated DON-GEN map is preferred, legacy supplied map is fallback.
-    if renpy.loadable(DG_MAP_USER):
-        add im.Scale(DG_MAP_USER, 1920, 1080)
+    default dg_map_selected = dg_rpg_state["place"]
+    add Solid("#0b2029")
+    text u"Карта Совёнка" style "dg_rpg_heading" xpos 32 ypos 28
+    text (dg_rpg.camp_time(dg_rpg_state) + u" · " + dg_world.weather(dg_rpg_state)[1]) style "dg_rpg_hint" xpos 32 ypos 88
+    $ dg_map_custom = renpy.loadable(DG_MAP_USER)
+    if dg_map_custom:
+        add im.Scale(DG_MAP_USER, 1416, 797) xpos 24 ypos 150
     elif renpy.loadable(DG_MAP_ATLAS):
-        add im.Scale(DG_MAP_ATLAS, 1920, 1080)
-    elif renpy.loadable(DG_RPG_MAP_IMAGE):
-        add DG_RPG_MAP_IMAGE
+        add im.Scale(DG_MAP_ATLAS, 1416, 797) xpos 24 ypos 150
     else:
-        add Solid("#78976b")
-    add Solid("#10202919")
-    # The user-supplied canonical map has its own landmark coordinates.
-    $ visible_places = DG_MAP_USER_PINS if renpy.loadable(DG_MAP_USER) else DG_RPG_MAP_PINS
+        add Solid("#567555", xysize=(1416, 797)) xpos 24 ypos 150
+    $ visible_places = DG_MAP_USER_PINS if dg_map_custom else DG_RPG_MAP_PINS
     for slug, px, py in visible_places:
+        $ marker_x, marker_y = dg_stage.map_point(px, py)
         $ story_here = dg_world.event_at(dg_rpg_state, slug)
         $ quest_here = dg_social.quest_at(dg_rpg_state, slug)
         $ incident_here = dg_social.incident_at(dg_rpg_state, slug)
-        $ locals_here = dg_rpg.at_place(dg_rpg_state, slug)
         imagebutton:
-            idle ((DG_MAP_USER_CURRENT if dg_rpg_state["place"] == slug else DG_MAP_USER_IDLE)
-                  if renpy.loadable(DG_MAP_USER)
-                  else (DG_MAP_PIN_SELECTED if dg_rpg_state["place"] == slug else DG_MAP_PIN_IDLE))
-            hover (DG_MAP_USER_HOVER if renpy.loadable(DG_MAP_USER) else DG_MAP_PIN_HOVER)
-            xpos px ypos py
-            focus_mask True
+            idle (DG_MAP_PIN_SELECTED if dg_map_selected == slug else DG_MAP_PIN_IDLE)
+            hover DG_MAP_PIN_HOVER
+            xpos marker_x ypos marker_y xanchor .5 yanchor .5
+            focus_mask None
             hovered SetScreenVariable("dg_map_hover", slug)
             unhovered SetScreenVariable("dg_map_hover", None)
-            action Return(("cabins", slug) if slug in ("cabins", "cabins_south") else ("go", slug))
+            action SetScreenVariable("dg_map_selected", slug)
         if story_here:
-            add DG_MAP_BADGE_STORY xpos (px + 30) ypos (py - 12)
-        if quest_here:
-            add DG_MAP_BADGE_QUEST xpos (px - 13) ypos (py - 18)
-        if incident_here:
-            add DG_MAP_BADGE_MEET xpos (px + 26) ypos (py + 28)
-        if locals_here:
-            # Character illustrations on the atlas, not a string of names.
-            for index, pair in enumerate(locals_here[:3]):
-                $ who = pair[0]
-                $ icon_display = dg_map_npc_icon(who)
-                if icon_display is not None:
-                    add icon_display xpos (px - 5 + index * 31) ypos (py + 33)
-                else:
-                    $ mini = dg_rpg_sprite(who)
-                    if mini is not None:
-                        add Transform(mini, zoom=0.068) xpos (px - 5 + index * 31) ypos (py + 33)
-                    else:
-                        add DG_MAP_BADGE_NPC xpos (px + index * 24) ypos (py + 33)
-    if renpy.loadable(DG_MAP_USER):
-        # Every house on the real gen_assets map can be entered DIRECTLY:
-        # transparent idle hotspot, highlighted roof on hover.
+            add DG_MAP_BADGE_STORY xpos (marker_x + 12) ypos (marker_y - 16)
+        elif incident_here:
+            add DG_MAP_BADGE_MEET xpos (marker_x + 12) ypos (marker_y - 16)
+        elif quest_here:
+            add DG_MAP_BADGE_QUEST xpos (marker_x + 12) ypos (marker_y - 16)
+        if dg_rpg_state["place"] == slug:
+            text u"Ты" style "dg_rpg_hint" size 19 color "#fff4c7" xpos marker_x ypos (marker_y + 22) xanchor .5 outlines [(2, "#07171f", 0, 0)]
+    if dg_map_custom:
+        # These roof coordinates are calibrated only for the private source map.
         for cabin, bx, by in DG_MAP_USER_CABINS:
+            $ roof_x, roof_y = dg_stage.map_point(bx, by)
             imagebutton:
                 idle Solid("#ffffff01", xysize=(27, 26))
                 hover Solid("#ffe0a990", xysize=(27, 26))
-                xpos bx ypos by
-                focus_mask False
+                xpos roof_x ypos roof_y
+                focus_mask None
                 hovered SetScreenVariable("dg_map_hover", cabin)
                 unhovered SetScreenVariable("dg_map_hover", None)
-                action Return(("go", cabin))
+                action SetScreenVariable("dg_map_selected", cabin)
+    if dg_map_hover in dg_rpg.PLACE_NAMES:
+        frame:
+            background Solid("#0b2029ed") padding (16, 10)
+            xpos 32 ypos 108 xmaximum 1380
+            text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_rpg_body" size 25
     frame:
-        background Solid("#102632ec")
-        xpos 0 ypos 0 xsize 1920 ysize 94
-        padding (68, 21)
-        hbox:
-            spacing 38
-            text u"DON-GEN  /  КАРТА ЛАГЕРЯ" style "dg_meta" size 26 color "#f5edda"
-            text (u"День %d/%d · %s · %s" % (dg_rpg_state["day"], dg_rpg_state["duration"],
-                   dg_rpg.SLOTS[dg_rpg_state["slot"]], dg_world.weather(dg_rpg_state)[1])) style "dg_text" size 24
-    textbutton u"СПИСОК МЕСТ" style "dg_map_pin" xpos 1480 ypos 19 action Return(("places", None))
-    textbutton u"ЗАКРЫТЬ" style "dg_map_pin" xpos 1690 ypos 19 action Return(("close", None))
-    frame:
-        background Solid("#102632ed")
-        xpos 12 ypos 920 xsize 565 ysize 92
-        padding (18, 10)
-        vbox:
-            spacing 8
-            if dg_map_hover in dg_rpg.PLACE_NAMES:
-                text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_text" size 25 color "#ffe2aa"
-                $ hover_people = dg_rpg.at_place(dg_rpg_state, dg_map_hover)
-                text (u"Здесь: " + u", ".join(name for code, name in hover_people) if hover_people else u"Никого из знакомых поблизости") style "dg_text" size 20
-            else:
-                text u"НАВЕДИ НА ЗДАНИЕ ИЛИ ЗНАЧОК" style "dg_meta" size 23 color "#ffe2aa"
-                text u"Переход между местами не расходует время." style "dg_text" size 21
-    frame:
-        background Solid("#102632ed")
-        xpos 1560 ypos 108 xsize 338 ysize 170
-        padding (19, 13)
-        vbox:
-            spacing 5
-            hbox:
-                spacing 10
-                add DG_MAP_BADGE_STORY
-                text u"История" style "dg_text" size 20
-            hbox:
-                spacing 10
-                add DG_MAP_BADGE_QUEST
-                text u"Поручение" style "dg_text" size 20
-            hbox:
-                spacing 10
-                add DG_MAP_BADGE_MEET
-                text u"Встреча" style "dg_text" size 20
-
+        background Solid("#14323c") xpos 1464 ypos 150 xsize 432 ysize 797 padding (24, 24)
+        fixed:
+            xsize 384 ysize 749
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
+                xsize 384 ysize 574 mousewheel True scrollbars "vertical"
+                vbox:
+                    xsize 348 spacing 18
+                    text dg_rpg.PLACE_NAMES[dg_map_selected] style "dg_rpg_heading" size 34
+                    text (u"Ты сейчас здесь" if dg_map_selected == dg_rpg_state["place"] else u"Переход без траты времени") style "dg_rpg_hint"
+                    text u"Кто здесь" style "dg_rpg_body"
+                    $ map_people = dg_rpg.at_place(dg_rpg_state, dg_map_selected)
+                    if not map_people:
+                        text u"Никого из знакомых" style "dg_rpg_hint"
+                    for who, name in map_people:
+                        text name style "dg_rpg_body" color dg_stage.COLORS.get(who, "#eeeeee")
+                    $ selected_event = dg_world.event_at(dg_rpg_state, dg_map_selected)
+                    if selected_event:
+                        text u"Событие дня" style "dg_rpg_hint"
+                        text dg_literal(selected_event["title"]) style "dg_rpg_body"
+                    $ selected_incident = dg_social.incident_at(dg_rpg_state, dg_map_selected)
+                    if selected_incident:
+                        text u"Встреча персонажей" style "dg_rpg_hint"
+                        text dg_literal(selected_incident["title"]) style "dg_rpg_body"
+                    for entry in dg_social.quest_at(dg_rpg_state, dg_map_selected):
+                        text dg_literal(entry["title"]) style "dg_rpg_body"
+            vbox:
+                ypos 598 xsize 384 spacing 12
+                textbutton (u"Ты уже здесь" if dg_map_selected == dg_rpg_state["place"] else u"Перейти сюда") style "dg_rpg_main_button" sensitive (not dg_rpg_state["finished"] and dg_map_selected != dg_rpg_state["place"]) action Return(("go", dg_map_selected))
+                if dg_map_selected in ("cabins", "cabins_south"):
+                    textbutton u"Выбрать домик" style "dg_rpg_button" action Return(("cabins", dg_map_selected))
+    hbox:
+        xpos 24 ypos 974 spacing 16
+        textbutton u"Поиск места" style "dg_rpg_tab" action Return(("places", None))
+        textbutton u"Закрыть карту" style "dg_rpg_tab" action Return(("close", None))
+    text u"Выбери отметку, затем нажми «Перейти сюда»." style "dg_rpg_hint" xpos 594 ypos 991 xmaximum 1280
     key "K_ESCAPE" action Return(("close", None))
 
 screen dg_rpg_places:
@@ -919,6 +964,12 @@ screen dg_rpg_places:
             value ScreenVariableInputValue("place_query") style "dg_rpg_edit_input"
             length 80 xmaximum 1680 default_focus True
     viewport:
+        viewport_xfill True
+        vscrollbar_xsize 16
+        vscrollbar_base_bar Solid("#0b2029")
+        vscrollbar_thumb Solid("#6d918e")
+        vscrollbar_unscrollable "hide"
+        side_spacing 12
         xpos 80 ypos 286 xsize 1760 ysize 620 mousewheel True draggable True scrollbars "vertical"
         vbox:
             xsize 1710 spacing 12
@@ -946,6 +997,12 @@ screen dg_rpg_cabins(region):
                 textbutton u"ОБЩИЙ ДВОР" style "dg_primary" action Return(("go", region))
                 textbutton u"НАЗАД НА КАРТУ" style "dg_act" action Return(("map", None))
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 mousewheel True
                 scrollbars "vertical"
                 ysize 615
@@ -983,9 +1040,11 @@ style dg_rpg_button_text is dg_rpg_body:
 style dg_rpg_main_button is dg_rpg_button:
     background Solid("#d8b678")
     hover_background Solid("#f0d49c")
+    insensitive_background Solid("#243a3e")
 style dg_rpg_main_button_text is dg_rpg_button_text:
     color "#172a30"
     hover_color "#172a30"
+    insensitive_color "#85958e"
 style dg_rpg_tab is dg_rpg_button:
     xfill False
     xsize 252
@@ -1021,6 +1080,12 @@ screen dg_rpg_hub:
         background Solid("#102b33f5")
         xpos 48 ypos 258 xsize 1100 ysize 656 padding (28, 24)
         viewport:
+            viewport_xfill True
+            vscrollbar_xsize 16
+            vscrollbar_base_bar Solid("#0b2029")
+            vscrollbar_thumb Solid("#6d918e")
+            vscrollbar_unscrollable "hide"
+            side_spacing 12
             xsize 1044 ysize 608
             mousewheel True draggable True scrollbars "vertical"
             vbox:
@@ -1081,6 +1146,12 @@ screen dg_rpg_hub:
             spacing 18
             text u"Кто рядом" style "dg_rpg_heading"
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 xsize 644 ysize 606 mousewheel True draggable True scrollbars "vertical"
                 vbox:
                     xsize 608 spacing 22
@@ -1132,6 +1203,12 @@ screen dg_rpg_hybrid_input(mode, who=None):
                 frame:
                     background Solid("#081b25") padding (24, 20) xsize 1380 ysize 170
                     viewport:
+                        viewport_xfill True
+                        vscrollbar_xsize 16
+                        vscrollbar_base_bar Solid("#0b2029")
+                        vscrollbar_thumb Solid("#6d918e")
+                        vscrollbar_unscrollable "hide"
+                        side_spacing 12
                         xsize 1332 ysize 130 mousewheel True scrollbars "vertical"
                         input:
                             value ScreenVariableInputValue("action_text")
@@ -1142,6 +1219,12 @@ screen dg_rpg_hybrid_input(mode, who=None):
                 text (u"%d / 4000 символов" % len(action_text)) style "dg_rpg_hint"
                 text u"Твой текст" style "dg_rpg_hint"
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     xsize 1380 ysize 256 mousewheel True draggable True scrollbars "vertical"
                     text dg_literal(action_text if action_text else u"Например: «Подойти к Мику и предложить вместе подготовить выступление».") style "dg_rpg_body" xmaximum 1320
             hbox:
@@ -1160,15 +1243,23 @@ screen dg_rpg_hybrid_review(plan):
         fixed:
             xsize 1400 ysize 836
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 xsize 1400 ysize 718 mousewheel True draggable True scrollbars "vertical"
                 vbox:
                     xsize 1340 spacing 20
                     text (u"Твой следующий ход" if plan["status"] == "ready" else u"Уточни действие") style "dg_rpg_heading"
-                    text dg_literal(plan.get("action", u"")) style "dg_rpg_body"
+                    text dg_literal(plan.get("action", u"")[:700] + (u"…" if len(plan.get("action", u"")) > 700 else u"")) style "dg_rpg_body"
+                    if len(plan.get("action", u"")) > 700:
+                        text u"Полный текст сохранён. Его можно открыть кнопкой «Изменить текст»." style "dg_rpg_hint"
                     if plan["status"] != "ready":
                         text dg_literal(plan["message"]) style "dg_rpg_body"
                     else:
-                        text dg_literal(plan["result"]["text"]) style "dg_rpg_body"
+                        text dg_literal(plan["result"]["text"] if len(plan["result"]["text"]) <= 1000 else plan["result"]["text"][:450] + u"…" + plan["result"]["text"][-450:]) style "dg_rpg_body"
                         text u"Что изменится" style "dg_rpg_heading" size 32
                         for item in plan["effects"]:
                             text dg_literal(item) style "dg_rpg_body"
@@ -1192,6 +1283,12 @@ screen dg_rpg_art_error(message):
             spacing 24
             text u"CG · НЕ УДАЛОСЬ СОЗДАТЬ ИЛЛЮСТРАЦИЮ" style "dg_title" size 43 color "#ffe2a6"
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 mousewheel True scrollbars "vertical" ysize 245
                 text dg_literal(message) style "dg_text" size 27 xmaximum 1300
             textbutton u"ВЕРНУТЬСЯ К СЦЕНЕ" style "dg_primary" action Return(None)
@@ -1208,6 +1305,12 @@ screen dg_rpg_cg_gallery:
             text u"ГАЛЕРЕЯ CG · ТЕКУЩАЯ СМЕНА" style "dg_title" size 49 color "#ffe1a4"
             text u"Иллюстрации сохранены на диске. Открытие галереи не запускает генерацию." style "dg_text" size 26
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 mousewheel True scrollbars "vertical" ysize 665
                 vbox:
                     spacing 15
@@ -1279,6 +1382,12 @@ screen dg_rpg_hybrid_read(entry):
                 padding (23, 19)
                 xsize 1410 ysize 545
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     mousewheel True scrollbars "vertical" ysize 490
                     text dg_literal(entry["scene"] if entry["scene"] else entry["result"]) style "dg_text" size 29 xmaximum 1330
             text u"ИГРОВЫЕ ПОСЛЕДСТВИЯ · зафиксированы движком, а не моделью" style "dg_meta" size 22
@@ -1315,6 +1424,12 @@ screen dg_rpg_free_input:
                 padding (20, 15) xsize 1350
                 ysize (dg_rpg_preview_height(action_text, 140, 300, 140, 80, 24))
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     mousewheel True scrollbars "vertical"
                     ysize (dg_rpg_preview_height(action_text, 100, 260, 100, 80, 24))
                     text dg_literal(action_text if action_text else u"Здесь будет показана длинная реплика с переносом строк.") style "dg_text" size 28 xmaximum 1260
@@ -1342,6 +1457,12 @@ screen dg_rpg_action_result(result, cg_worthy=False):
                 padding (22, 18)
                 xsize 1265 ysize 535
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     mousewheel True scrollbars "vertical" ysize 490
                     text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
             if cg_worthy:
@@ -1368,6 +1489,12 @@ screen dg_rpg_npc_incident:
                     padding (25, 20)
                     xsize 1260 ysize 270
                     viewport:
+                        viewport_xfill True
+                        vscrollbar_xsize 16
+                        vscrollbar_base_bar Solid("#0b2029")
+                        vscrollbar_thumb Solid("#6d918e")
+                        vscrollbar_unscrollable "hide"
+                        side_spacing 12
                         mousewheel True scrollbars "vertical" ysize 225
                         text dg_literal(event["text"]) style "dg_text" size 31 xmaximum 1185
                 text (u"Их отношение сейчас: " + str(dg_social.bond(dg_rpg_state, event["pair"][0], event["pair"][1]))) style "dg_text" size 26 color "#ffe5a0"
@@ -1399,6 +1526,12 @@ screen dg_rpg_personal(who):
                 padding (25, 20)
                 xsize 1220 ysize 318
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     mousewheel True scrollbars "vertical" ysize 270
                     text dg_literal(scene["text"]) style "dg_text" size 32 xmaximum 1140
             text u"ОТ ТЕБЯ ЗАВИСИТ, КАК ПРОДОЛЖИТСЯ ВАША ИСТОРИЯ" style "dg_meta" size 23
@@ -1417,6 +1550,12 @@ screen dg_rpg_contracts:
         xpos 105 ypos 287 xsize 1710 ysize 680
         padding (35, 27)
         viewport:
+            viewport_xfill True
+            vscrollbar_xsize 16
+            vscrollbar_base_bar Solid("#0b2029")
+            vscrollbar_thumb Solid("#6d918e")
+            vscrollbar_unscrollable "hide"
+            side_spacing 12
             mousewheel True scrollbars "vertical" ysize 610
             vbox:
                 spacing 24
@@ -1472,6 +1611,12 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
                 padding (24, 18)
                 xsize 1212 ysize 310
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     mousewheel True
                     scrollbars "vertical"
                     ysize 270
@@ -1505,6 +1650,12 @@ screen dg_rpg_finale:
             spacing 16
             text u"Твоя история в Совёнке" style "dg_ink_title" size 50
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 mousewheel True
                 scrollbars "vertical"
                 ysize 570
@@ -1535,6 +1686,12 @@ screen dg_rpg_world_event:
                     padding (22, 15)
                     xsize 1230 ysize 270
                     viewport:
+                        viewport_xfill True
+                        vscrollbar_xsize 16
+                        vscrollbar_base_bar Solid("#0b2029")
+                        vscrollbar_thumb Solid("#6d918e")
+                        vscrollbar_unscrollable "hide"
+                        side_spacing 12
                         ysize 232
                         mousewheel True
                         scrollbars "vertical"
@@ -1542,6 +1699,12 @@ screen dg_rpg_world_event:
                 text u"КАК ТЫ ПОСТУПИШЬ? РЕШЕНИЕ ИЗМЕНИТ СЛЕДУЮЩИЕ ДНИ" style "dg_meta" size 22 color "#ffda91"
                 if dg_rpg_state["energy"] >= 8:
                     viewport:
+                        viewport_xfill True
+                        vscrollbar_xsize 16
+                        vscrollbar_base_bar Solid("#0b2029")
+                        vscrollbar_thumb Solid("#6d918e")
+                        vscrollbar_unscrollable "hide"
+                        side_spacing 12
                         ysize 184
                         mousewheel True
                         scrollbars "vertical"
@@ -1575,6 +1738,12 @@ screen dg_rpg_world_result(result):
                 padding (25, 20)
                 xsize 1360 ysize 435
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     ysize 390
                     mousewheel True scrollbars "vertical"
                     text dg_literal(result["text"]) style "dg_text" size 31 xmaximum 1290
@@ -1604,6 +1773,12 @@ screen dg_rpg_journal:
             padding (23, 21)
             xsize 970 ysize 660
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 mousewheel True
                 scrollbars "vertical"
                 ysize 610
@@ -1618,7 +1793,7 @@ screen dg_rpg_journal:
                             text u"Вы ещё не вели подробных разговоров. Встретьте персонажа и выберите тему беседы." style "dg_text" size 28 xmaximum 850
                         for item in dg_rpg_state.get("dialogue_history", [])[::-1]:
                             text (u"День %d · %s · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]], item["topic"])) style "dg_meta" size 23
-                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 855
                             text (u"Отношения +%d" % item["affinity_gain"]) style "dg_text" size 22 color "#ffe19b"
                             null height 12
                     elif view == "world":
@@ -1627,7 +1802,7 @@ screen dg_rpg_journal:
                         for item in dg_rpg_state["world"]["chronicle"][::-1]:
                             text (u"День %d · %s · %s" % (item["day"], item["title"],
                                   u"Пропущено" if item["status"] == "missed" else u"Событие сыграно")) style "dg_meta" size 23
-                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 855
                             null height 12
                     elif view == "social":
                         text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_meta" size 25 color "#ffe5a0"
@@ -1635,7 +1810,7 @@ screen dg_rpg_journal:
                             text u"Пока ничего необычного. Новые слухи появляются со временем." style "dg_text" size 25
                         for item in dg_rpg_state["social"]["rumours"][::-1]:
                             text (u"День %d" % item["day"]) style "dg_meta" size 22
-                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 850
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 850
                         text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_meta" size 25 color "#ffe5a0"
                         for who, name in dg_social.NAMES.items():
                             if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
@@ -1644,19 +1819,25 @@ screen dg_rpg_journal:
                         for item in dg_rpg_state.get("hybrid_history", [])[::-1]:
                             text (u"День %d · Твой поступок" % item["day"]) style "dg_rpg_hint"
                             text dg_literal(item["action"]) style "dg_rpg_body" xmaximum 855
-                            text dg_literal(item["scene"] or item["result"]) style "dg_rpg_body" xmaximum 855
+                            text dg_literal(dg_stage.readable(item["scene"] or item["result"])) style "dg_rpg_body" xmaximum 855
                             null height 16
                         if not dg_rpg_state["ai_scenes"] and not dg_rpg_state.get("hybrid_history"):
                             text u"Пока нет AI-сцен. Продолжи историю своим действием или репликой." style "dg_text" size 28
                         for item in dg_rpg_state["ai_scenes"][::-1]:
                             text (u"День %d · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]])) style "dg_meta" size 23
-                            text dg_literal(item["text"]) style "dg_text" size 26 xmaximum 855
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 855
                             null height 13
         frame:
             background Solid("#091a24")
             padding (24, 19)
             xsize 750 ysize 660
             viewport:
+                viewport_xfill True
+                vscrollbar_xsize 16
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
                 mousewheel True scrollbars "vertical" ysize 610
                 vbox:
                     spacing 13
@@ -1724,6 +1905,12 @@ screen dg_rpg_route_choice(who):
                 padding (23, 17)
                 xsize 1210 ysize 345
                 viewport:
+                    viewport_xfill True
+                    vscrollbar_xsize 16
+                    vscrollbar_base_bar Solid("#0b2029")
+                    vscrollbar_thumb Solid("#6d918e")
+                    vscrollbar_unscrollable "hide"
+                    side_spacing 12
                     mousewheel True scrollbars "vertical"
                     ysize 303
                     text dg_literal(situation["text"]) style "dg_text" size 28 xmaximum 1140
@@ -1778,34 +1965,38 @@ screen dg_rpg_read_scene(scene_text):
         padding (55, 45)
         xpos 270 ypos 175 xsize 1380 ysize 740
         viewport:
+            viewport_xfill True
+            vscrollbar_xsize 16
+            vscrollbar_base_bar Solid("#0b2029")
+            vscrollbar_thumb Solid("#6d918e")
+            vscrollbar_unscrollable "hide"
+            side_spacing 12
             ysize 640
             mousewheel True scrollbars "vertical"
             text dg_literal(scene_text) style "dg_ink_small" size 30 xmaximum 1240
     textbutton u"Иллюстрировать сцену (CG)" style "dg_primary" xpos 1120 ypos 955 action Return("cg")
 
-# Narration now uses Everlasting Summer's own Ren'Py say window.
-# This is a label, not a custom fullscreen paper-like Screen.
+# Native named dialogue over a frozen, full-screen stage. No hub overlay.
 label dg_rpg_vn_text(scene_text, who=None):
     $ renpy.hide_screen("dg_scene")
+    if dg_rpg_scene_context is None:
+        $ dg_rpg_scene_context = dg_stage.freeze(dg_rpg_state, who)
+    $ dg_rpg_stage_active = True
     scene expression dg_rpg_bg()
-    $ dg_rpg_vn_lines = dg_rpg_vn_pages(scene_text)
-    $ dg_rpg_vn_secondary_code = dg_rpg_vn_secondary(who, scene_text)
+    $ dg_rpg_actor_moods = {}
+    $ dg_stage_present = list(dg_rpg_scene_context["present"])
+    if who in dg_stage.NAMES and who not in dg_stage_present:
+        $ dg_stage_present.append(who)
+    $ dg_rpg_vn_turns = dg_stage.parse(scene_text, dg_stage_present, who)
+    $ dg_rpg_vn_cast = dg_stage.cast(dg_rpg_vn_turns, dg_stage_present, who)
     $ dg_rpg_vn_line_index = 0
-    while dg_rpg_vn_line_index < len(dg_rpg_vn_lines):
-        $ dg_rpg_vn_raw = dg_rpg_vn_lines[dg_rpg_vn_line_index]
-        $ dg_rpg_vn_emotion = dg_visual.mood(dg_rpg_vn_raw)
-        $ dg_rpg_vn_distance = dg_visual.distance(dg_rpg_vn_raw)
-        if who is not None:
-            $ dg_rpg_vn_primary_sprite = dg_rpg_sprite(who, dg_rpg_vn_emotion, dg_rpg_vn_distance)
-            if dg_rpg_vn_primary_sprite is not None:
-                show expression dg_rpg_vn_primary_sprite as dg_vn_character at right
-        if dg_rpg_vn_secondary_code is not None:
-            $ dg_rpg_vn_secondary_sprite = dg_rpg_sprite(dg_rpg_vn_secondary_code, dg_rpg_vn_emotion, "normal")
-            if dg_rpg_vn_secondary_sprite is not None:
-                show expression dg_rpg_vn_secondary_sprite as dg_vn_secondary at left
-        $ dg_rpg_vn_line = dg_literal(dg_rpg_vn_raw)
-        "[dg_rpg_vn_line]"
+    while dg_rpg_vn_line_index < len(dg_rpg_vn_turns):
+        $ dg_rpg_vn_turn = dg_rpg_vn_turns[dg_rpg_vn_line_index]
+        $ dg_rpg_stage_actors(dg_rpg_vn_turns, dg_rpg_vn_cast, dg_rpg_vn_turn)
+        $ dg_rpg_vn_line = dg_literal(dg_rpg_vn_turn["text"])
+        $ renpy.say(dg_rpg_say_character(dg_rpg_vn_turn["who"]), dg_rpg_vn_line)
         $ dg_rpg_vn_line_index += 1
+    $ dg_rpg_stage_active = False
     return
 
 label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None, scene_identity=None):
@@ -1940,6 +2131,8 @@ label dg_rpg_create_loop:
     jump dg_rpg_create_loop
 
 label dg_rpg_loop:
+    $ dg_rpg_stage_active = False
+    $ dg_rpg_scene_context = dg_stage.freeze(dg_rpg_state)
     call screen dg_rpg_hub
     $ dg_rpg_cmd, dg_rpg_value = _return
     if dg_rpg_cmd == "exit":

@@ -543,6 +543,7 @@ def summary_for_ai(state, who, intent):
         "hero": state["hero"], "profile": state["source"], "day": state["day"],
         "slot": SLOTS[state["slot"]], "place": PLACE_NAMES[state["place"]],
         "speaker": NPC_NAMES[who], "affinity": state["affinity"][who],
+        "present_people": at_place(state),
         "relation": route_label(state["affinity"][who]), "player_action": intent,
         "recent_journal": state["journal"][-10:],
         "recent_scenes": state["ai_scenes"][-3:],

@@ -103,8 +103,9 @@ class DialogueTests(unittest.TestCase):
         self.assertIn('DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"', script)
         self.assertIn('("gate",175,640)', script)
         self.assertIn('DG_MAP_ATLAS = "mods/don_gen/images/don_gen_atlas.png"', script)
-        self.assertIn('action Return(("cabins", slug) if slug in', script)
-        self.assertIn('else ("go", slug))', script)
+        self.assertIn('action SetScreenVariable("dg_map_selected", slug)', script)
+        self.assertIn('Return(("cabins", dg_map_selected))', script)
+        self.assertIn('action Return(("go", dg_map_selected))', script)
         self.assertIn('screen dg_rpg_dialogue(who, phase', script)
         self.assertIn('Return(("talk", who))', script)
         self.assertNotIn('min(progress, goal)', script)
@@ -112,3 +113,4 @@ class DialogueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

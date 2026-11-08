@@ -20,7 +20,9 @@ class VisualRegressionTests(unittest.TestCase):
         self.assertIn('renpy.hide_screen("dg_scene")',SCRIPT)
         self.assertNotIn('    $ dg_place("gate")',SCRIPT)
         self.assertIn('scene expression dg_rpg_bg()',SCRIPT)
-        self.assertIn('show expression dg_rpg_vn_primary_sprite as dg_vn_character at right',SCRIPT)
+        self.assertIn('renpy.show("dg_actor_" + who',SCRIPT)
+        self.assertIn('dg_stage.positions(cast_ids, turn["who"])',SCRIPT)
+        self.assertNotIn('focus_mask False',SCRIPT)
     def test_cg_frozen_payload_per_thread_and_validated(self):
         plan=dg_art.scene_plan(self.state,"ai",u"Неоконченная песня",
             u"Мику остановилась у сцены. В свете фонарей она показала герою свои черновые ноты и попросила помочь с репетицией.","mi")
@@ -79,3 +81,4 @@ class VisualRegressionTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

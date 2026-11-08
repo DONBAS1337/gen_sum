@@ -62,7 +62,8 @@ class AtlasAndHiddenNPC(unittest.TestCase):
         canonical=set(dg_rpg.PLACE_NAMES)-set("cabin_%02d" % n for n in range(1,32))
         self.assertEqual(coords,canonical)
         self.assertEqual(len(dg_rpg.PLACE_NAMES),70)
-        self.assertIn('Return(("cabins", slug) if slug in',screen)
+        self.assertIn('action SetScreenVariable("dg_map_selected", slug)',screen)
+        self.assertIn('Return(("cabins", dg_map_selected))',screen)
         self.assertIn('dg_map_result[0] == "go"',screen)
         self.assertIn('dg_map_result[1] in dg_rpg.PLACE_NAMES',screen)
         self.assertIn('action Return(("close", None))',screen)
@@ -112,3 +113,4 @@ class AtlasAndHiddenNPC(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

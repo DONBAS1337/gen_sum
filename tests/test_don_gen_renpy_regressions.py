@@ -76,7 +76,7 @@ class ReportedTracebacks(unittest.TestCase):
     def test_native_dialogue_used_for_all_story_paths(self):
         for expected in ('label dg_rpg_vn_text(scene_text, who=None):',
                          'scene expression dg_rpg_bg()',
-                         '"[dg_rpg_vn_line]"',
+                         'renpy.say(dg_rpg_say_character(dg_rpg_vn_turn["who"]), dg_rpg_vn_line)',
                          'label dg_rpg_vn_choice(story_text, choice_pairs, who=None, scene_identity=None):',
                          'renpy.display_menu',
                          'call dg_rpg_vn_dialogue(dg_rpg_focus, "topics")',
@@ -84,7 +84,7 @@ class ReportedTracebacks(unittest.TestCase):
                          'call dg_rpg_vn_scene(dg_rpg_last_world["text"], True, dg_world_active["npc"], "outcome:"+dg_world_active["id"]+":"+dg_rpg_world_stance)',
                          'call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])'):
             self.assertIn(expected,SCRIPT)
-        self.assertIn('show expression dg_rpg_vn_primary_sprite as dg_vn_character at right',SCRIPT)
+        self.assertIn('renpy.show("dg_actor_" + who',SCRIPT)
         self.assertIn('__cancel__',SCRIPT)
         for outdated in ('call screen dg_rpg_read_scene(', 'call screen dg_rpg_world_result(',
                          'call screen dg_rpg_hybrid_read('):
@@ -106,7 +106,8 @@ class ReportedTracebacks(unittest.TestCase):
         for name,x,y in landmarks+houses:
             self.assertTrue(0<=x<1920 and 0<=y<1080,(name,x,y))
         self.assertIn('hover Solid("#ffe0a990"',SCRIPT)
-        self.assertIn('action Return(("go", cabin))',SCRIPT)
+        self.assertIn('action SetScreenVariable("dg_map_selected", cabin)',SCRIPT)
+        self.assertIn('action Return(("go", dg_map_selected))',SCRIPT)
         self.assertIn('action Return(("go", slug))',SCRIPT) if False else None
         self.assertIn('dg_map_result[0] == "go"',SCRIPT)
 

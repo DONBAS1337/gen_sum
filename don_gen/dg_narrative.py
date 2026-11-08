@@ -152,6 +152,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "day":state["day"],"slot":time,"place":dg_rpg.PLACE_NAMES[state["place"]],
         "source":source,"route_style":STYLE_PROFILES.get(source,STYLE_PROFILES["vanilla"]),
         "who":who,"persona":(persona[:2] if persona else None),
+        "present_people": [(code, name) for code, name in dg_rpg.at_place(state)],
         "relationship":state["affinity"].get(who,0) if who else None,
         "motivation":motif,"physical_detail":detail,"unexpected_twist":twist,
         "character_hook":hook,"recent_journal":copy.deepcopy(recent),
@@ -296,3 +297,4 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
            u"или после зафиксированного исхода. Не перемещай героев в новое место "
            u"без разрешения. Верни только повествовательный текст без Markdown.")
     return rules,json.dumps(brief,ensure_ascii=False,sort_keys=True)
+
