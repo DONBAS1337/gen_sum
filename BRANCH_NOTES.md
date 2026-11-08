@@ -15,6 +15,9 @@ Installation details: [README.md](README.md). RPG features: [RPG.md](RPG.md).
 
 Base branch `gen-7dl-vanilla` is unchanged.
 
+2026-11-08: Online-first RPG UI pass: bounded hub panels, persistent action drafts, scrollable setup, searchable travel, correct map back navigation, and hybrid scene history in the journal. Fixed free actions at extended locations, negated commands, NPC-name prefix collisions, same-day skill unlocks, and final-day quest expiration. See UI_CHANGES_RU.md for validation and remaining limitations.
+
 2026-11-01: Added `dg_world.py` nonlinear camp director and `tests/test_don_gen_world.py`; see README v0.3 for new UI and daily events. Character setup now uses its own contrast popup screen.
 
 DON-GEN v0.4: Added `dg_social.py`: typed offline actions, 33 personal NPC chapters, 4 three-step timed quests, daily social rumours and interactive two-NPC encounters. Ren'Py screens include free-action modal, personal scenes, contracts, shared-map encounter markers and social journal tab. Existing JSON sessions migrate automatically.
+

@@ -14,10 +14,15 @@ NAMES = {
     "mz": u"Женя", "mt": u"Ольга Дмитриевна", "cs": u"Виола",
     "uv": u"Юля"
 }
-STEMS = {"mi":(u"мику",), "dv":(u"алис",), "un":(u"лен",),
-         "sl":(u"слав",), "us":(u"ульян",), "sh":(u"шурик",u"шурик"),
-         "el":(u"электроник",), "mz":(u"жен",), "mt":(u"ольг",u"вожат"),
-         "cs":(u"виол",), "uv":(u"юл",)}
+# Match inflected names as whole words, not arbitrary words sharing a prefix.
+TARGET_PATTERNS = {
+    "mi": u"мику", "dv": u"алис(?:а|ы|е|у|ой|ою)",
+    "un": u"лен(?:а|ы|е|у|ой|ою)", "sl": u"слав(?:я|и|е|ю|ей|ею)",
+    "us": u"ульян(?:а|ы|е|у|ой|ою)", "sh": u"шурик(?:а|у|ом|е)?",
+    "el": u"электроник(?:а|у|ом|е)?", "mz": u"жен(?:я|и|е|ю|ей|ею)",
+    "mt": u"(?:ольг(?:а|и|е|у|ой|ою)|вожат(?:ая|ой|ую))",
+    "cs": u"виол(?:а|ы|е|у|ой|ою)", "uv": u"юл(?:я|и|е|ю|ей|ею)"
+}
 VERBS = (
     ("mediate", (u"помир",u"договор",u"примир",u"обсуд",u"уговор",u"поговор",u"разговор",u"подруж")),
     ("create", (u"почин",u"собра",u"сдела",u"созда",u"постро",u"написа",u"организ",u"придум",u"подготов",u"отрепетир")),
@@ -334,12 +339,16 @@ def parse(text):
         for stem in stems:
             match = re.search(r"(?<!\w)" + re.escape(stem), lowered, re.UNICODE)
             if match is not None and match.start() < earliest:
+                # A directly negated verb is a refusal, not a performed act.
+                # Be conservative with compound refusals rather than rewarding them.
+                if re.search(u"(?<!\\w)не\\s+$", lowered[:match.start()], re.UNICODE):
+                    return None
                 selected = key
                 earliest = match.start()
     if selected is None:
         return None
-    targets = [who for who, stems in STEMS.items()
-               if any(re.search(r"(?<!\w)" + re.escape(stem), lowered, re.UNICODE) for stem in stems)]
+    targets = [who for who, pattern in TARGET_PATTERNS.items()
+               if re.search(r"(?<!\w)(?:" + pattern + r")(?!\w)", lowered, re.UNICODE)]
     if len(targets) > 1:
         targets = sorted(targets)
     # Do not pretend an unknown *named* interlocutor is a known camp NPC.
@@ -375,6 +384,9 @@ def action(state, text, nearby):
     cost = 0 if intent=="rest" else 10
     if state["energy"] < cost:
         return {"status":"unknown","text":u"Для этого действия нужно хотя бы 10 энергии. Отдохни. Время не потрачено."}
+    import dg_rpg
+    place = state["place"]
+    location = dg_rpg.PLACE_NAMES[place]
     social=ensure(state)
     world=dg_world.ensure(state)
     state["energy"]=min(100,state["energy"]+35) if intent=="rest" else state["energy"]-cost
@@ -407,16 +419,11 @@ def action(state, text, nearby):
         if pairs:
             a,b=pairs[0]
             social["bonds"][_pair(a,b)]=max(-100,min(100,social["bonds"][_pair(a,b)]+7))
-    place = state["place"]
-    location={"square":u"площади","gate":u"ворот","cabins":u"домиков",
-        "canteen":u"столовой","library":u"библиотеки","clubs":u"клубов",
-        "stage":u"сцены","beach":u"пляжа","lake":u"озера","forest":u"леса",
-        "infirmary":u"медпункта","sports":u"спортплощадки"}[place]
     person=u" вместе с "+NAMES[target] if target else u""
     if intent=="rest":
-        narration=u"Ты находишь спокойное место у %s и немного восстанавливаешь силы. Лагерь тем временем продолжает жить своей жизнью." % location
+        narration=u"Ты находишь спокойное место: %s и немного восстанавливаешь силы. Лагерь тем временем продолжает жить своей жизнью." % location
     else:
-        narration=(u"На территории %s ты берёшься за дело%s. Ты описал своё намерение так: «%s». "
+        narration=(u"Место действия: %s. Здесь ты берёшься за дело%s. Ты описал своё намерение так: «%s». "
                    u"Поступок меняет подготовку к следующему лагерному событию%s.") % (
                    location,person,parsed["original"],
                    u" (+%d)" % impact if impact else u", но повторение уже не даёт награды")
@@ -546,3 +553,4 @@ def report(state):
             "quests":quest_list(state),
             "rumours":social["rumours"][-8:],
             "recent_actions":social["actions"][-8:]}
+

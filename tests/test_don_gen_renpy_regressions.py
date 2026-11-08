@@ -113,7 +113,9 @@ class ReportedTracebacks(unittest.TestCase):
     def test_right_npc_panel_not_one_overwide_row(self):
         self.assertNotIn('textbutton u"Своя реплика + AI"',SCRIPT)
         self.assertIn('textbutton u"Особая AI-сцена"',SCRIPT)
-        self.assertIn('xpos 938 ypos 135 xsize 888 ysize 805',SCRIPT)
+        self.assertIn('xpos 1172 ypos 178 xsize 700 ysize 736',SCRIPT)
+        self.assertIn('xsize 608 spacing 22',SCRIPT)
 
 if __name__=="__main__":
     unittest.main()
+

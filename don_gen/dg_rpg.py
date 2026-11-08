@@ -276,6 +276,7 @@ def route_event(state, who, approach):
         conclusion = u"Вы предпочли сохранить дистанцию."
     _journal(state, u"Рут %s, этап %d: %s. %s" %
              (NPC_NAMES[who], level, title, conclusion))
+    dg_world.refresh_open_event(state)
     _tick(state)
     return state
 
@@ -293,6 +294,9 @@ def _tick(state):
         state["slot"] = 0
         state["day"] += 1
         state["energy"] = min(100, state["energy"] + 65)
+        # Expire obligations even on the final transition out of camp.
+        for notice in dg_social.expire_quests(state):
+            _journal(state, notice)
         if state["day"] > state["duration"]:
             state["finished"] = True
             _journal(state, u"Смена закончилась. Все встречи и достижения сохранились в дневнике.")
@@ -301,8 +305,6 @@ def _tick(state):
             interaction = dg_social.npc_daily(state)
             if interaction:
                 _journal(state, interaction)
-            for notice in dg_social.expire_quests(state):
-                _journal(state, notice)
             dg_world.prepare(state)
             dg_social.prepare_incident(state)
 
@@ -381,6 +383,7 @@ def activity(state, action, who=None):
     _check_quests(state)
     _journal(state, label + u" — " + PLACE_NAMES[state["place"]] + u".")
     _try_reveal_yulia(state, action)
+    dg_world.refresh_open_event(state)
     _tick(state)
     return state
 
@@ -431,6 +434,7 @@ def conversation(state, who, topic_index, stance):
         event += u" Открыта веха рута (%s)." % u", ".join(str(x) for x in new_milestones)
     _journal(state, event)
     _check_quests(state)
+    dg_world.refresh_open_event(state)
     _tick(state)
     return scene
 
@@ -675,3 +679,4 @@ def save_asset(root, game_id, kind, key, data):
         if os.path.isfile(temporary):
             os.unlink(temporary)
     return relative
+

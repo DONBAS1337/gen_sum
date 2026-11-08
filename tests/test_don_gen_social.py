@@ -21,6 +21,65 @@ class SocialSandboxTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root)
 
+    def test_free_actions_work_at_every_map_destination(self):
+        for place in dg_rpg.PLACE_NAMES:
+            for request in (u"Отдохнуть", u"Исследовать окрестности"):
+                state = copy.deepcopy(self.state)
+                dg_rpg.move(state, place)
+                result = dg_rpg.free_action(state, request)
+                self.assertEqual(result["status"], "done", (place, request))
+                self.assertIn(dg_rpg.PLACE_NAMES[place], result["text"])
+                self.assertEqual(state["slot"], 1)
+
+    def test_direct_refusals_do_not_change_state(self):
+        for request in (u"Не помогать Мику", u"Не осматривать берег", u"Не отдыхать",
+                        u"Я не буду помогать Мику", u"Я не хочу исследовать лес"):
+            state = copy.deepcopy(self.state)
+            before = copy.deepcopy(state)
+            self.assertIsNone(dg_social.parse(request))
+            self.assertEqual(dg_rpg.free_action(state, request)["status"], "unknown")
+            self.assertEqual(state, before)
+
+    def test_names_require_whole_inflected_words(self):
+        for request in (u"Осмотреть ленточку", u"Осмотреть журнал", u"Помочь женщинам",
+                        u"Осмотреть славянский узор"):
+            self.assertIsNone(dg_social.parse(request)["target"])
+        for who, forms in (("un", (u"Лена", u"Леной", u"Лене")),
+                           ("sl", (u"Славя", u"Славе", u"Славей")),
+                           ("mz", (u"Женя", u"Жене", u"Женей")),
+                           ("mt", (u"Ольгой", u"вожатой")),
+                           ("mi", (u"Мику",)), ("sh", (u"Шуриком",))):
+            for form in forms:
+                self.assertEqual(dg_social.parse(u"Помочь " + form)["target"], who)
+
+    def test_final_day_closes_unfinished_quests(self):
+        state = dg_rpg.new_game(u"Герой", 18, 1)
+        dg_rpg.accept_contract(state, "rehearsal")
+        for turn in range(4):
+            dg_rpg.activity(state, "rest")
+        self.assertTrue(state["finished"])
+        self.assertEqual(state["social"]["quests"]["rehearsal"]["status"], "failed")
+        self.assertIn(u"Смена закончилась", state["event"])
+
+    def test_practice_unlocks_current_event_without_day_change(self):
+        state = self.state
+        state["stats"]["skill"] = 8
+        old_event = dg_world.current(state)
+        self.assertNotIn("specialist", [c["key"] for c in old_event["choices"]])
+        dg_rpg.activity(state, "practice")
+        event = dg_world.current(state)
+        self.assertEqual(event["id"], old_event["id"])
+        self.assertIn("specialist", [c["key"] for c in event["choices"]])
+
+    def test_conversation_unlocks_current_event_without_day_change(self):
+        state = self.state
+        state["stats"]["curiosity"] = 10
+        dg_rpg.move(state, dg_rpg.where_is(state, "mi"))
+        old_id = dg_world.current(state)["id"]
+        dg_rpg.conversation(state, "mi", 0, "curious")
+        self.assertEqual(dg_world.current(state)["id"], old_id)
+        self.assertIn("specialist", [c["key"] for c in dg_world.current(state)["choices"]])
+
     def test_all_npcs_have_three_chapters_and_valid_scenes(self):
         self.assertEqual(set(dg_rpg.NPC_NAMES),set(dg_social.PERSONAL))
         for who, beats in dg_social.PERSONAL.items():
@@ -244,7 +303,7 @@ class SocialSandboxTests(unittest.TestCase):
             "screen dg_rpg_free_input:", "screen dg_rpg_contracts:",
             "screen dg_rpg_personal(who):", "screen dg_rpg_action_result(result, cg_worthy=False):",
             "screen dg_rpg_npc_incident:", 'Return(("incident", None))',
-            'Return(("free", None))', 'Return(("contracts", None))',
+            'Return(("hybrid", None))', 'Return(("contracts", None))',
             'dg_rpg_apply("personal", (dg_rpg_focus, dg_rpg_personal_stance))',
             'SetScreenVariable("view", "social")'):
             self.assertIn(expected,script)
@@ -252,3 +311,4 @@ class SocialSandboxTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
