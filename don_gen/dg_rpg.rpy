@@ -17,6 +17,7 @@ init 1001 python:
     import dg_visual
     import dg_stage
     import dg_map
+    import dg_resources
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -246,7 +247,18 @@ init 1001 python:
         "sl":"sl", "sh":"sh", "cs":"vi", "us":"ul", "un":"un", "uv":"yu"
     }
 
+    def dg_rpg_workshop_root():
+        roots = dg_runtime.app.catalog.get("source_roots", {})
+        return roots.get("7dl") or dg_detect_7dl_root()
+
+    def dg_rpg_map_asset(filename):
+        external = dg_resources.map_asset(dg_rpg_workshop_root(), filename)
+        return external or DG_MAP_ROOT + filename
+
     def dg_map_npc_icon(who):
+        external = dg_resources.map_icon(dg_rpg_workshop_root(), who)
+        if external:
+            return im.Scale(external, 42, 42)
         code = "me" if who == "hero" else DG_MAP_ICON_BY_NPC.get(who)
         if code is None:
             return None
@@ -320,12 +332,18 @@ init 1001 python:
     def dg_rpg_bg_native(place):
         # Prefer the actual location AND matching time of day when available.
         # Only exact 12 canonical locations block manual BG generation.
+        external = dg_resources.background(
+            dg_runtime.app.catalog.get("source_assets", {}).get("7dl", {}),
+            place, dg_rpg_visual_state()["slot"])
         if place not in DG_RPG_EXACT_BG:
-            return None
-        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_visual_state()["slot"]):
+            return external
+        base = DG_RPG_BG.get(place)
+        if base is None and place.startswith("cabin_"):
+            base = "bg ext_houses_day"
+        for name in dg_visual.background_names(base, dg_rpg_visual_state()["slot"]):
             if name in dg_runtime.original_images:
                 return name
-        return None
+        return external
 
     def dg_rpg_bg_status():
         place = dg_rpg_visual_state()["place"]
@@ -340,9 +358,13 @@ init 1001 python:
         if available["status"] == "generated" and renpy.loadable(available["path"]):
             return Image(available["path"])
         if available["status"] == "builtin":
-            return dg_runtime.original_images[available["path"]]
+            native = dg_runtime.original_images.get(available["path"])
+            return native if native is not None else Image(available["path"])
         # Fallback scenery is shown while specific visual art is absent.
-        for name in dg_visual.background_names(DG_RPG_BG.get(place), dg_rpg_visual_state()["slot"]):
+        base = DG_RPG_BG.get(place)
+        if base is None and place.startswith("cabin_"):
+            base = "bg ext_houses_day"
+        for name in dg_visual.background_names(base, dg_rpg_visual_state()["slot"]):
             if name in dg_runtime.original_images:
                 return dg_runtime.original_images[name]
         return Solid("#173039")
@@ -789,13 +811,16 @@ screen dg_rpg_adult_settings:
 screen dg_rpg_map:
     modal True
     default dg_map_hover = None
-    if renpy.loadable(DG_MAP_USER):
+    $ dg_map_background = dg_rpg_map_asset("map_bg.jpg")
+    $ dg_map_available = dg_rpg_map_asset("map_avaliable.jpg")
+    $ dg_map_selection = dg_rpg_map_asset("map_selected.jpg")
+    if renpy.loadable(dg_map_background):
         imagemap:
-            ground DG_MAP_USER
-            idle DG_MAP_USER
-            hover (DG_MAP_HOVER if renpy.loadable(DG_MAP_HOVER) else DG_MAP_USER)
-            selected_idle (DG_MAP_SELECTED if renpy.loadable(DG_MAP_SELECTED) else DG_MAP_USER)
-            selected_hover (DG_MAP_SELECTED if renpy.loadable(DG_MAP_SELECTED) else DG_MAP_USER)
+            ground dg_map_background
+            idle dg_map_background
+            hover (dg_map_available if renpy.loadable(dg_map_available) else dg_map_background)
+            selected_idle (dg_map_selection if renpy.loadable(dg_map_selection) else dg_map_background)
+            selected_hover (dg_map_selection if renpy.loadable(dg_map_selection) else dg_map_background)
             alpha False
             cache False
             for slug, rect in dg_map.regions():
@@ -824,7 +849,7 @@ screen dg_rpg_map:
             vbox:
                 spacing 20
                 text u"Нужна классическая карта лагеря" style "dg_rpg_heading"
-                text u"Установи набор карт из gen_assets/maps через install.ps1 -AssetsDir. Пока все места доступны через поиск." style "dg_rpg_body"
+                text u"Укажи установленную 7ДЛ: CE через install.ps1 -WorkshopDir или подключи набор gen_assets через -AssetsDir. Все места доступны через поиск." style "dg_rpg_body"
                 textbutton u"Открыть список мест" style "dg_rpg_main_button" action Return(("places", None))
     # Compact controls leave the original map at its native 1920x1080 size.
     frame:

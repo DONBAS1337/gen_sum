@@ -9,6 +9,7 @@ init 1000 python:
     if dg_module_dir not in sys.path:
         sys.path.insert(0, dg_module_dir)
     import dg_runtime
+    import dg_resources
 
     # A private archive namespace prevents other mods from replacing even vanilla filenames.
     dg_archive_path = os.path.join(config.gamedir, "archive.rpa")
@@ -162,19 +163,8 @@ init 1000 python:
         return u"ПРОШЛО  %d:%02d" % divmod(seconds, 60)
 
     def dg_detect_7dl_root():
-        # DON-GEN uses the vanilla archive, 7DL is an optional external source.
-        game_dir = os.path.abspath(config.gamedir)
-        steamapps = os.path.abspath(os.path.join(game_dir, "..", "..", ".."))
-        candidates = [
-            os.environ.get("DON_GEN_7DL_ROOT"),
-            os.path.join(steamapps, "workshop", "content", "331470", "3266357374"),
-            os.path.join(game_dir, "mods", "7dl"),
-            os.path.join(game_dir, "mods", "7dl_ce")
-        ]
-        for candidate in candidates:
-            if candidate and os.path.isdir(os.path.join(candidate, "scenario_alt")):
-                return os.path.abspath(candidate)
-        return None
+        return dg_resources.detect_root(config.gamedir,
+            os.path.join(dg_module_dir, "resource_sources.json"))
 
     def dg_sprite_layer_map(source, distance, who):
         return (((source or {}).get(distance) or {}).get(who) or {})
@@ -273,11 +263,9 @@ init 1000 python:
         dg_7dl_root = dg_detect_7dl_root()
         if dg_7dl_root:
             catalog["source_roots"]["7dl"] = dg_7dl_root
-            # Make scenario_alt/... paths loadable without importing/executing 7DL.
-            if dg_7dl_root not in config.searchpath:
-                config.searchpath.append(dg_7dl_root)
             import dg_source_7dl
-            catalog["source_assets"]["7dl"] = dg_source_7dl.asset_manifest(dg_7dl_root)
+            catalog["source_assets"]["7dl"] = dg_resources.absolute_assets(
+                dg_7dl_root, dg_source_7dl.asset_manifest(dg_7dl_root))
         import base64
         catalog["background_references"] = []
         for path in ("dg_original/images/bg/ext_square_day.jpg", "dg_original/images/bg/int_library_day.jpg"):
@@ -1168,3 +1156,4 @@ screen dg_diagnostics:
                 null height 10
                 text (u"Последняя ошибка: " + dg_literal(dg_runtime.app.error or u"нет")) style "dg_ink_small" size 24
     text u"При краше: traceback.txt + don_gen.log. При ошибках генерации: don_gen_worker.log." style "dg_small" xpos 140 ypos 915
+

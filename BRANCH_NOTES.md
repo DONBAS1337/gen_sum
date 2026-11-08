@@ -15,6 +15,8 @@ Installation details: [README.md](README.md). RPG features: [RPG.md](RPG.md).
 
 Base branch `gen-7dl-vanilla` is unchanged.
 
+2026-11-08: Added direct installed 7DL CE resource support. -WorkshopDir writes a local resource_sources.json for cross-library installs; same-library and environment discovery remain supported. Workshop maps and numbered character icons take precedence, donor backgrounds cover additional RPG locations, and runtime manifest paths are absolute with forward slashes. The donor directory is not added to Ren'Py's script search path. Added fixture tests and a native four-actor preview using read-only vanilla/Workshop assets.
+
 2026-11-08: Online-first RPG UI pass: bounded hub panels, persistent action drafts, scrollable setup, searchable travel, correct map back navigation, and hybrid scene history in the journal. Fixed free actions at extended locations, negated commands, NPC-name prefix collisions, same-day skill unlocks, and final-day quest expiration. See UI_CHANGES_RU.md for validation and remaining limitations.
 
 2026-11-08: Native named Character dialogue and four-actor staging replace anonymous paragraphs and two fixed portraits. AI labels are parsed as text only; scene time/place are frozen before a turn. Map selection uses one art/hotspot transform and a separate destination panel. Fixed invalid focus_mask False and made viewport scrollbar sizing explicit. Added a Windows Ren'Py 7 headless render runner with placeholder vanilla resources; it exercises nine actual RPG screens without login or game saves.

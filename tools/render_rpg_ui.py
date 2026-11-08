@@ -6,6 +6,7 @@ Outputs use placeholders for vanilla backgrounds/sprites and for authentication.
 The render exercises actual RPG screen code, not an HTML recreation.
 """
 import argparse
+import ast
 from pathlib import Path
 import os
 import shutil
@@ -17,7 +18,9 @@ def main():
     parser.add_argument("--sdk", type=Path, required=True)
     parser.add_argument("--out", type=Path, default=Path("work/ui-smoke"))
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
-    parser.add_argument("--screen", choices=("hub", "setup", "input", "review", "map", "places", "cabins", "journal", "picker"))
+    parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
+    parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
+    parser.add_argument("--screen", choices=("hub", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene"))
     args = parser.parse_args()
     sdk = args.sdk.resolve()
     runner = sdk / "lib/py2-windows-x86_64/python.exe"
@@ -53,11 +56,19 @@ def main():
             source = sdk / "renpy/common/DejaVuSans.ttf"
         shutil.copyfile(source, fonts / ("gothic.TTF" if name == "gothic.ttf" else name))
     base = (root / "don_gen.rpy").read_text(encoding="utf-8")
+    import textwrap
+    init_source = textwrap.dedent(base.split('init 1000 python:\n', 1)[1].split('\ndefault persistent.', 1)[0])
+    parsed = ast.parse(init_source)
+    helper_names = {"dg_sprite_layer_map", "dg_7dl_sprite_layer", "dg_7dl_sprite_poses", "dg_7dl_sprite_displayable"}
+    helpers = [ast.get_source_segment(init_source, node) for node in parsed.body if isinstance(node, ast.FunctionDef) and node.name in helper_names]
+    (game / "sprite_helpers.rpy").write_bytes(('init 1050 python:\n    import re\n' + textwrap.indent('\n\n'.join(helpers), '    ') + '\n').encode('utf-8'))
     styles = base[base.index("style dg_text:"):base.index("screen dg_scene(")]
     (game / "styles.rpy").write_bytes(styles.encode("utf-8"))
     (game / "test.rpy").write_bytes(HARNESS.encode("utf-8"))
     env = dict(os.environ)
     env["DG_UI_SCREEN"] = args.screen or ""
+    env["DG_UI_WORKSHOP"] = str(args.workshop.resolve()) if args.workshop else ""
+    env["DG_UI_VANILLA"] = str(args.vanilla.resolve()) if args.vanilla else ""
     subprocess.run([str(runner), str(sdk / "renpy.py"), str(output), "ui-render"], check=True, env=env)
     print("Rendered UI screenshots:", output)
 
@@ -77,6 +88,10 @@ init -1000 python:
     config.gl2 = False
     config.physical_width = 1280
     config.physical_height = 720
+    vanilla_root = os.environ.get("DG_UI_VANILLA")
+    if vanilla_root and os.path.isfile(os.path.join(vanilla_root, "archive.rpa")):
+        config.archives.append(os.path.join(vanilla_root, "archive").replace("\\", "/"))
+        renpy.loader.index_archives()
 
 init 1100 python:
     class TestClient(object):
@@ -84,9 +99,30 @@ init 1100 python:
             return True
     class TestApp(object):
         client = TestClient()
+        catalog = {"source_roots": {}, "source_assets": {}}
     class TestRuntime(object):
         app = TestApp()
+        original_images = {}
+        original_sprite_layers = {}
+        source_images = {}
     dg_runtime = TestRuntime()
+    if vanilla_root:
+        import re
+        for archive_path, archive_index in renpy.loader.archives:
+            for path in archive_index:
+                match = re.match(r"^images/sprites/(normal|far|close)/([^/]+)/([^/]+)$", path)
+                if not match:
+                    continue
+                distance, who, filename = match.groups()
+                layer = re.match(r"^([A-Za-z_]+)_([0-9]+)_(.+)\.png$", filename)
+                if layer and layer.group(1) == who:
+                    dg_runtime.original_sprite_layers.setdefault(distance, {}).setdefault(who, {}).setdefault(layer.group(2), {})[layer.group(3)] = path
+    workshop_root = dg_resources.valid_root(os.environ.get("DG_UI_WORKSHOP"))
+    if workshop_root:
+        import dg_source_7dl
+        dg_runtime.app.catalog["source_roots"]["7dl"] = workshop_root
+        dg_runtime.app.catalog["source_assets"]["7dl"] = dg_resources.absolute_assets(
+            workshop_root, dg_source_7dl.asset_manifest(workshop_root))
     DG_PAPER = Solid("#f3e6cf")
     def dg_literal(value):
         return value.replace("{", "{{").replace("[", "[[")
@@ -94,12 +130,13 @@ init 1100 python:
         return os.path.join(config.gamedir, "test-saves")
     def dg_rpg_bg():
         return Solid("#253f42")
+    dg_test_native_sprite = dg_rpg_sprite
     def dg_rpg_sprite(*args):
-        return None
+        return dg_test_native_sprite(*args) if vanilla_root else None
     def dg_rpg_bg_status():
         return {"status": "original"}
     def dg_detect_7dl_root():
-        return None
+        return workshop_root
     def ui_capture(name):
         renpy.screenshot(os.path.join(config.basedir, name + ".png"))
 
@@ -117,8 +154,8 @@ init 1100 python:
         renpy.display.draw.draw_per_virt = 1.0
         store.dg_rpg_state = dg_rpg.new_game(u"Тестовый герой", 23, 30)
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
-        assert dg_rpg_say_character("dv").name == u"Алиса"
-        assert dg_rpg_say_character("hero").name == u"Тестовый герой"
+        if dg_rpg_say_character("dv").name != u"Алиса" or dg_rpg_say_character("hero").name != u"Тестовый герой":
+            raise ValueError("Incorrect native character names")
         dg_rpg.move(store.dg_rpg_state, "cabins")
         store.dg_create_name = u"Тестовый герой"
         store.dg_create_age = u"23"
@@ -135,6 +172,16 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") == "scene":
+            if not vanilla_root:
+                raise ValueError("--vanilla is required for the scene preview")
+            for path in ("images/bg/int_dining_hall_people_day.jpg", "images/gui/dialogue_box/day/dialogue_box.png"):
+                if not renpy.exports.loadable(path):
+                    raise ValueError("Missing vanilla preview resource: " + path)
+            for actor in ("un", "mi", "sl", "dv"):
+                if dg_rpg_sprite(actor, "smile", "normal") is None:
+                    raise ValueError("Missing sprite: " + actor)
+            cases = [("scene", "dg_ui_native_scene", {})]
         for filename, name, scope in cases:
             if os.environ.get("DG_UI_SCREEN") and os.environ["DG_UI_SCREEN"] != filename:
                 continue
@@ -146,7 +193,8 @@ init 1100 python:
             surface = renpy.display.draw.render_to_texture(render, True)
             def debug_viewport(d):
                 if isinstance(d, renpy.display.viewport.Viewport):
-                    assert d.width > 0 and d.height > 0, filename + ": empty viewport"
+                    if d.width <= 0 or d.height <= 0:
+                        raise ValueError(filename + ": empty viewport")
             displayable.visit_all(debug_viewport)
             pygame.image.save(surface, os.path.join(config.basedir, filename + ".png"))
             print("Rendered " + filename)
@@ -158,6 +206,14 @@ screen dg_chrome(place_name, back=None):
     text place_name xpos 100 ypos 50 color "#ffffff" size 24
     if back is not None:
         textbutton u"Назад" xpos 1650 ypos 50 action back
+
+screen dg_ui_native_scene:
+    add "images/bg/int_dining_hall_people_day.jpg"
+    for who, x in dg_stage.positions(["un", "mi", "sl", "dv"], "dv"):
+        add dg_rpg_sprite(who, "smile", "normal") xpos x xanchor .5 ypos 1.0 yanchor 1.0
+    add "images/gui/dialogue_box/day/dialogue_box.png" xpos 174 ypos 916
+    text u"Алиса" font "fonts/calibri.ttf" size 28 color "#ffaa00" xpos 204 ypos 924
+    text u"«Костры»!" font "fonts/calibri.ttf" size 28 color "#f3ddb1" xpos 204 ypos 962
 
 '''
 

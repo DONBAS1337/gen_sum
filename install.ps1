@@ -3,7 +3,8 @@
 # Writes ONLY to game/mods/don_gen. Existing mods remain untouched.
 param(
     [string]$GameDir = "",
-    [string]$AssetsDir = ""
+    [string]$AssetsDir = "",
+    [string]$WorkshopDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +25,22 @@ if ((Split-Path -Leaf $InputDir) -ieq "game") {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $Game "archive.rpa") -PathType Leaf)) {
     throw "Everlasting Summer game/archive.rpa was not found in: $Game"
+}
+
+if ($WorkshopDir) {
+    $WorkshopDir = (Resolve-Path -LiteralPath $WorkshopDir -ErrorAction Stop).Path
+    if ((Split-Path -Leaf $WorkshopDir) -ieq "scenario_alt") {
+        $WorkshopDir = Split-Path -Parent $WorkshopDir
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $WorkshopDir "scenario_alt/Pics") -PathType Container)) {
+        throw "7DL CE resource directory was not found in: $WorkshopDir"
+    }
+} else {
+    $SteamAppsDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $Game))
+    $WorkshopCandidate = Join-Path $SteamAppsDir "workshop/content/331470/3266357374"
+    if (Test-Path -LiteralPath (Join-Path $WorkshopCandidate "scenario_alt/Pics") -PathType Container) {
+        $WorkshopDir = $WorkshopCandidate
+    }
 }
 
 # Validate the optional local asset pack BEFORE touching the installed game.
@@ -62,6 +79,12 @@ if (Test-Path -LiteralPath $Dest) {
 # Overlay new scripts/assets but preserve user-supplied workflow JSON and
 # optional private images already installed inside the DON-GEN folder.
 Copy-Item -Path (Join-Path $Source "*") -Destination $Dest -Force -Recurse
+
+if ($WorkshopDir) {
+    @{ seven_dl_root = $WorkshopDir } | ConvertTo-Json |
+        Set-Content -LiteralPath (Join-Path $Dest "resource_sources.json") -Encoding UTF8
+    Write-Host "7DL CE resources linked from: $WorkshopDir"
+}
 
 if ($Maps) {
     $AssetsOut = Join-Path (Join-Path $Dest "images") "gen_assets"

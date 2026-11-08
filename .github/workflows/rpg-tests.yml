@@ -32,9 +32,11 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP "DON-GEN installer smoke"
           $game = Join-Path $root "Everlasting Summer"
           $assets = Join-Path $root "Local Private Assets"
+          $workshop = Join-Path $root "Workshop CE Resources"
           New-Item -ItemType Directory -Force -Path (Join-Path $game "game") | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $assets "maps") | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $assets "cg") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $workshop "scenario_alt/Pics") | Out-Null
           Set-Content -LiteralPath (Join-Path $game "game/archive.rpa") -Value "test"
           Set-Content -LiteralPath (Join-Path $assets "maps/map_bg.jpg") -Value "mock image"
           Set-Content -LiteralPath (Join-Path $assets "maps/map_avaliable.jpg") -Value "mock hover"
@@ -44,9 +46,11 @@ jobs:
           $hash = "0123456789abcdef0123456789abcdef01234567"
           '{"' + $hash + '":"mods/don_gen/images/gen_assets/cg/example.png"}' |
             Set-Content -LiteralPath (Join-Path $assets "cg_index.json")
-          & ./install.ps1 -GameDir $game -AssetsDir $assets
+          & ./install.ps1 -GameDir $game -AssetsDir $assets -WorkshopDir $workshop
           $mod = Join-Path $game "game/mods/don_gen"
           if (-not (Test-Path -LiteralPath (Join-Path $mod "dg_rpg.rpy"))) { throw "Mod not installed" }
+          $sources = Get-Content -LiteralPath (Join-Path $mod "resource_sources.json") -Raw | ConvertFrom-Json
+          if ($sources.seven_dl_root -ne $workshop) { throw "Workshop resource path not saved" }
           if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_bg.jpg"))) { throw "Missing imported classic map" }
           if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_icon_mi.png"))) { throw "Missing imported icon" }
           if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/cg/example.png"))) { throw "Missing imported curated CG" }
