@@ -20,6 +20,12 @@ init 1001 python:
     import dg_resources
     import dg_turn
 
+    def dg_camp_button_surface(fill, edge):
+        # A scalable one-pixel rim, drawn natively by Ren'Py.
+        return Frame(Composite((12, 12),
+            (0, 0), Solid(edge, xsize=12, ysize=12),
+            (1, 1), Solid(fill, xsize=10, ysize=10)), 5, 5)
+
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
         # Keep pages short enough for the classic bottom textbox.
@@ -994,6 +1000,38 @@ style dg_rpg_tab_text is dg_rpg_button_text:
 default dg_rpg_action_draft = u""
 default dg_rpg_action_context = None
 
+# Camp navigation stays outside the dialogue area.
+init 1002:
+    style dg_camp_nav is button:
+        background dg_camp_button_surface("#071c17c9", "#a7996470")
+        hover_background dg_camp_button_surface("#bfa769e8", "#efdc9ecc")
+        insensitive_background Solid("#071c1770")
+        padding (22, 14)
+        xminimum 142
+        ysize 58
+    style dg_camp_nav_text is dg_rpg_button_text:
+        size 24
+        color "#e7d9ac"
+        hover_color "#172b22"
+        insensitive_color "#869087"
+        outlines [(1, "#00000055", 0, 1)]
+    style dg_camp_action is dg_camp_nav:
+        background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
+        hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
+        xminimum 238
+    style dg_camp_action_text is dg_camp_nav_text:
+        color "#fff0bc"
+        hover_color "#172b22"
+    style dg_camp_arrow is dg_camp_nav:
+        xminimum 44
+        xsize 44
+        ysize 44
+        padding (10, 2)
+        background None
+        hover_background Solid("#bfa76970")
+    style dg_camp_arrow_text is dg_camp_nav_text:
+        size 32
+
 screen dg_rpg_hub:
     modal True
     default selected_person = 0
@@ -1008,44 +1046,49 @@ screen dg_rpg_hub:
         if actor_image is not None:
             add actor_image xpos actor_x xanchor .5 ypos 1.0 yanchor 1.0
     if show_interface:
-        if renpy.loadable("images/gui/dialogue_box/day/dialogue_box.png"):
-            add Transform(Image("images/gui/dialogue_box/day/dialogue_box.png"), xysize=(1572, 236)) xpos 174 ypos 816
-        else:
-            add Solid("#061a19d9") xpos 174 ypos 816 xsize 1572 ysize 236
         frame:
             background Solid("#071914b0")
-            xpos 174 ypos 30 xsize 1572 padding (22, 14)
-            hbox:
-                spacing 28
-                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_body" color "#e2d8aa"
-                text dg_rpg.camp_time(dg_rpg_state) style "dg_rpg_body"
-                text (u"Силы: %d" % dg_rpg_state["energy"]) style "dg_rpg_body"
-        frame:
-            background None
-            xpos 174 ypos 816 xsize 1572 ysize 236 padding (24, 16)
+            xpos 52 ypos 36 xsize 650 padding (20, 12)
             vbox:
-                spacing 12
-                hbox:
-                    spacing 18
-                    if inhabitants:
-                        textbutton u"‹" style "dg_rpg_tab" xsize 64 action SetScreenVariable("selected_person", selected_person - 1)
-                        text dg_rpg.NPC_NAMES[selected_who] style "dg_rpg_heading" size 32 color dg_stage.COLORS[selected_who] yalign .5
-                        textbutton u"›" style "dg_rpg_tab" xsize 64 action SetScreenVariable("selected_person", selected_person + 1)
-                        textbutton u"Заговорить" style "dg_rpg_tab" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
-                        textbutton u"Своя реплика" style "dg_rpg_tab" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
-                    else:
-                        text u"Рядом никого. Куда отправимся?" style "dg_rpg_body"
-                hbox:
-                    spacing 14
-                    textbutton u"Карта" style "dg_rpg_tab" action Return(("map", None))
-                    textbutton u"Своё действие" style "dg_rpg_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
-                    textbutton u"Дневник" style "dg_rpg_tab" action Return(("journal", None))
-                    textbutton u"События и занятия" style "dg_rpg_tab" action Return(("controls", None))
-                    textbutton u"Меню" style "dg_rpg_tab" action Return(("exit", None))
-                text u"H — скрыть интерфейс. Переходы бесплатны; действия и разговоры двигают время." style "dg_rpg_hint" size 22
+                spacing 3
+                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" size 30 color "#e7d9ac"
+                text (dg_rpg.camp_time(dg_rpg_state) + u"   ·   Силы: %d" % dg_rpg_state["energy"]) style "dg_rpg_hint" size 23
+        hbox:
+            xpos 1052 ypos 36 spacing 8
+            textbutton u"Карта" style "dg_camp_nav" action Return(("map", None))
+            textbutton u"Дневник" style "dg_camp_nav" action Return(("journal", None))
+            textbutton u"События" style "dg_camp_nav" action Return(("controls", None))
+            textbutton u"Меню" style "dg_camp_nav" action Return(("exit", None))
+        if renpy.loadable("images/gui/dialogue_box/day/dialogue_box.png"):
+            add "images/gui/dialogue_box/day/dialogue_box.png" xpos 174 ypos 916
+        else:
+            add Solid("#061a19d9") xpos 174 ypos 916 xsize 1572 ysize 164
+        if inhabitants:
+            hbox:
+                xpos 194 ypos 920 spacing 10
+                text dg_rpg.NPC_NAMES[selected_who] style "dg_rpg_heading" size 28 color dg_stage.COLORS[selected_who] yalign .5
+                if len(inhabitants) > 1:
+                    textbutton u"‹" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person - 1)
+                    textbutton u"›" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person + 1)
+            text u"Что ты хочешь сказать?" style "dg_rpg_body" xpos 204 ypos 975 size 27
+        else:
+            text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#e7d9ac"
+            text u"Можно осмотреться или открыть карту." style "dg_rpg_body" xpos 204 ypos 975 size 27
+        hbox:
+            xpos 1118 ypos 974 spacing 12
+            if inhabitants:
+                textbutton u"Своя реплика" style "dg_camp_action" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
+                textbutton u"Темы разговора" style "dg_camp_nav" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
+            else:
+                textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
+        if inhabitants:
+            textbutton u"Действие" style "dg_camp_nav" xpos 1680 ypos 36 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
+        text u"M — карта   ·   J — дневник   ·   H — скрыть интерфейс" style "dg_rpg_hint" size 18 xpos 1052 ypos 108 color "#f1e7c5"
     else:
-        textbutton u"Показать интерфейс · H" style "dg_rpg_tab" xpos 174 ypos 990 action SetScreenVariable("show_interface", True)
+        textbutton u"Показать интерфейс · H" style "dg_camp_nav" xpos 52 ypos 990 action SetScreenVariable("show_interface", True)
     key "h" action ToggleScreenVariable("show_interface")
+    key "m" action Return(("map", None))
+    key "j" action Return(("journal", None))
     key "K_ESCAPE" action Return(("controls", None))
 
 screen dg_rpg_controls:

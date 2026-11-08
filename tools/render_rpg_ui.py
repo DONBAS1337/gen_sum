@@ -21,6 +21,8 @@ def main():
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene"))
+    parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
+    parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     args = parser.parse_args()
     sdk = args.sdk.resolve()
     runner = sdk / "lib/py2-windows-x86_64/python.exe"
@@ -69,6 +71,8 @@ def main():
     env["DG_UI_SCREEN"] = args.screen or ""
     env["DG_UI_WORKSHOP"] = str(args.workshop.resolve()) if args.workshop else ""
     env["DG_UI_VANILLA"] = str(args.vanilla.resolve()) if args.vanilla else ""
+    env["DG_UI_PLACE"] = args.place
+    env["DG_UI_SLOT"] = str(args.slot)
     subprocess.run([str(runner), str(sdk / "renpy.py"), str(output), "ui-render"], check=True, env=env)
     print("Rendered UI screenshots:", output)
 
@@ -110,6 +114,9 @@ init 1100 python:
         import re
         for archive_path, archive_index in renpy.loader.archives:
             for path in archive_index:
+                if path.startswith("images/bg/") and path.endswith((".jpg", ".png")):
+                    name = "bg " + os.path.splitext(os.path.basename(path))[0]
+                    dg_runtime.original_images[name] = Image(path)
                 match = re.match(r"^images/sprites/(normal|far|close)/([^/]+)/([^/]+)$", path)
                 if not match:
                     continue
@@ -128,15 +135,9 @@ init 1100 python:
         return value.replace("{", "{{").replace("[", "[[")
     def dg_rpg_root():
         return os.path.join(config.gamedir, "test-saves")
-    def dg_rpg_bg():
-        if vanilla_root:
-            return Image("images/bg/ext_houses_day.jpg")
-        return Solid("#253f42")
     dg_test_native_sprite = dg_rpg_sprite
     def dg_rpg_sprite(*args):
         return dg_test_native_sprite(*args) if vanilla_root else None
-    def dg_rpg_bg_status():
-        return {"status": "original"}
     def dg_detect_7dl_root():
         return workshop_root
     def ui_capture(name):
@@ -158,7 +159,24 @@ init 1100 python:
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
         if dg_rpg_say_character("dv").name != u"Алиса" or dg_rpg_say_character("hero").name != u"Тестовый герой":
             raise ValueError("Incorrect native character names")
-        dg_rpg.move(store.dg_rpg_state, "cabins")
+        dg_rpg.move(store.dg_rpg_state, os.environ.get("DG_UI_PLACE", "cabins"))
+        store.dg_rpg_state["slot"] = int(os.environ.get("DG_UI_SLOT", "0"))
+        store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
+        if vanilla_root:
+            # Exercise production background selection, including a prior scene's
+            # snapshot: the camp hub must always use the new current location.
+            backgrounds = []
+            for place, slot in (("gate", 0), ("canteen", 1), ("beach", 1), ("gate", 3)):
+                store.dg_rpg_state["place"] = place
+                store.dg_rpg_state["slot"] = slot
+                native = dg_rpg_bg_native(place)
+                if native is None:
+                    raise ValueError("Missing actual background for " + place)
+                backgrounds.append(native)
+            if len(set(backgrounds)) != 4:
+                raise ValueError("Location/time transitions did not change the background")
+            store.dg_rpg_state["place"] = os.environ.get("DG_UI_PLACE", "cabins")
+            store.dg_rpg_state["slot"] = int(os.environ.get("DG_UI_SLOT", "0"))
         store.dg_create_name = u"Тестовый герой"
         store.dg_create_age = u"23"
         store.dg_create_days = u"30"
