@@ -19,6 +19,11 @@ init 1001 python:
     import dg_map
     import dg_resources
     import dg_turn
+    import dg_bkrr
+
+    def dg_rpg_notice_board():
+        root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
+        return dg_bkrr.board(root)
 
     def dg_camp_button_surface(fill, edge):
         # A scalable one-pixel rim, drawn natively by Ren'Py.
@@ -117,6 +122,8 @@ init 1001 python:
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
+        elif action == "profile":
+            dg_rpg.set_source(state, arg)
         elif action == "remember_narrative":
             if store.dg_rpg_pending_turn is not None:
                 state = dg_turn.finish(dg_rpg_root(), store.dg_rpg_pending_turn, arg[0], arg[1])
@@ -356,6 +363,11 @@ init 1001 python:
     def dg_rpg_bg_native(place):
         # Prefer the actual location AND matching time of day when available.
         # Only exact 12 canonical locations block manual BG generation.
+        if dg_rpg_state.get("source") == dg_bkrr.SOURCE:
+            root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
+            backdrop = dg_bkrr.background(root, place, dg_rpg_visual_state()["slot"])
+            if backdrop:
+                return backdrop
         external = dg_resources.background(
             dg_runtime.app.catalog.get("source_assets", {}).get("7dl", {}),
             place, dg_rpg_visual_state()["slot"])
@@ -489,6 +501,7 @@ init 1001 python:
         # Called via dg_runtime.app.start(), never on the screen rendering thread.
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         context = dg_rpg.summary_for_ai(state, who, intent)
+        context["narrative_direction"] = dg_narrative.context(state, "special", who, intent)
         app = dg_runtime.app
         if state["source"].startswith("7dl:"):
             root = (app.catalog.get("source_roots") or {}).get("7dl")
@@ -581,27 +594,27 @@ default dg_rpg_actor_moods = {}
 
 screen dg_rpg_picker:
     modal True
-    add Solid("#0b2029")
-    text u"Твоя история в Совёнке" style "dg_rpg_heading" xpos 64 ypos 52
-    text u"Свои решения, живые сцены и персонажи. Для новых сцен нужны ИИ и интернет." style "dg_rpg_hint" xpos 64 ypos 116 xmaximum 1680
+    add Solid("#d7ccae")
+    text u"Твоя история в Совёнке" style "dg_note_heading" xpos 64 ypos 52
+    text u"Свои решения, живые сцены и персонажи. Для новых сцен нужны ИИ и интернет." style "dg_note_hint" xpos 64 ypos 116 xmaximum 1680
     frame:
-        background Solid("#14323c") xpos 64 ypos 192 xsize 728 ysize 716 padding (32, 28)
+        background Solid("#faf2de") xpos 64 ypos 192 xsize 728 ysize 716 padding (32, 28)
         vbox:
             xsize 664 spacing 24
-            text u"Новая смена" style "dg_rpg_heading"
-            text u"Создай героя, выбери предысторию и начни знакомство с лагерем." style "dg_rpg_body"
-            textbutton u"Создать персонажа" style "dg_rpg_main_button" action Return(("new", None))
-            text u"Игра сохраняет поступки автоматически. Смены хранятся отдельно от обычных сохранений «Бесконечного лета»." style "dg_rpg_hint"
+            text u"Новая смена" style "dg_note_heading"
+            text u"Создай героя, выбери предысторию и начни знакомство с лагерем." style "dg_note_body"
+            textbutton u"Создать персонажа" style "dg_note_main" action Return(("new", None))
+            text u"Игра сохраняет поступки автоматически. Смены хранятся отдельно от обычных сохранений «Бесконечного лета»." style "dg_note_hint"
     frame:
-        background Solid("#14323c") xpos 816 ypos 192 xsize 1040 ysize 716 padding (32, 28)
+        background Solid("#faf2de") xpos 816 ypos 192 xsize 1040 ysize 716 padding (32, 28)
         vbox:
             spacing 24
-            text u"Продолжить историю" style "dg_rpg_heading"
+            text u"Продолжить историю" style "dg_note_heading"
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#0b2029")
-                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_base_bar Solid("#d7ccae")
+                vscrollbar_thumb Solid("#69a89a")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 xsize 976 ysize 580 mousewheel True draggable True scrollbars "vertical"
@@ -609,16 +622,16 @@ screen dg_rpg_picker:
                     xsize 936 spacing 16
                     $ saved = dg_rpg.list_games(dg_rpg_root())
                     if not saved:
-                        text u"Сохранённых смен пока нет." style "dg_rpg_body"
+                        text u"Сохранённых смен пока нет." style "dg_note_body"
                     for game in saved:
                         frame:
-                            background Solid("#1d414a") xsize 936 padding (24, 20)
+                            background Solid("#eee4ce") xsize 936 padding (24, 20)
                             vbox:
                                 xsize 888 spacing 12
-                                text dg_literal(game["name"]) style "dg_rpg_heading" size 34 xmaximum 880
-                                text (u"День %d / %d · %s" % (game["day"], game["duration"], u"Завершена" if game["finished"] else u"В лагере")) style "dg_rpg_hint"
-                                textbutton u"Открыть смену" style "dg_rpg_button" action Return(("load", game["id"]))
-    textbutton u"Назад в меню" style "dg_rpg_tab" xpos 64 ypos 944 action Return(("back", None))
+                                text dg_literal(game["name"]) style "dg_note_heading" size 34 xmaximum 880
+                                text (u"День %d / %d · %s" % (game["day"], game["duration"], u"Завершена" if game["finished"] else u"В лагере")) style "dg_note_hint"
+                                textbutton u"Открыть смену" style "dg_note_button" action Return(("load", game["id"]))
+    textbutton u"Назад в меню" style "dg_note_tab" xpos 64 ypos 944 action Return(("back", None))
     key "K_ESCAPE" action Return(("back", None))
 
 # Contrast-focused modal editor; avoids the tiny global Ren'Py input overlay.
@@ -759,6 +772,7 @@ screen dg_rpg_setup:
                             textbutton (dg_literal(dg_create_history[:105]) + (u"…" if len(dg_create_history) > 105 else u"") + u"  · ИЗМЕНИТЬ") style "dg_ink_act" text_size 29 action Return(("edit", "history")) xmaximum 565
                             null height 9
                             text u"МИР И ХАРАКТЕРЫ" style "dg_ink_label"
+                            textbutton u"Мику · Булки, кефир и рок-н-ролл" style "dg_ink_act" text_size 27 action SetVariable("dg_create_source", "bkrr:mi") selected dg_create_source == "bkrr:mi"
                             textbutton u"Оригинальный Совёнок" style "dg_ink_act" text_size 29 action SetVariable("dg_create_source", "vanilla") selected dg_create_source == "vanilla"
                             if dg_detect_7dl_root():
                                 textbutton u"7ДЛ · Мику" style "dg_ink_act" text_size 29 action SetVariable("dg_create_source", "7dl:mi_7dl") selected dg_create_source == "7dl:mi_7dl"
@@ -1003,25 +1017,25 @@ default dg_rpg_action_context = None
 # Camp navigation stays outside the dialogue area.
 init 1002:
     style dg_camp_nav is button:
-        background dg_camp_button_surface("#071c17c9", "#a7996470")
-        hover_background dg_camp_button_surface("#bfa769e8", "#efdc9ecc")
+        background dg_camp_button_surface("#faf1dcf0", "#b7a989")
+        hover_background dg_camp_button_surface("#cbe3d8f5", "#63a99a")
         insensitive_background Solid("#071c1770")
         padding (22, 14)
         xminimum 142
         ysize 58
     style dg_camp_nav_text is dg_rpg_button_text:
         size 24
-        color "#e7d9ac"
-        hover_color "#172b22"
+        color "#30463f"
+        hover_color "#16594e"
         insensitive_color "#869087"
-        outlines [(1, "#00000055", 0, 1)]
+        outlines []
     style dg_camp_action is dg_camp_nav:
-        background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
-        hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
+        background dg_camp_button_surface("#307d70f0", "#7fbaaa")
+        hover_background dg_camp_button_surface("#449a88f5", "#a5d7c5")
         xminimum 238
     style dg_camp_action_text is dg_camp_nav_text:
-        color "#fff0bc"
-        hover_color "#172b22"
+        color "#fff5da"
+        hover_color "#ffffff"
     style dg_camp_arrow is dg_camp_nav:
         xminimum 44
         xsize 44
@@ -1032,11 +1046,47 @@ init 1002:
     style dg_camp_arrow_text is dg_camp_nav_text:
         size 32
 
+    style dg_note_body is dg_rpg_body:
+        color "#30463f"
+        outlines []
+    style dg_note_hint is dg_note_body:
+        color "#6c7b6c"
+        size 23
+    style dg_note_heading is dg_rpg_heading:
+        color "#26574f"
+        outlines []
+    style dg_note_button is dg_rpg_button:
+        background dg_camp_button_surface("#eee4ce", "#c8bda5")
+        hover_background dg_camp_button_surface("#d2e6dc", "#62a79b")
+        selected_background dg_camp_button_surface("#bbd9cd", "#408b7c")
+        insensitive_background Solid("#e4ddcd")
+    style dg_note_button_text is dg_note_body:
+        size 27
+        hover_color "#16594e"
+        insensitive_color "#9c9d8d"
+    style dg_note_main is dg_note_button:
+        background dg_camp_button_surface("#307d70", "#216859")
+        hover_background dg_camp_button_surface("#469b89", "#83c6b4")
+    style dg_note_main_text is dg_note_button_text:
+        color "#fff5da"
+        hover_color "#ffffff"
+    style dg_note_tab is dg_note_button:
+        xfill False
+        xsize 252
+    style dg_note_tab_text is dg_note_button_text:
+        size 26
+    style dg_note_input is dg_rpg_edit_input:
+        size 30
+        color "#30463f"
+        outlines []
+
 screen dg_rpg_hub:
     modal True
     default selected_person = 0
     default show_interface = True
     $ inhabitants = dg_rpg.at_place(dg_rpg_state)
+    if dg_rpg_state.get("source") == "bkrr:mi":
+        $ inhabitants = sorted(inhabitants, key=lambda item: item[0] != "mi")
     $ shift_open = not dg_rpg_state["finished"]
     $ selected_who = inhabitants[selected_person % len(inhabitants)][0] if inhabitants else None
     $ visible_cast = dg_stage.cast([], [item[0] for item in inhabitants], selected_who)
@@ -1047,12 +1097,12 @@ screen dg_rpg_hub:
             add actor_image xpos actor_x xanchor .5 ypos 1.0 yanchor 1.0
     if show_interface:
         frame:
-            background Solid("#071914b0")
+            background Solid("#faf1dce8")
             xpos 52 ypos 36 xsize 650 padding (20, 12)
             vbox:
                 spacing 3
-                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" size 30 color "#e7d9ac"
-                text (dg_rpg.camp_time(dg_rpg_state) + u"   ·   Силы: %d" % dg_rpg_state["energy"]) style "dg_rpg_hint" size 23
+                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" size 30 color "#26574f"
+                text (dg_rpg.camp_time(dg_rpg_state) + u"   ·   Силы: %d" % dg_rpg_state["energy"]) style "dg_note_hint" size 23
         hbox:
             xpos 1052 ypos 36 spacing 8
             textbutton u"Карта" style "dg_camp_nav" action Return(("map", None))
@@ -1072,7 +1122,7 @@ screen dg_rpg_hub:
                     textbutton u"›" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person + 1)
             text u"Что ты хочешь сказать?" style "dg_rpg_body" xpos 204 ypos 975 size 27
         else:
-            text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#e7d9ac"
+            text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#26574f"
             text u"Можно осмотреться или открыть карту." style "dg_rpg_body" xpos 204 ypos 975 size 27
         hbox:
             xpos 950 ypos 974 spacing 12
@@ -1093,31 +1143,35 @@ screen dg_rpg_controls:
     default dg_hub_tab = "story"
     default dg_expanded_npc = None
     add dg_rpg_bg()
-    add Solid("#07171de8")
+    $ board_image = dg_rpg_notice_board()
+    if board_image:
+        add Image(board_image)
+    else:
+        add Solid("#c3ad80")
     $ inhabitants = dg_rpg.at_place(dg_rpg_state)
     $ shift_open = not dg_rpg_state["finished"]
     $ day_event = dg_world.current(dg_rpg_state)
     frame:
-        background Solid("#102b33")
+        background Solid("#faf2de")
         xpos 48 ypos 32 xsize 1824 ysize 126 padding (28, 18)
         vbox:
             spacing 6
-            text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" xmaximum 1320
-            text (dg_rpg.camp_time(dg_rpg_state) + u"  ·  " + dg_world.weather(dg_rpg_state)[1] + u"  ·  Энергия %d/100" % dg_rpg_state["energy"]) style "dg_rpg_hint" xmaximum 1320
-    textbutton u"Выбор смены" style "dg_rpg_tab" xpos 1578 ypos 65 action Return(("exit", None))
+            text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_note_heading" xmaximum 1320
+            text (dg_rpg.camp_time(dg_rpg_state) + u"  ·  " + dg_world.weather(dg_rpg_state)[1] + u"  ·  Энергия %d/100" % dg_rpg_state["energy"]) style "dg_note_hint" xmaximum 1320
+    textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1578 ypos 65 action Return(("camp", None))
     hbox:
         xpos 48 ypos 178 spacing 12
-        textbutton u"ИСТОРИЯ" style "dg_rpg_tab" selected dg_hub_tab == "story" action SetScreenVariable("dg_hub_tab","story")
-        textbutton u"ДЕЙСТВИЯ" style "dg_rpg_tab" selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
-        textbutton u"НАСТРОЙКИ" style "dg_rpg_tab" selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
+        textbutton u"События" style "dg_note_tab" selected dg_hub_tab == "story" action SetScreenVariable("dg_hub_tab","story")
+        textbutton u"Занятия" style "dg_note_tab" selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
+        textbutton u"Настройки" style "dg_note_tab" selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
     frame:
-        background Solid("#102b33f5")
+        background Solid("#faf2defa")
         xpos 48 ypos 258 xsize 1100 ysize 656 padding (28, 24)
         viewport:
             viewport_xfill True
             vscrollbar_xsize 16
-            vscrollbar_base_bar Solid("#0b2029")
-            vscrollbar_thumb Solid("#6d918e")
+            vscrollbar_base_bar Solid("#d7ccae")
+            vscrollbar_thumb Solid("#69a89a")
             vscrollbar_unscrollable "hide"
             side_spacing 12
             xsize 1044 ysize 608
@@ -1126,184 +1180,179 @@ screen dg_rpg_controls:
                 xsize 1008 spacing 18
                 if dg_hub_tab == "story":
                     if not shift_open:
-                        text u"Смена завершена" style "dg_rpg_heading"
-                        text u"Перечитай дневник или узнай, к чему привели твои решения." style "dg_rpg_body"
-                        textbutton u"Итоги смены" style "dg_rpg_main_button" action Return(("finale", None))
+                        text u"Смена завершена" style "dg_note_heading"
+                        text u"Перечитай дневник или узнай, к чему привели твои решения." style "dg_note_body"
+                        textbutton u"Итоги смены" style "dg_note_main" action Return(("finale", None))
                     else:
-                        text u"Что ты сделаешь?" style "dg_rpg_heading"
-                        text u"Опиши поступок своими словами или обратись к тому, кто рядом." style "dg_rpg_body"
-                        textbutton u"Написать своё действие" style "dg_rpg_main_button" action Return(("hybrid", None)) sensitive dg_rpg_state["energy"] >= 4
+                        text u"Что ты сделаешь?" style "dg_note_heading"
+                        text u"Опиши поступок своими словами или обратись к тому, кто рядом." style "dg_note_body"
+                        textbutton u"Написать своё действие" style "dg_note_main" action Return(("hybrid", None)) sensitive dg_rpg_state["energy"] >= 4
                         if dg_rpg_state["energy"] < 4:
-                            text u"Ты устал. Отдых доступен во вкладке «Действия»." style "dg_rpg_hint"
+                            text u"Ты устал. Отдых доступен во вкладке «Действия»." style "dg_note_hint"
                         if day_event:
-                            text u"Событие дня" style "dg_rpg_hint"
-                            text dg_literal(day_event["title"]) style "dg_rpg_heading" size 34
-                            text (u"Где: " + dg_rpg.PLACE_NAMES[day_event["place"]]) style "dg_rpg_body"
-                            textbutton (u"Участвовать · 8 энергии" if dg_rpg_state["place"] == day_event["place"] else u"Перейти к событию") style "dg_rpg_button" sensitive (dg_rpg_state["place"] != day_event["place"] or dg_rpg_state["energy"] >= 8) action Return(("world", None) if dg_rpg_state["place"] == day_event["place"] else ("world_travel", day_event["place"]))
+                            text u"Событие дня" style "dg_note_hint"
+                            text dg_literal(day_event["title"]) style "dg_note_heading" size 34
+                            text (u"Где: " + dg_rpg.PLACE_NAMES[day_event["place"]]) style "dg_note_body"
+                            textbutton (u"Участвовать · 8 энергии" if dg_rpg_state["place"] == day_event["place"] else u"Перейти к событию") style "dg_note_button" sensitive (dg_rpg_state["place"] != day_event["place"] or dg_rpg_state["energy"] >= 8) action Return(("world", None) if dg_rpg_state["place"] == day_event["place"] else ("world_travel", day_event["place"]))
                         else:
-                            text u"Событие дня завершено. Можно продолжать свою историю." style "dg_rpg_hint"
+                            text u"Событие дня завершено. Можно продолжать свою историю." style "dg_note_hint"
                         $ active_incident = dg_social.incident_at(dg_rpg_state, dg_rpg_state["place"])
                         if active_incident:
-                            text dg_literal(u"Рядом: " + active_incident["title"]) style "dg_rpg_body"
-                            textbutton u"Присоединиться · 9 энергии" style "dg_rpg_button" action Return(("incident", None)) sensitive dg_rpg_state["energy"] >= 9
-                    text u"Последняя запись" style "dg_rpg_hint"
-                    text dg_literal(dg_rpg_state["event"]) style "dg_rpg_body"
+                            text dg_literal(u"Рядом: " + active_incident["title"]) style "dg_note_body"
+                            textbutton u"Присоединиться · 9 энергии" style "dg_note_button" action Return(("incident", None)) sensitive dg_rpg_state["energy"] >= 9
+                    text u"Последняя запись" style "dg_note_hint"
+                    text dg_literal(dg_rpg_state["event"]) style "dg_note_body"
                 elif dg_hub_tab == "actions":
-                    text u"Твой ход" style "dg_rpg_heading"
+                    text u"Твой ход" style "dg_note_heading"
                     if shift_open:
-                        textbutton u"Написать своё действие" style "dg_rpg_main_button" action Return(("hybrid", None)) sensitive dg_rpg_state["energy"] >= 4
-                        textbutton u"Поручения и исследования" style "dg_rpg_button" action Return(("contracts", None))
-                        textbutton u"Неожиданная встреча · 4 энергии" style "dg_rpg_button" action Return(("surprise", None)) sensitive dg_rpg_state["energy"] >= 4
-                        text u"Занятия · каждое переводит время на следующий период" style "dg_rpg_hint"
-                        textbutton u"Осмотреться · 12 энергии" style "dg_rpg_button" action Return(("activity", "explore")) sensitive dg_rpg_state["energy"] >= 12
-                        textbutton u"Помочь лагерю · 17 энергии" style "dg_rpg_button" action Return(("activity", "help")) sensitive dg_rpg_state["energy"] >= 17
-                        textbutton u"Заняться делом · 20 энергии" style "dg_rpg_button" action Return(("activity", "practice")) sensitive dg_rpg_state["energy"] >= 20
-                        textbutton u"Отдохнуть · +35 энергии" style "dg_rpg_button" action Return(("activity", "rest"))
+                        textbutton u"Написать своё действие" style "dg_note_main" action Return(("hybrid", None)) sensitive dg_rpg_state["energy"] >= 4
+                        textbutton u"Поручения и исследования" style "dg_note_button" action Return(("contracts", None))
+                        textbutton u"Неожиданная встреча · 4 энергии" style "dg_note_button" action Return(("surprise", None)) sensitive dg_rpg_state["energy"] >= 4
+                        text u"Занятия · каждое переводит время на следующий период" style "dg_note_hint"
+                        textbutton u"Осмотреться · 12 энергии" style "dg_note_button" action Return(("activity", "explore")) sensitive dg_rpg_state["energy"] >= 12
+                        textbutton u"Помочь лагерю · 17 энергии" style "dg_note_button" action Return(("activity", "help")) sensitive dg_rpg_state["energy"] >= 17
+                        textbutton u"Заняться делом · 20 энергии" style "dg_note_button" action Return(("activity", "practice")) sensitive dg_rpg_state["energy"] >= 20
+                        textbutton u"Отдохнуть · +35 энергии" style "dg_note_button" action Return(("activity", "rest"))
                     else:
-                        text u"Смена окончена. История сохранена в дневнике." style "dg_rpg_body"
+                        text u"Смена окончена. История сохранена в дневнике." style "dg_note_body"
                 else:
-                    text u"Настройки истории" style "dg_rpg_heading"
-                    text (u"ИИ подключён" if dg_runtime.app.client.authenticated() else u"Для новых сцен подключи ИИ") style "dg_rpg_body"
-                    textbutton u"Подключение ИИ" style "dg_rpg_button" action Return(("connect", None))
-                    textbutton (u"Взрослая AU: включена" if dg_adult.enabled(dg_rpg_state) else u"Взрослая AU: выключена") style "dg_rpg_button" action Return(("adult", None))
-                    textbutton u"Настройки изображений" style "dg_rpg_button" action Return(("artist", None))
+                    text u"Настройки истории" style "dg_note_heading"
+                    if dg_rpg_state.get("source") == "bkrr:mi":
+                        text u"Ориентир: БКРР · Мику, музыка и лагерное лето" style "dg_note_body"
+                    else:
+                        textbutton u"Выбрать настроение БКРР · Мику" style "dg_note_button" action Return(("profile", "bkrr:mi"))
+                    text (u"ИИ подключён" if dg_runtime.app.client.authenticated() else u"Для новых сцен подключи ИИ") style "dg_note_body"
+                    textbutton u"Подключение ИИ" style "dg_note_button" action Return(("connect", None))
+                    textbutton (u"Взрослая AU: включена" if dg_adult.enabled(dg_rpg_state) else u"Взрослая AU: выключена") style "dg_note_button" action Return(("adult", None))
+                    textbutton u"Настройки изображений" style "dg_note_button" action Return(("artist", None))
                     $ bg_state = dg_rpg_bg_status()
                     if shift_open and bg_state["status"] == "missing":
-                        textbutton u"Создать фон этого места" style "dg_rpg_button" action Return(("background", dg_rpg_state["place"]))
-                    textbutton u"Галерея CG" style "dg_rpg_button" action Return(("cg_gallery", None))
-                    textbutton u"Диагностика" style "dg_rpg_button" action Return(("diag", None))
-                    text (u"Навык %d · Доброта %d · Любознательность %d" % (dg_rpg_state["stats"]["skill"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["curiosity"])) style "dg_rpg_hint"
+                        textbutton u"Создать фон этого места" style "dg_note_button" action Return(("background", dg_rpg_state["place"]))
+                    textbutton u"Галерея CG" style "dg_note_button" action Return(("cg_gallery", None))
+                    textbutton u"Диагностика" style "dg_note_button" action Return(("diag", None))
+                    text (u"Навык %d · Доброта %d · Любознательность %d" % (dg_rpg_state["stats"]["skill"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["curiosity"])) style "dg_note_hint"
     frame:
-        background Solid("#102b33f5")
+        background Solid("#faf2defa")
         xpos 1172 ypos 178 xsize 700 ysize 736 padding (28, 24)
         vbox:
             spacing 18
-            text u"Кто рядом" style "dg_rpg_heading"
+            text u"Кто рядом" style "dg_note_heading"
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#0b2029")
-                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_base_bar Solid("#d7ccae")
+                vscrollbar_thumb Solid("#69a89a")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 xsize 644 ysize 606 mousewheel True draggable True scrollbars "vertical"
                 vbox:
                     xsize 608 spacing 22
                     if not inhabitants:
-                        text u"Здесь пока никого." style "dg_rpg_body"
-                        text u"Посмотри карту: персонажи перемещаются в течение дня." style "dg_rpg_hint"
+                        text u"Здесь пока никого." style "dg_note_body"
+                        text u"Посмотри карту: персонажи перемещаются в течение дня." style "dg_note_hint"
                     for who, person in inhabitants:
                         frame:
-                            background Solid("#193840")
+                            background Solid("#eee4ce")
                             xsize 608 padding (18, 16)
                             vbox:
                                 spacing 12 xsize 572
-                                text person style "dg_rpg_heading" size 34
-                                text (u"%s · %d/100" % (dg_rpg.route_label(dg_rpg_state["affinity"][who]), dg_rpg_state["affinity"][who])) style "dg_rpg_hint"
-                                textbutton u"Сказать своими словами" style "dg_rpg_main_button" action Return(("hybrid_npc", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
-                                textbutton u"Выбрать тему разговора" style "dg_rpg_button" action Return(("talk", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
-                                textbutton u"Другие встречи" style "dg_rpg_button" selected dg_expanded_npc == who action SetScreenVariable("dg_expanded_npc", None if dg_expanded_npc == who else who)
+                                text person style "dg_note_heading" size 34
+                                text (u"%s · %d/100" % (dg_rpg.route_label(dg_rpg_state["affinity"][who]), dg_rpg_state["affinity"][who])) style "dg_note_hint"
+                                textbutton u"Сказать своими словами" style "dg_note_main" action Return(("hybrid_npc", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
+                                textbutton u"Выбрать тему разговора" style "dg_note_button" action Return(("talk", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
+                                textbutton u"Другие встречи" style "dg_note_button" selected dg_expanded_npc == who action SetScreenVariable("dg_expanded_npc", None if dg_expanded_npc == who else who)
                                 if dg_expanded_npc == who:
-                                    textbutton u"Особая AI-сцена" style "dg_rpg_button" action Return(("ai", who)) sensitive shift_open
-                                    textbutton u"Неожиданная встреча · 4 энергии" style "dg_rpg_button" action Return(("surprise", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
+                                    textbutton u"Особая AI-сцена" style "dg_note_button" action Return(("ai", who)) sensitive shift_open
+                                    textbutton u"Неожиданная встреча · 4 энергии" style "dg_note_button" action Return(("surprise", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
                                 if dg_social.personal_scene(dg_rpg_state, who) and shift_open:
-                                    textbutton u"Личная история · 12 энергии" style "dg_rpg_button" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
+                                    textbutton u"Личная история · 12 энергии" style "dg_note_button" action Return(("personal", who)) sensitive dg_rpg_state["energy"] >= 12
                                 if dg_rpg.available_route_events(dg_rpg_state, who) and shift_open:
-                                    textbutton u"Важный разговор · 12 энергии" style "dg_rpg_button" action Return(("route", who)) sensitive dg_rpg_state["energy"] >= 12
+                                    textbutton u"Важный разговор · 12 энергии" style "dg_note_button" action Return(("route", who)) sensitive dg_rpg_state["energy"] >= 12
     hbox:
         xpos 48 ypos 942 spacing 18
-        textbutton u"Карта лагеря" style "dg_rpg_tab" action Return(("map", None))
-        textbutton u"Дневник и связи" style "dg_rpg_tab" action Return(("journal", None))
-        textbutton u"Своё действие" style "dg_rpg_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
-    text u"Переходы бесплатны. Поступки и разговоры двигают время." style "dg_rpg_hint" xpos 882 ypos 960 xmaximum 970
+        textbutton u"Карта лагеря" style "dg_note_tab" action Return(("map", None))
+        textbutton u"Дневник и связи" style "dg_note_tab" action Return(("journal", None))
+        textbutton u"Своё действие" style "dg_note_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
+    text u"Переходы бесплатны. Поступки и разговоры двигают время." style "dg_note_hint" color "#35483b" xpos 882 ypos 960 xmaximum 970
     key "K_ESCAPE" action Return(("camp", None))
 
 screen dg_rpg_hybrid_input(mode, who=None):
     modal True
     default action_text = dg_rpg_action_draft
     add dg_rpg_bg()
-    add Solid("#07171df2")
+    add Solid("#182c2390")
     frame:
-        background Solid("#102b33")
+        background Solid("#faf2de")
         align (0.5, 0.5) xsize 1480 ysize 900 padding (40, 32)
         fixed:
             xsize 1400 ysize 836
             vbox:
                 spacing 18 xsize 1380
-                text (u"Что ты скажешь?" if mode == "npc" else u"Как ты поступишь?") style "dg_rpg_heading"
+                text (u"Что ты скажешь?" if mode == "npc" else u"Как ты поступишь?") style "dg_note_heading"
                 if who is not None:
-                    text (u"Собеседник: " + dg_rpg.NPC_NAMES[who]) style "dg_rpg_body"
-                text u"Опиши один поступок или реплику. Затем можно проверить ход и продолжить сцену с ИИ." style "dg_rpg_body"
+                    text (u"Собеседник: " + dg_rpg.NPC_NAMES[who]) style "dg_note_body"
+                text u"Опиши один поступок или реплику. Затем можно проверить ход и продолжить сцену с ИИ." style "dg_note_body"
                 frame:
-                    background Solid("#081b25") padding (24, 20) xsize 1380 ysize 170
+                    background Solid("#eee6d4") padding (24, 20) xsize 1380 ysize 430
                     viewport:
                         viewport_xfill True
                         vscrollbar_xsize 16
-                        vscrollbar_base_bar Solid("#0b2029")
-                        vscrollbar_thumb Solid("#6d918e")
+                        vscrollbar_base_bar Solid("#d7ccae")
+                        vscrollbar_thumb Solid("#69a89a")
                         vscrollbar_unscrollable "hide"
                         side_spacing 12
-                        xsize 1332 ysize 130 mousewheel True scrollbars "vertical"
+                        xsize 1332 ysize 390 mousewheel True scrollbars "vertical"
                         input:
                             value ScreenVariableInputValue("action_text")
-                            style "dg_rpg_edit_input"
+                            style "dg_note_input"
                             length 4000
                             xmaximum 1280
                             default_focus True
-                text (u"%d / 4000 символов" % len(action_text)) style "dg_rpg_hint"
-                text u"Твой текст" style "dg_rpg_hint"
-                viewport:
-                    viewport_xfill True
-                    vscrollbar_xsize 16
-                    vscrollbar_base_bar Solid("#0b2029")
-                    vscrollbar_thumb Solid("#6d918e")
-                    vscrollbar_unscrollable "hide"
-                    side_spacing 12
-                    xsize 1380 ysize 256 mousewheel True draggable True scrollbars "vertical"
-                    text dg_literal(action_text if action_text else u"Например: «Подойти к Мику и предложить вместе подготовить выступление».") style "dg_rpg_body" xmaximum 1320
+                text (u"%d / 4000 символов" % len(action_text)) style "dg_note_hint"
+                text u"Один поступок или одна реплика. Текст сохранится, если вернуться назад." style "dg_note_hint"
             hbox:
                 ypos 756 spacing 18
-                textbutton u"Продолжить" style "dg_rpg_main_button" xsize 430 sensitive bool(action_text.strip()) action [SetVariable("dg_rpg_action_draft", action_text), Return(("submit", action_text.strip()))]
-                textbutton u"Назад" style "dg_rpg_button" xsize 260 action [SetVariable("dg_rpg_action_draft", action_text), Return(None)]
+                textbutton u"Продолжить" style "dg_note_main" xsize 430 sensitive bool(action_text.strip()) action [SetVariable("dg_rpg_action_draft", action_text), Return(("submit", action_text.strip()))]
+                textbutton u"Назад" style "dg_note_button" xsize 260 action [SetVariable("dg_rpg_action_draft", action_text), Return(None)]
     key "K_ESCAPE" action [SetVariable("dg_rpg_action_draft", action_text), Return(None)]
 
 screen dg_rpg_hybrid_review(plan):
     modal True
     add dg_rpg_bg()
-    add Solid("#07171df2")
+    add Solid("#182c2390")
     frame:
-        background Solid("#102b33")
+        background Solid("#faf2de")
         align (0.5, 0.5) xsize 1480 ysize 900 padding (40, 32)
         fixed:
             xsize 1400 ysize 836
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#0b2029")
-                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_base_bar Solid("#d7ccae")
+                vscrollbar_thumb Solid("#69a89a")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 xsize 1400 ysize 718 mousewheel True draggable True scrollbars "vertical"
                 vbox:
                     xsize 1340 spacing 20
-                    text (u"Твой следующий ход" if plan["status"] == "ready" else u"Уточни действие") style "dg_rpg_heading"
-                    text dg_literal(plan.get("action", u"")[:700] + (u"…" if len(plan.get("action", u"")) > 700 else u"")) style "dg_rpg_body"
+                    text (u"Твой следующий ход" if plan["status"] == "ready" else u"Уточни действие") style "dg_note_heading"
+                    text dg_literal(plan.get("action", u"")[:700] + (u"…" if len(plan.get("action", u"")) > 700 else u"")) style "dg_note_body"
                     if len(plan.get("action", u"")) > 700:
-                        text u"Полный текст сохранён. Его можно открыть кнопкой «Изменить текст»." style "dg_rpg_hint"
+                        text u"Полный текст сохранён. Его можно открыть кнопкой «Изменить текст»." style "dg_note_hint"
                     if plan["status"] != "ready":
-                        text dg_literal(plan["message"]) style "dg_rpg_body"
+                        text dg_literal(plan["message"]) style "dg_note_body"
                     else:
-                        text dg_literal(plan["result"]["text"] if len(plan["result"]["text"]) <= 1000 else plan["result"]["text"][:450] + u"…" + plan["result"]["text"][-450:]) style "dg_rpg_body"
-                        text u"Что изменится" style "dg_rpg_heading" size 32
+                        text dg_literal(plan["result"]["text"] if len(plan["result"]["text"]) <= 1000 else plan["result"]["text"][:450] + u"…" + plan["result"]["text"][-450:]) style "dg_note_body"
+                        text u"Что изменится" style "dg_note_heading" size 32
                         for item in plan["effects"]:
-                            text dg_literal(item) style "dg_rpg_body"
-                    text u"Ход ещё не сделан. После продолжения ИИ напишет сцену." style "dg_rpg_hint"
+                            text dg_literal(item) style "dg_note_body"
+                    text u"Ход ещё не сделан. После продолжения ИИ напишет сцену." style "dg_note_hint"
             hbox:
                 ypos 756 spacing 18
                 if plan["status"] == "ready":
-                    textbutton u"Продолжить с ИИ" style "dg_rpg_main_button" xsize 430 action Return("ai")
-                textbutton u"Изменить текст" style "dg_rpg_button" xsize 310 action Return("retry")
-                textbutton u"Отмена" style "dg_rpg_button" xsize 240 action Return("cancel")
+                    textbutton u"Продолжить с ИИ" style "dg_note_main" xsize 430 action Return("ai")
+                textbutton u"Изменить текст" style "dg_note_button" xsize 310 action Return("retry")
+                textbutton u"Отмена" style "dg_note_button" xsize 240 action Return("cancel")
     key "K_ESCAPE" action Return("cancel")
 
 screen dg_rpg_art_error(message):
@@ -1790,27 +1839,27 @@ screen dg_rpg_world_result(result):
 screen dg_rpg_journal:
     modal True
     default view = "timeline"
-    add Solid("#142832")
-    use dg_chrome(u"ДНЕВНИК", Return())
-    text u"Дневник смены" style "dg_title" xpos 100 ypos 115 size 65
+    add Solid("#e6d9bd")
+    textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1580 ypos 105 action Return(None)
+    text u"Дневник смены" style "dg_note_heading" xpos 100 ypos 115 size 52
     hbox:
         xpos 100 ypos 215 spacing 16
-        textbutton u"События" style "dg_navlink" selected view == "timeline" action SetScreenVariable("view", "timeline")
-        textbutton u"Разговоры" style "dg_navlink" selected view == "talks" action SetScreenVariable("view", "talks")
-        textbutton u"AI-сцены" style "dg_navlink" selected view == "ai" action SetScreenVariable("view", "ai")
-        textbutton u"Хроника мира" style "dg_navlink" selected view == "world" action SetScreenVariable("view", "world")
-        textbutton u"Люди и слухи" style "dg_navlink" selected view == "social" action SetScreenVariable("view", "social")
+        textbutton u"События" style "dg_note_tab" selected view == "timeline" action SetScreenVariable("view", "timeline")
+        textbutton u"Разговоры" style "dg_note_tab" selected view == "talks" action SetScreenVariable("view", "talks")
+        textbutton u"AI-сцены" style "dg_note_tab" selected view == "ai" action SetScreenVariable("view", "ai")
+        textbutton u"Хроника мира" style "dg_note_tab" selected view == "world" action SetScreenVariable("view", "world")
+        textbutton u"Люди и слухи" style "dg_note_tab" selected view == "social" action SetScreenVariable("view", "social")
     hbox:
         xpos 95 ypos 295 spacing 45
         frame:
-            background Solid("#091a24")
+            background Solid("#faf2de")
             padding (23, 21)
             xsize 970 ysize 660
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#0b2029")
-                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_base_bar Solid("#d7ccae")
+                vscrollbar_thumb Solid("#69a89a")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 mousewheel True
@@ -1820,100 +1869,100 @@ screen dg_rpg_journal:
                     spacing 16
                     if view == "timeline":
                         for row in dg_rpg_state["journal"][::-1]:
-                            text (u"День %d · %s" % (row["day"], dg_rpg.SLOTS[row["slot"]])) style "dg_meta" size 20
-                            text dg_literal(row["text"]) style "dg_text" size 26 xmaximum 855
+                            text (u"День %d · %s" % (row["day"], dg_rpg.SLOTS[row["slot"]])) style "dg_note_hint" size 20
+                            text dg_literal(row["text"]) style "dg_note_body" size 26 xmaximum 855
                     elif view == "talks":
                         if not dg_rpg_state.get("dialogue_history"):
-                            text u"Вы ещё не вели подробных разговоров. Встретьте персонажа и выберите тему беседы." style "dg_text" size 28 xmaximum 850
+                            text u"Вы ещё не вели подробных разговоров. Встретьте персонажа и выберите тему беседы." style "dg_note_body" size 28 xmaximum 850
                         for item in dg_rpg_state.get("dialogue_history", [])[::-1]:
-                            text (u"День %d · %s · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]], item["topic"])) style "dg_meta" size 23
-                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 855
-                            text (u"Отношения +%d" % item["affinity_gain"]) style "dg_text" size 22 color "#ffe19b"
+                            text (u"День %d · %s · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]], item["topic"])) style "dg_note_hint" size 23
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 855
+                            text (u"Отношения +%d" % item["affinity_gain"]) style "dg_note_body" size 22 color "#307d70"
                             null height 12
                     elif view == "world":
                         if not dg_rpg_state["world"]["chronicle"]:
-                            text u"Лагерные истории только начинаются. Посетите место события дня и примите решение." style "dg_text" size 28 xmaximum 850
+                            text u"Лагерные истории только начинаются. Посетите место события дня и примите решение." style "dg_note_body" size 28 xmaximum 850
                         for item in dg_rpg_state["world"]["chronicle"][::-1]:
                             text (u"День %d · %s · %s" % (item["day"], item["title"],
-                                  u"Пропущено" if item["status"] == "missed" else u"Событие сыграно")) style "dg_meta" size 23
-                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 855
+                                  u"Пропущено" if item["status"] == "missed" else u"Событие сыграно")) style "dg_note_hint" size 23
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 855
                             null height 12
                     elif view == "social":
-                        text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_meta" size 25 color "#ffe5a0"
+                        text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_note_hint" size 25 color "#307d70"
                         if not dg_rpg_state["social"]["rumours"]:
-                            text u"Пока ничего необычного. Новые слухи появляются со временем." style "dg_text" size 25
+                            text u"Пока ничего необычного. Новые слухи появляются со временем." style "dg_note_body" size 25
                         for item in dg_rpg_state["social"]["rumours"][::-1]:
-                            text (u"День %d" % item["day"]) style "dg_meta" size 22
-                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 850
-                        text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_meta" size 25 color "#ffe5a0"
+                            text (u"День %d" % item["day"]) style "dg_note_hint" size 22
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 850
+                        text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_note_hint" size 25 color "#307d70"
                         for who, name in dg_social.NAMES.items():
                             if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
-                                text (name + u": " + str(dg_rpg_state["social"]["personal"].get(who, 0)) + u"/3 этапов") style "dg_text" size 24
+                                text (name + u": " + str(dg_rpg_state["social"]["personal"].get(who, 0)) + u"/3 этапов") style "dg_note_body" size 24
                     else:
                         for item in dg_rpg_state.get("hybrid_history", [])[::-1]:
-                            text (u"День %d · Твой поступок" % item["day"]) style "dg_rpg_hint"
-                            text dg_literal(item["action"]) style "dg_rpg_body" xmaximum 855
-                            text dg_literal(dg_stage.readable(item["scene"] or item["result"])) style "dg_rpg_body" xmaximum 855
+                            text (u"День %d · Твой поступок" % item["day"]) style "dg_note_hint"
+                            text dg_literal(item["action"]) style "dg_note_body" xmaximum 855
+                            text dg_literal(dg_stage.readable(item["scene"] or item["result"])) style "dg_note_body" xmaximum 855
                             null height 16
                         if not dg_rpg_state["ai_scenes"] and not dg_rpg_state.get("hybrid_history"):
-                            text u"Пока нет AI-сцен. Продолжи историю своим действием или репликой." style "dg_text" size 28
+                            text u"Пока нет AI-сцен. Продолжи историю своим действием или репликой." style "dg_note_body" size 28
                         for item in dg_rpg_state["ai_scenes"][::-1]:
-                            text (u"День %d · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]])) style "dg_meta" size 23
-                            text dg_literal(dg_stage.readable(item["text"])) style "dg_text" size 26 xmaximum 855
+                            text (u"День %d · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]])) style "dg_note_hint" size 23
+                            text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 855
                             null height 13
         frame:
-            background Solid("#091a24")
+            background Solid("#faf2de")
             padding (24, 19)
             xsize 750 ysize 660
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#0b2029")
-                vscrollbar_thumb Solid("#6d918e")
+                vscrollbar_base_bar Solid("#d7ccae")
+                vscrollbar_thumb Solid("#69a89a")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 mousewheel True scrollbars "vertical" ysize 610
                 vbox:
                     spacing 13
                     if view == "social":
-                        text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_meta" size 25 color "#ffdf98"
+                        text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_note_hint" size 25 color "#307d70"
                         for a, b, initial, caption, description in dg_social.PAIR_DEFS:
                             if dg_rpg_state.get("mystery", {}).get("yulia_discovered", False) or "uv" not in (a, b):
-                                text (caption + u": " + str(dg_social.bond(dg_rpg_state, a, b))) style "dg_text" size 25
+                                text (caption + u": " + str(dg_social.bond(dg_rpg_state, a, b))) style "dg_note_body" size 25
                         null height 14
-                        text u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ" style "dg_meta" size 25
+                        text u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ" style "dg_note_hint" size 25
                         for item in dg_social.quest_list(dg_rpg_state):
                             text (item["title"] + u": " +
                                   (u"Не принято" if item["status"] == "available"
                                    else u"В процессе" if item["status"] == "active"
-                                   else u"Готово" if item["status"] == "completed" else u"Просрочено")) style "dg_text" size 23
+                                   else u"Готово" if item["status"] == "completed" else u"Просрочено")) style "dg_note_body" size 23
                         null height 15
-                    text u"ХАРАКТЕРИСТИКИ" style "dg_meta" size 25
-                    text (u"Энергия: %d/100" % dg_rpg_state["energy"]) style "dg_text" size 26
+                    text u"ХАРАКТЕРИСТИКИ" style "dg_note_hint" size 25
+                    text (u"Энергия: %d/100" % dg_rpg_state["energy"]) style "dg_note_body" size 26
                     text (u"Любознательность: %d · Доброта: %d · Навык: %d" %
                           (dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"],
-                           dg_rpg_state["stats"]["skill"])) style "dg_text" size 23 xmaximum 680
+                           dg_rpg_state["stats"]["skill"])) style "dg_note_body" size 23 xmaximum 680
                     null height 12
-                    text u"СОСТОЯНИЕ ЛАГЕРЯ" style "dg_meta" size 25 color "#ffdf98"
+                    text u"СОСТОЯНИЕ ЛАГЕРЯ" style "dg_note_hint" size 25 color "#307d70"
                     text (u"Сплочённость: %d/100 · Знания: %d/100" %
-                          (dg_rpg_state["world"]["morale"], dg_rpg_state["world"]["knowledge"])) style "dg_text" size 23
+                          (dg_rpg_state["world"]["morale"], dg_rpg_state["world"]["knowledge"])) style "dg_note_body" size 23
                     text (u"Свобода: %d/100 · Ресурсы: %d/100" %
-                          (dg_rpg_state["world"]["freedom"], dg_rpg_state["world"]["resources"])) style "dg_text" size 23
+                          (dg_rpg_state["world"]["freedom"], dg_rpg_state["world"]["resources"])) style "dg_note_body" size 23
                     null height 12
-                    text u"СЮЖЕТНЫЕ ЛИНИИ" style "dg_meta" size 25
+                    text u"СЮЖЕТНЫЕ ЛИНИИ" style "dg_note_hint" size 25
                     for plot in dg_world.PLOT_ORDER:
                         text (dg_world.PLOTS[plot]["name"] + u" · " +
-                              str(dg_rpg_state["world"]["tracks"][plot]["stage"]) + u"/5") style "dg_text" size 25 color "#ffe4a1"
-                        text dg_world.story_status(dg_rpg_state, plot) style "dg_text" size 21 xmaximum 680
+                              str(dg_rpg_state["world"]["tracks"][plot]["stage"]) + u"/5") style "dg_note_body" size 25 color "#307d70"
+                        text dg_world.story_status(dg_rpg_state, plot) style "dg_note_body" size 21 xmaximum 680
                     null height 15
-                    text u"ОТНОШЕНИЯ" style "dg_meta"
+                    text u"ОТНОШЕНИЯ" style "dg_note_hint"
                     for who, name, morning, daytime, evening, night in dg_rpg.NPCS:
                         if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
-                            text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_text" size 25
+                            text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_note_body" size 25
                     null height 18
-                    text u"ЗАДАНИЯ" style "dg_meta"
+                    text u"ЗАДАНИЯ" style "dg_note_hint"
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):
-                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" (готово)" if key in dg_rpg_state["quests_done"] else u"")) style "dg_text" size 24
+                        text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" (готово)" if key in dg_rpg_state["quests_done"] else u"")) style "dg_note_body" size 24
 
     key "K_ESCAPE" action Return(None)
 
@@ -2127,7 +2176,7 @@ label dg_rpg_picker_label:
         $ dg_create_age = u"18"
         $ dg_create_days = u"14"
         $ dg_create_history = u"Новичок в лагере"
-        $ dg_create_source = "vanilla"
+        $ dg_create_source = "bkrr:mi"
         $ dg_create_pronouns = u"он/его"
         $ dg_create_adult = False
         jump dg_rpg_create_loop
@@ -2180,6 +2229,9 @@ label dg_rpg_loop:
         $ dg_rpg_cmd, dg_rpg_value = _return
     if dg_rpg_cmd == "exit":
         jump dg_rpg_picker_label
+    if dg_rpg_cmd == "profile":
+        $ dg_rpg_apply("profile", dg_rpg_value)
+        jump dg_rpg_loop
     if dg_rpg_cmd == "journal":
         call screen dg_rpg_journal
         jump dg_rpg_loop

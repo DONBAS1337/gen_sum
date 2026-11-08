@@ -23,6 +23,7 @@ except NameError:
     text_type = str
 
 SLOTS = (u"Утро", u"День", u"Вечер", u"Ночь")
+WORLD_PROFILES = ("vanilla", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl", "bkrr:mi")
 PLACES = (
     ("square", u"Площадь", 50, 52),
     ("gate", u"Ворота", 9, 56),
@@ -114,7 +115,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         raise ValueError("Age must be 1..999999999 and duration 1..120")
     if pronouns not in (u"он/его", u"она/её", u"они/их"):
         raise ValueError("Unknown pronouns")
-    if source not in ("vanilla", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"):
+    if source not in WORLD_PROFILES:
         raise ValueError("Unknown world profile")
     state = {
         "version": 1, "id": uuid.uuid4().hex,
@@ -132,6 +133,13 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
     dg_world.prepare(state)
     dg_social.ensure(state)
     dg_social.prepare_incident(state)
+    return state
+
+
+def set_source(state, source):
+    if source not in WORLD_PROFILES:
+        raise ValueError("Unknown world profile")
+    state["source"] = source
     return state
 
 
@@ -185,6 +193,10 @@ def where_is(state, who):
     incident = dg_social.incident(state)
     if incident and who in incident["pair"]:
         return incident["place"]
+    event = state.get("world", {}).get("event")
+    if (state.get("source") == "bkrr:mi" and who == "mi" and event
+            and event.get("arc") == "festival" and event.get("day") == state["day"]):
+        return event["place"]
     # Deterministic day-specific schedule variation; no random rolls on screen redraw.
     slot = state["slot"]
     if slot == 2 and state["day"] % 3 == 0 and who in ("sl", "un", "mi"):

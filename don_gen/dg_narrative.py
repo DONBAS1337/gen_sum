@@ -9,6 +9,7 @@ from __future__ import unicode_literals
 import copy
 import hashlib
 import json
+import dg_bkrr
 
 try:
     text_type=unicode
@@ -16,6 +17,7 @@ except NameError:
     text_type=str
 
 STYLE_PROFILES={
+ "bkrr:mi": dg_bkrr.PROFILE,
  "vanilla": (u"летний лагерь, будни, лёгкая ностальгия, юмор и честные чувства",
              u"Внешний мир и необычные события вводить только при поддержке истории"),
  "7dl:mi_7dl": (u"7ДЛ: Мику как самостоятельная личность: сцена, музыка, отношения, "
@@ -145,6 +147,12 @@ def context(state, kind, who=None, identity=None, moment=None):
     hook=_pick(persona[2],key,"hook") if persona else u"жизнь лагеря требует участия"
     if who=="mi" and source in MI_7DL:
         hook=_pick(MI_7DL[source],key,"mi_route")
+    if source == dg_bkrr.SOURCE:
+        motif=_pick((u"доверие через совместное дело", u"дружба и чувство меры",
+                     u"умение посмеяться над собственной неудачей",
+                     u"уважение к чужой инициативе"), key, "bkrr_motive")
+        if who == "mi":
+            hook=_pick(dg_bkrr.HOOKS, key, "bkrr_hook")
     recent=state.get("journal",[])[-5:]
     recent_decisions=state.get("world",{}).get("decisions",[])[-6:]
     return {

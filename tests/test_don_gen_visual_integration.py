@@ -75,7 +75,7 @@ class VisualRegressionTests(unittest.TestCase):
         self.assertIn('Hybrid input submitted mode=',SCRIPT)
     def test_hub_has_compact_tabs_and_native_dialogues(self):
         self.assertIn('default dg_hub_tab = "story"',SCRIPT)
-        for label in (u"ИСТОРИЯ",u"ДЕЙСТВИЯ",u"НАСТРОЙКИ"):
+        for label in (u"События",u"Занятия",u"Настройки"):
             self.assertIn(label,SCRIPT)
         self.assertIn('action SetScreenVariable("dg_hub_tab","actions")',SCRIPT)
 

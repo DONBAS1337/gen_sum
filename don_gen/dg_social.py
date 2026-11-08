@@ -462,8 +462,15 @@ def prepare_incident(state):
         if "uv" in PAIR_DEFS[index][:2]:
             index=(index+1)%len(PAIR_DEFS)
         a,b,score,title,description=PAIR_DEFS[index]
+        place = INCIDENT_PLACES[index]
+        event = state.get("world", {}).get("event")
+        if (state.get("source") == "bkrr:mi" and "mi" in (a, b) and event
+                and event.get("arc") == "festival" and event.get("day") == state["day"]):
+            place = event["place"]
+            if place == "music":
+                description = description.replace(u"у сцены", u"у музыкального кружка")
         social["incident"]={"day":state["day"],"pair":[a,b],
-                            "place":INCIDENT_PLACES[index],"title":title,
+                            "place":place,"title":title,
                             "text":description,"status":"open"}
     return social["incident"]
 

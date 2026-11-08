@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
+    parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
+    parser.add_argument("--focus", choices=("mi", "dv", "un", "sl"), help="Preview at this character's actual current location")
     args = parser.parse_args()
     sdk = args.sdk.resolve()
     runner = sdk / "lib/py2-windows-x86_64/python.exe"
@@ -73,6 +75,8 @@ def main():
     env["DG_UI_VANILLA"] = str(args.vanilla.resolve()) if args.vanilla else ""
     env["DG_UI_PLACE"] = args.place
     env["DG_UI_SLOT"] = str(args.slot)
+    env["DG_UI_SOURCE"] = args.source
+    env["DG_UI_FOCUS"] = args.focus or ""
     subprocess.run([str(runner), str(sdk / "renpy.py"), str(output), "ui-render"], check=True, env=env)
     print("Rendered UI screenshots:", output)
 
@@ -155,7 +159,7 @@ init 1100 python:
         renpy.display.draw.draw_to_virt = renpy.display.render.Matrix2D(1, 0, 0, 1)
         renpy.display.draw.virt_to_draw = renpy.display.render.Matrix2D(1, 0, 0, 1)
         renpy.display.draw.draw_per_virt = 1.0
-        store.dg_rpg_state = dg_rpg.new_game(u"Тестовый герой", 23, 30)
+        store.dg_rpg_state = dg_rpg.new_game(u"Тестовый герой", 23, 30, source=os.environ.get("DG_UI_SOURCE", "vanilla"))
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
         if dg_rpg_say_character("dv").name != u"Алиса" or dg_rpg_say_character("hero").name != u"Тестовый герой":
             raise ValueError("Incorrect native character names")
@@ -177,11 +181,15 @@ init 1100 python:
                 raise ValueError("Location/time transitions did not change the background")
             store.dg_rpg_state["place"] = os.environ.get("DG_UI_PLACE", "cabins")
             store.dg_rpg_state["slot"] = int(os.environ.get("DG_UI_SLOT", "0"))
+        if os.environ.get("DG_UI_FOCUS"):
+            focus = os.environ["DG_UI_FOCUS"]
+            dg_rpg.move(store.dg_rpg_state, dg_rpg.where_is(store.dg_rpg_state, focus))
+        store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
         store.dg_create_name = u"Тестовый герой"
         store.dg_create_age = u"23"
         store.dg_create_days = u"30"
         store.dg_create_history = u"Длинная предыстория. " * 100
-        store.dg_create_source = "vanilla"
+        store.dg_create_source = os.environ.get("DG_UI_SOURCE", "vanilla")
         store.dg_create_pronouns = u"он/его"
         store.dg_create_adult = False
         store.dg_rpg_action_draft = u"Помочь подготовить выступление. " * 100

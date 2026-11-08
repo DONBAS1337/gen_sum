@@ -254,6 +254,8 @@ def _arc(state):
     if not unfinished:
         return None
     day = int(state["day"])
+    if state.get("source") == "bkrr:mi" and day == 1 and "festival" in unfinished:
+        return "festival"
     offset = _seed(state["id"], "arc") % len(PLOT_ORDER)
     rotated = PLOT_ORDER[offset:] + PLOT_ORDER[:offset]
     return rotated[(day - 1) % len(rotated)] if rotated[(day - 1) % len(rotated)] in unfinished else unfinished[(day - 1) % len(unfinished)]
@@ -268,6 +270,10 @@ def make_event(state):
     if arc is not None:
         plot = PLOTS[arc]
         stage = world["tracks"][arc]["stage"]
+        if state.get("source") == "bkrr:mi" and arc == "festival":
+            import dg_bkrr
+            plot = dict(plot, chapters=dg_bkrr.CHAPTERS,
+                        place=("music" if stage < 4 else "stage"))
         title, lead, yes, understand, risk = plot["chapters"][stage]
         choices = []
         for index, (key, label, metric, metric_gain, stat, stat_gain, affinity) in enumerate(OPTIONS):
@@ -544,3 +550,4 @@ def finale(state):
     return (u"ПОСЛЕДНИЙ ДЕНЬ СМЕНЫ\n\n%s, теперь пришло время уезжать.\n\n%s\n\n%s\n\n%s\n\n" %
             (hero, mood, discovery, friendship) + u"\n\n".join(epilogues) +
             u"\n\nТы можешь вернуться к дневнику и перечитать, какие поступки привели к этому итогу. Каждая новая смена начинается с других событий.")
+
