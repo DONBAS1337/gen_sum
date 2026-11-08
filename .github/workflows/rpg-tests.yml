@@ -36,7 +36,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $assets "maps") | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $assets "cg") | Out-Null
           Set-Content -LiteralPath (Join-Path $game "game/archive.rpa") -Value "test"
-          Set-Content -LiteralPath (Join-Path $assets "maps/map_default.png") -Value "mock image"
+          Set-Content -LiteralPath (Join-Path $assets "maps/map_bg.jpg") -Value "mock image"
+          Set-Content -LiteralPath (Join-Path $assets "maps/map_avaliable.jpg") -Value "mock hover"
+          Set-Content -LiteralPath (Join-Path $assets "maps/map_selected.jpg") -Value "mock selected"
           Set-Content -LiteralPath (Join-Path $assets "maps/map_icon_mi.png") -Value "mock icon"
           Set-Content -LiteralPath (Join-Path $assets "cg/example.png") -Value "mock CG"
           $hash = "0123456789abcdef0123456789abcdef01234567"
@@ -45,7 +47,7 @@ jobs:
           & ./install.ps1 -GameDir $game -AssetsDir $assets
           $mod = Join-Path $game "game/mods/don_gen"
           if (-not (Test-Path -LiteralPath (Join-Path $mod "dg_rpg.rpy"))) { throw "Mod not installed" }
-          if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_default.png"))) { throw "Missing imported map" }
+          if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_bg.jpg"))) { throw "Missing imported classic map" }
           if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/map_icon_mi.png"))) { throw "Missing imported icon" }
           if (-not (Test-Path -LiteralPath (Join-Path $mod "images/gen_assets/cg/example.png"))) { throw "Missing imported curated CG" }
           Set-Content -LiteralPath (Join-Path $mod "comfy_workflow_background_api.json") -Value '{"test":true}'
@@ -85,3 +87,4 @@ jobs:
                   assert not re.search(forbidden, content), (path, forbidden)
           print("Standalone namespace / dependencies: OK")
           PY
+

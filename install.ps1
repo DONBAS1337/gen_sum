@@ -38,8 +38,8 @@ if ($AssetsDir) {
         $AssetsRoot = $AssetInput
         $Maps = Join-Path $AssetsRoot "maps"
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $Maps "map_default.png") -PathType Leaf)) {
-        throw "Missing map_default.png in assets pack: $Maps"
+    if (-not (Test-Path -LiteralPath (Join-Path $Maps "map_bg.jpg") -PathType Leaf)) {
+        throw "Missing classic map_bg.jpg in assets pack: $Maps"
     }
 }
 
@@ -67,7 +67,7 @@ if ($Maps) {
     $AssetsOut = Join-Path (Join-Path $Dest "images") "gen_assets"
     New-Item -ItemType Directory -Force -Path $AssetsOut | Out-Null
 
-    foreach ($Name in @("map_default.png", "map_bg.jpg", "7dl_bg.jpg", "map_selected.png", "map_available.png")) {
+    foreach ($Name in @("map_bg.jpg", "map_avaliable.jpg", "map_selected.jpg")) {
         $File = Join-Path $Maps $Name
         if (Test-Path -LiteralPath $File -PathType Leaf) {
             Copy-Item -LiteralPath $File -Destination $AssetsOut -Force
@@ -116,5 +116,6 @@ Get-ChildItem -LiteralPath $Dest -Recurse -File -ErrorAction SilentlyContinue |
 Write-Host ""
 Write-Host "DON-GEN installed: $Dest"
 Write-Host "No other mods were modified."
-Write-Host "Offline RPG features do not require ChatGPT or ComfyUI."
+Write-Host "New story scenes require an AI connection. Map resources load locally."
 Write-Host "Local image generation requires a running ComfyUI at 127.0.0.1:8188."
+

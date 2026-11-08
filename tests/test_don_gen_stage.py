@@ -55,13 +55,11 @@ class NativeSceneTests(unittest.TestCase):
         self.assertEqual(len(set(x for who, x in placements)), 4)
         self.assertEqual(dg_stage.positions([]), [])
 
-    def test_art_and_hotspots_use_same_transform(self):
-        self.assertEqual(dg_stage.map_point(0, 0), (24, 150))
-        x, y = dg_stage.map_point(1920, 1080)
-        self.assertAlmostEqual(x, 1440)
-        self.assertEqual(y, 947)
-        self.assertIsInstance(x, int)
-        self.assertIsInstance(y, int)
+    def test_classic_map_has_integer_native_coordinates(self):
+        import dg_map
+        for slug,rect in dg_map.regions():
+            self.assertTrue(all(isinstance(value,int) for value in rect))
+            self.assertEqual(len(dg_map.center(rect)),2)
 
     def test_hybrid_narrator_requests_speaker_markup(self):
         state = dg_rpg.new_game(u"Герой", 18, 7)

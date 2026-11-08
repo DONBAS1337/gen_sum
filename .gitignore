@@ -1,0 +1,7 @@
+# Private art packs are imported locally, never committed with the public mod.
+don_gen/images/gen_assets/
+work/
+__pycache__/
+*.pyc
+*.pyo
+*.rpyc

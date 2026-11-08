@@ -53,21 +53,19 @@ class AtlasAndHiddenNPC(unittest.TestCase):
             w,h,t,raw=read_png("map_"+icon+".png")
             self.assertEqual((w,h,t),(56,56,6))
 
-    def test_every_non_cabin_place_has_visible_map_point(self):
+    def test_classic_map_keeps_unmapped_rooms_in_searchable_place_list(self):
+        import dg_map
         with open(os.path.join(BASE,"don_gen","dg_rpg.rpy"),"rb") as f:
             screen=f.read().decode("utf-8")
-        start=screen.index("DG_RPG_MAP_PINS = (")
-        end=screen.index("DG_RPG_SPRITE_HINTS =",start)
-        coords=set(re.findall(r'\("([a-z_]+)",\s*\d+,\s*\d+\)',screen[start:end]))
-        canonical=set(dg_rpg.PLACE_NAMES)-set("cabin_%02d" % n for n in range(1,32))
-        self.assertEqual(coords,canonical)
+        ids=[slug for slug, rect in dg_map.regions()]
+        self.assertEqual(len(ids),len(set(ids)))
+        self.assertTrue(set(ids).issubset(dg_rpg.PLACE_NAMES))
         self.assertEqual(len(dg_rpg.PLACE_NAMES),70)
-        self.assertIn('action SetScreenVariable("dg_map_selected", slug)',screen)
-        self.assertIn('Return(("cabins", dg_map_selected))',screen)
-        self.assertIn('dg_map_result[0] == "go"',screen)
+        self.assertIn('for slug, rect in dg_map.regions():',screen)
+        self.assertIn('action Return(("go", slug))',screen)
         self.assertIn('dg_map_result[1] in dg_rpg.PLACE_NAMES',screen)
         self.assertIn('action Return(("close", None))',screen)
-        self.assertIn('hovered SetScreenVariable("dg_map_hover", slug)',screen)
+        self.assertIn('for slug, title, x, y in dg_rpg.PLACES',screen)
 
     def test_all_cabins_are_reachable_and_have_names(self):
         game=dg_rpg.new_game(u"Герой",80,14)

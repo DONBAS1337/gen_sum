@@ -16,6 +16,7 @@ init 1001 python:
     import dg_narrative
     import dg_visual
     import dg_stage
+    import dg_map
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -235,92 +236,22 @@ init 1001 python:
             raise ValueError("Narrator returned invalid scene text")
         return result.strip()
 
-    # Optional private gen_assets pack, imported from a local checkout by install.ps1.
-    DG_MAP_USER = "mods/don_gen/images/gen_assets/map_default.png"
-    # Hotspots located over buildings on the real gen_assets Sovyonok map.
-    # Individual cabin roofs are separate interactive targets below.
-    DG_MAP_USER_PINS = (
-        ("gate",472,505), ("parking",351,486), ("square",928,456),
-        ("cabins",874,303), ("cabins_south",710,626),
-        ("canteen",1098,521), ("canteen_veranda",1056,577),
-        ("library",1230,366), ("clubs",497,542), ("clubhouse",521,470),
-        ("stage",1101,115), ("outdoor_stage",1130,192),
-        ("beach",1378,746), ("lake",1015,873), ("forest",628,124),
-        ("forest_path",527,230), ("infirmary",1083,420), ("sports",1355,528),
-        ("music",641,305), ("administration",814,408), ("showers",746,475),
-        ("washrooms",581,457), ("kitchen",1066,489), ("storage",1188,527),
-        ("gym",1378,469), ("volleyball",1288,514), ("football",1513,553),
-        ("badminton",1435,400), ("boathouse",903,688), ("pier",929,772),
-        ("beachhouse",1394,616), ("island",711,953),
-        ("island_far",1192,985), ("old_camp",273,1028),
-        ("campfire",663,757), ("radio",668,383),
-        ("headquarters",798,444), ("laundry",744,530),
-        ("warehouse",1173,473)
-    )
-    # 31 cabins follow the numbered roofs on the genuine camp plan.
-    DG_MAP_USER_CABINS = (
-        ("cabin_01",785,300), ("cabin_02",829,301),
-        ("cabin_03",865,303), ("cabin_04",911,311),
-        ("cabin_05",972,313), ("cabin_06",1011,313),
-        ("cabin_07",812,245), ("cabin_08",848,247),
-        ("cabin_09",916,258), ("cabin_10",952,260),
-        ("cabin_11",990,264), ("cabin_12",811,183),
-        ("cabin_13",837,183), ("cabin_14",865,184),
-        ("cabin_15",901,186), ("cabin_16",941,188),
-        ("cabin_17",981,190), ("cabin_18",663,566),
-        ("cabin_19",711,569), ("cabin_20",757,570),
-        ("cabin_21",798,569), ("cabin_22",675,634),
-        ("cabin_23",706,653), ("cabin_24",731,676),
-        ("cabin_25",596,652), ("cabin_26",623,684),
-        ("cabin_27",656,706), ("cabin_28",687,732),
-        ("cabin_29",586,753), ("cabin_30",552,770),
-        ("cabin_31",511,789)
-    )
-    DG_MAP_USER_IDLE = im.Scale("mods/don_gen/images/map_idle.png",29,29)
-    DG_MAP_USER_HOVER = im.Scale("mods/don_gen/images/map_hover.png",44,44)
-    DG_MAP_USER_CURRENT = im.Scale("mods/don_gen/images/map_selected.png",35,35)
-
+    # Classic resources stay in the private gen_assets pack, imported by install.ps1.
+    DG_MAP_ROOT = "mods/don_gen/images/gen_assets/"
+    DG_MAP_USER = DG_MAP_ROOT + "map_bg.jpg"
+    DG_MAP_HOVER = DG_MAP_ROOT + "map_avaliable.jpg"
+    DG_MAP_SELECTED = DG_MAP_ROOT + "map_selected.jpg"
     DG_MAP_ICON_BY_NPC = {
         "dv":"dv", "el":"el", "mi":"mi", "mz":"zh", "mt":"od",
         "sl":"sl", "sh":"sh", "cs":"vi", "us":"ul", "un":"un", "uv":"yu"
     }
 
     def dg_map_npc_icon(who):
-        if who not in DG_MAP_ICON_BY_NPC:
+        code = "me" if who == "hero" else DG_MAP_ICON_BY_NPC.get(who)
+        if code is None:
             return None
-        image_path = "mods/don_gen/images/gen_assets/map_icon_%s.png" % DG_MAP_ICON_BY_NPC[who]
-        if renpy.loadable(image_path):
-            return im.Scale(image_path, 45, 45)
-        return None
-
-    DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"  # legacy optional image
-    DG_MAP_ATLAS = "mods/don_gen/images/don_gen_atlas.png"
-    DG_MAP_PIN_IDLE = im.Scale("mods/don_gen/images/map_idle.png", 42, 42)
-    DG_MAP_PIN_HOVER = im.Scale("mods/don_gen/images/map_hover.png", 53, 53)
-    DG_MAP_PIN_SELECTED = im.Scale("mods/don_gen/images/map_selected.png", 47, 47)
-    DG_MAP_BADGE_STORY = im.Scale("mods/don_gen/images/map_story.png", 29, 29)
-    DG_MAP_BADGE_QUEST = im.Scale("mods/don_gen/images/map_quest.png", 27, 27)
-    DG_MAP_BADGE_MEET = im.Scale("mods/don_gen/images/map_encounter.png", 29, 29)
-    DG_MAP_BADGE_NPC = im.Scale("mods/don_gen/images/map_character.png", 32, 32)
-    # 1920x1080 hot zones matching the new illustrated 16:9 art (not text labels).
-    DG_RPG_MAP_PINS = (
-        ("gate",175,640), ("parking",85,595), ("square",944,558),
-        ("cabins",735,278), ("cabins_south",615,733),
-        ("canteen",1302,530), ("canteen_veranda",1283,625),
-        ("library",1339,310), ("clubs",472,400), ("clubhouse",388,520),
-        ("stage",1048,170), ("outdoor_stage",1108,250),
-        ("beach",1425,802), ("lake",1010,928), ("forest",240,190),
-        ("forest_path",380,338), ("infirmary",1122,480), ("sports",1570,450),
-        ("music",450,225), ("administration",812,488), ("showers",640,572),
-        ("washrooms",574,486), ("kitchen",1360,620), ("storage",1490,548),
-        ("gym",1528,389), ("volleyball",1685,552), ("football",1812,604),
-        ("badminton",1671,305), ("boathouse",1105,815), ("pier",1208,854),
-        ("beachhouse",1590,726), ("island",697,949),
-        ("island_far",1462,952), ("old_camp",387,853),
-        ("campfire",518,790), ("radio",1115,363),
-        ("headquarters",943,459), ("laundry",603,639),
-        ("warehouse",1524,655)
-    )
+        path = DG_MAP_ROOT + "map_icon_%s.png" % code
+        return im.Scale(path, 42, 42) if renpy.loadable(path) else None
 
     DG_RPG_SPRITE_HINTS = {
         "sl": u"blonde girl, long braids, blue eyes, red pioneer neckerchief",
@@ -858,98 +789,63 @@ screen dg_rpg_adult_settings:
 screen dg_rpg_map:
     modal True
     default dg_map_hover = None
-    default dg_map_selected = dg_rpg_state["place"]
-    add Solid("#0b2029")
-    text u"Карта Совёнка" style "dg_rpg_heading" xpos 32 ypos 28
-    text (dg_rpg.camp_time(dg_rpg_state) + u" · " + dg_world.weather(dg_rpg_state)[1]) style "dg_rpg_hint" xpos 32 ypos 88
-    $ dg_map_custom = renpy.loadable(DG_MAP_USER)
-    if dg_map_custom:
-        add im.Scale(DG_MAP_USER, 1416, 797) xpos 24 ypos 150
-    elif renpy.loadable(DG_MAP_ATLAS):
-        add im.Scale(DG_MAP_ATLAS, 1416, 797) xpos 24 ypos 150
+    if renpy.loadable(DG_MAP_USER):
+        imagemap:
+            ground DG_MAP_USER
+            idle DG_MAP_USER
+            hover (DG_MAP_HOVER if renpy.loadable(DG_MAP_HOVER) else DG_MAP_USER)
+            selected_idle (DG_MAP_SELECTED if renpy.loadable(DG_MAP_SELECTED) else DG_MAP_USER)
+            selected_hover (DG_MAP_SELECTED if renpy.loadable(DG_MAP_SELECTED) else DG_MAP_USER)
+            alpha False
+            cache False
+            for slug, rect in dg_map.regions():
+                hotspot rect:
+                    selected dg_rpg_state["place"] == slug
+                    sensitive not dg_rpg_state["finished"]
+                    hovered SetScreenVariable("dg_map_hover", slug)
+                    unhovered SetScreenVariable("dg_map_hover", None)
+                    action Return(("go", slug))
+        for slug, rect in dg_map.regions():
+            $ map_x, map_y = dg_map.center(rect)
+            $ map_people = dg_rpg.at_place(dg_rpg_state, slug)
+            for index, pair in enumerate(map_people[:4]):
+                $ map_icon = dg_map_npc_icon(pair[0])
+                if map_icon is not None:
+                    add map_icon xpos (map_x - 21 + index * 30) ypos (rect[1] - 40)
+            if dg_rpg_state["place"] == slug:
+                $ map_hero = dg_map_npc_icon("hero")
+                if map_hero is not None:
+                    add map_hero xpos (map_x - 21) ypos (rect[1] + rect[3] - 4)
     else:
-        add Solid("#567555", xysize=(1416, 797)) xpos 24 ypos 150
-    $ visible_places = DG_MAP_USER_PINS if dg_map_custom else DG_RPG_MAP_PINS
-    for slug, px, py in visible_places:
-        $ marker_x, marker_y = dg_stage.map_point(px, py)
-        $ story_here = dg_world.event_at(dg_rpg_state, slug)
-        $ quest_here = dg_social.quest_at(dg_rpg_state, slug)
-        $ incident_here = dg_social.incident_at(dg_rpg_state, slug)
-        imagebutton:
-            idle (DG_MAP_PIN_SELECTED if dg_map_selected == slug else DG_MAP_PIN_IDLE)
-            hover DG_MAP_PIN_HOVER
-            xpos marker_x ypos marker_y xanchor .5 yanchor .5
-            focus_mask None
-            hovered SetScreenVariable("dg_map_hover", slug)
-            unhovered SetScreenVariable("dg_map_hover", None)
-            action SetScreenVariable("dg_map_selected", slug)
-        if story_here:
-            add DG_MAP_BADGE_STORY xpos (marker_x + 12) ypos (marker_y - 16)
-        elif incident_here:
-            add DG_MAP_BADGE_MEET xpos (marker_x + 12) ypos (marker_y - 16)
-        elif quest_here:
-            add DG_MAP_BADGE_QUEST xpos (marker_x + 12) ypos (marker_y - 16)
-        if dg_rpg_state["place"] == slug:
-            text u"Ты" style "dg_rpg_hint" size 19 color "#fff4c7" xpos marker_x ypos (marker_y + 22) xanchor .5 outlines [(2, "#07171f", 0, 0)]
-    if dg_map_custom:
-        # These roof coordinates are calibrated only for the private source map.
-        for cabin, bx, by in DG_MAP_USER_CABINS:
-            $ roof_x, roof_y = dg_stage.map_point(bx, by)
-            imagebutton:
-                idle Solid("#ffffff01", xysize=(27, 26))
-                hover Solid("#ffe0a990", xysize=(27, 26))
-                xpos roof_x ypos roof_y
-                focus_mask None
-                hovered SetScreenVariable("dg_map_hover", cabin)
-                unhovered SetScreenVariable("dg_map_hover", None)
-                action SetScreenVariable("dg_map_selected", cabin)
+        add Solid("#142d31")
+        frame:
+            background Solid("#1d3c41") padding (40, 32)
+            align (.5, .5) xsize 1250
+            vbox:
+                spacing 20
+                text u"Нужна классическая карта лагеря" style "dg_rpg_heading"
+                text u"Установи набор карт из gen_assets/maps через install.ps1 -AssetsDir. Пока все места доступны через поиск." style "dg_rpg_body"
+                textbutton u"Открыть список мест" style "dg_rpg_main_button" action Return(("places", None))
+    # Compact controls leave the original map at its native 1920x1080 size.
+    frame:
+        background Solid("#12272bc9") padding (18, 12)
+        xpos 24 ypos 22
+        text dg_rpg.camp_time(dg_rpg_state) style "dg_rpg_body" size 25
+    hbox:
+        xpos 1410 ypos 22 spacing 12
+        textbutton u"Найти место" style "dg_rpg_tab" xsize 238 action Return(("places", None))
+        textbutton u"Закрыть" style "dg_rpg_tab" xsize 220 action Return(("close", None))
     if dg_map_hover in dg_rpg.PLACE_NAMES:
         frame:
-            background Solid("#0b2029ed") padding (16, 10)
-            xpos 32 ypos 108 xmaximum 1380
-            text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_rpg_body" size 25
-    frame:
-        background Solid("#14323c") xpos 1464 ypos 150 xsize 432 ysize 797 padding (24, 24)
-        fixed:
-            xsize 384 ysize 749
-            viewport:
-                viewport_xfill True
-                vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#0b2029")
-                vscrollbar_thumb Solid("#6d918e")
-                vscrollbar_unscrollable "hide"
-                side_spacing 12
-                xsize 384 ysize 574 mousewheel True scrollbars "vertical"
-                vbox:
-                    xsize 348 spacing 18
-                    text dg_rpg.PLACE_NAMES[dg_map_selected] style "dg_rpg_heading" size 34
-                    text (u"Ты сейчас здесь" if dg_map_selected == dg_rpg_state["place"] else u"Переход без траты времени") style "dg_rpg_hint"
-                    text u"Кто здесь" style "dg_rpg_body"
-                    $ map_people = dg_rpg.at_place(dg_rpg_state, dg_map_selected)
-                    if not map_people:
-                        text u"Никого из знакомых" style "dg_rpg_hint"
-                    for who, name in map_people:
-                        text name style "dg_rpg_body" color dg_stage.COLORS.get(who, "#eeeeee")
-                    $ selected_event = dg_world.event_at(dg_rpg_state, dg_map_selected)
-                    if selected_event:
-                        text u"Событие дня" style "dg_rpg_hint"
-                        text dg_literal(selected_event["title"]) style "dg_rpg_body"
-                    $ selected_incident = dg_social.incident_at(dg_rpg_state, dg_map_selected)
-                    if selected_incident:
-                        text u"Встреча персонажей" style "dg_rpg_hint"
-                        text dg_literal(selected_incident["title"]) style "dg_rpg_body"
-                    for entry in dg_social.quest_at(dg_rpg_state, dg_map_selected):
-                        text dg_literal(entry["title"]) style "dg_rpg_body"
+            background Solid("#12272be8") padding (20, 14)
+            xpos 980 ypos 938 xsize 880 ysize 118
             vbox:
-                ypos 598 xsize 384 spacing 12
-                textbutton (u"Ты уже здесь" if dg_map_selected == dg_rpg_state["place"] else u"Перейти сюда") style "dg_rpg_main_button" sensitive (not dg_rpg_state["finished"] and dg_map_selected != dg_rpg_state["place"]) action Return(("go", dg_map_selected))
-                if dg_map_selected in ("cabins", "cabins_south"):
-                    textbutton u"Выбрать домик" style "dg_rpg_button" action Return(("cabins", dg_map_selected))
-    hbox:
-        xpos 24 ypos 974 spacing 16
-        textbutton u"Поиск места" style "dg_rpg_tab" action Return(("places", None))
-        textbutton u"Закрыть карту" style "dg_rpg_tab" action Return(("close", None))
-    text u"Выбери отметку, затем нажми «Перейти сюда»." style "dg_rpg_hint" xpos 594 ypos 991 xmaximum 1280
+                spacing 8
+                text dg_rpg.PLACE_NAMES[dg_map_hover] style "dg_rpg_body" color "#ffe0a2"
+                $ hover_people = dg_rpg.at_place(dg_rpg_state, dg_map_hover)
+                text (u"Здесь: " + u", ".join(name for who, name in hover_people) if hover_people else u"Никого из знакомых поблизости") style "dg_rpg_hint" xmaximum 820
+                if dg_world.event_at(dg_rpg_state, dg_map_hover) or dg_social.incident_at(dg_rpg_state, dg_map_hover):
+                    text u"Здесь происходит событие" style "dg_rpg_hint" color "#ffe0a2"
     key "K_ESCAPE" action Return(("close", None))
 
 screen dg_rpg_places:

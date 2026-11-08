@@ -11,11 +11,11 @@ with open(os.path.join(ROOT,"don_gen","dg_rpg.rpy"),"rb") as f:
 class VisualRegressionTests(unittest.TestCase):
     def setUp(self):
         self.state=dg_rpg.new_game(u"Игорь",18,39)
-    def test_real_renpy_7_solid_signature(self):
-        self.assertIn('idle Solid("#ffffff01", xysize=(27, 26))',SCRIPT)
-        self.assertIn('hover Solid("#ffe0a990", xysize=(27, 26))',SCRIPT)
-        self.assertNotIn('Solid("#ffffff01", 27, 26)',SCRIPT)
-        self.assertNotIn('Solid("#ffe0a990", 27, 26)',SCRIPT)
+    def test_classic_imagemap_uses_native_hit_testing(self):
+        self.assertIn('imagemap:',SCRIPT)
+        self.assertIn('alpha False',SCRIPT)
+        self.assertIn('cache False',SCRIPT)
+        self.assertNotIn('focus_mask False',SCRIPT)
     def test_no_old_gate_overlay_inside_novel(self):
         self.assertIn('renpy.hide_screen("dg_scene")',SCRIPT)
         self.assertNotIn('    $ dg_place("gate")',SCRIPT)

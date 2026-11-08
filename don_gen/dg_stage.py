@@ -135,8 +135,3 @@ def positions(cast_ids, speaker=None):
               4: (.13, .37, .63, .87)}[len(visible)]
     return list(zip(visible, places))
 
-
-def map_point(x, y):
-    """Map art and hotspots share one 1920x1080 -> 1416x796.5 transform."""
-    # Ren'Py interprets floats as relative positions, even values above 1.0.
-    return int(24 + x * .7375 + .5), int(150 + y * .7375 + .5)

@@ -96,19 +96,19 @@ class DialogueTests(unittest.TestCase):
         self.assertIn('dg_rpg_state.get("dialogue_history", [])', script)
         self.assertNotIn('min(progress, goal)', script)
 
-    def test_map_is_based_on_original_user_supplied_image(self):
-        folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "don_gen"))
-        with open(os.path.join(folder, "dg_rpg.rpy"), "rb") as fh:
-            script = fh.read().decode("utf-8")
-        self.assertIn('DG_RPG_MAP_IMAGE = "mods/don_gen/images/camp_map.png"', script)
-        self.assertIn('("gate",175,640)', script)
-        self.assertIn('DG_MAP_ATLAS = "mods/don_gen/images/don_gen_atlas.png"', script)
-        self.assertIn('action SetScreenVariable("dg_map_selected", slug)', script)
-        self.assertIn('Return(("cabins", dg_map_selected))', script)
-        self.assertIn('action Return(("go", dg_map_selected))', script)
-        self.assertIn('screen dg_rpg_dialogue(who, phase', script)
-        self.assertIn('Return(("talk", who))', script)
-        self.assertNotIn('min(progress, goal)', script)
+    def test_map_uses_classic_assets_without_pixel_atlas_fallback(self):
+        folder=os.path.abspath(os.path.join(os.path.dirname(__file__),"..","don_gen"))
+        with open(os.path.join(folder,"dg_rpg.rpy"),"rb") as fh:
+            script=fh.read().decode("utf-8")
+        block=script[script.index('screen dg_rpg_map:'):script.index('screen dg_rpg_places:')]
+        self.assertIn('DG_MAP_USER = DG_MAP_ROOT + "map_bg.jpg"',script)
+        self.assertIn('DG_MAP_HOVER = DG_MAP_ROOT + "map_avaliable.jpg"',script)
+        self.assertIn('DG_MAP_SELECTED = DG_MAP_ROOT + "map_selected.jpg"',script)
+        self.assertIn('ground DG_MAP_USER',block)
+        self.assertNotIn('DG_MAP_ATLAS',script)
+        self.assertNotIn('dg_map_selected',block)
+        self.assertNotIn('im.Scale(DG_MAP_USER',block)
+        self.assertIn('action Return(("go", slug))',block)
 
 
 if __name__ == "__main__":

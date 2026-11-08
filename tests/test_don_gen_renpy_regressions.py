@@ -90,26 +90,20 @@ class ReportedTracebacks(unittest.TestCase):
                          'call screen dg_rpg_hybrid_read('):
             self.assertNotIn(outdated,SCRIPT)
 
-    def test_all_map_destinations_directly_clickable_on_real_gen_assets_map(self):
-        a=SCRIPT.index('DG_MAP_USER_PINS = (')
-        b=SCRIPT.index('DG_MAP_USER_CABINS = (',a)
-        c=SCRIPT.index('DG_MAP_USER_IDLE',b)
-        def extract(block):
-            return ast.literal_eval(block[block.index('('):block.rfind(')')+1])
-        landmarks=extract(SCRIPT[a:b])
-        houses=extract(SCRIPT[b:c])
-        self.assertEqual(len(landmarks),39)
+    def test_classic_map_cabin_numbers_match_the_roofs(self):
+        import dg_map
+        houses=dict((name,(x,y)) for name,x,y in dg_map.CLASSIC_CABINS)
         self.assertEqual(len(houses),31)
-        ids=[entry[0] for entry in landmarks+houses]
-        self.assertEqual(set(ids),set(dg_rpg.PLACE_NAMES))
-        self.assertEqual(len(ids),len(set(ids)))
-        for name,x,y in landmarks+houses:
-            self.assertTrue(0<=x<1920 and 0<=y<1080,(name,x,y))
-        self.assertIn('hover Solid("#ffe0a990"',SCRIPT)
-        self.assertIn('action SetScreenVariable("dg_map_selected", cabin)',SCRIPT)
-        self.assertIn('action Return(("go", dg_map_selected))',SCRIPT)
-        self.assertIn('action Return(("go", slug))',SCRIPT) if False else None
-        self.assertIn('dg_map_result[0] == "go"',SCRIPT)
+        self.assertEqual(houses["cabin_12"],(1045,276))
+        self.assertEqual(houses["cabin_13"],(831,176))
+        self.assertEqual(houses["cabin_23"],(735,643))
+        self.assertEqual(houses["cabin_31"],(514,790))
+        for slug,rect in dg_map.regions():
+            x,y,w,h=rect
+            self.assertTrue(0<=x<x+w<=1920 and 0<=y<y+h<=1080)
+            self.assertIn(slug,dg_rpg.PLACE_NAMES)
+        self.assertIn('hotspot rect:',SCRIPT)
+        self.assertIn('action Return(("go", slug))',SCRIPT)
 
     def test_right_npc_panel_not_one_overwide_row(self):
         self.assertNotIn('textbutton u"Своя реплика + AI"',SCRIPT)

@@ -16,6 +16,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", type=Path, required=True)
     parser.add_argument("--out", type=Path, default=Path("work/ui-smoke"))
+    parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
+    parser.add_argument("--screen", choices=("hub", "setup", "input", "review", "map", "places", "cabins", "journal", "picker"))
     args = parser.parse_args()
     sdk = args.sdk.resolve()
     runner = sdk / "lib/py2-windows-x86_64/python.exe"
@@ -32,6 +34,17 @@ def main():
     shutil.copyfile(root / "dg_rpg.rpy", game / "dg_rpg.rpy")
     for source in (root / "images").glob("*.png"):
         shutil.copyfile(source, images / source.name)
+    assets = args.assets or root / "images/gen_assets"
+    if args.assets and (assets / "maps").is_dir():
+        assets = assets / "maps"
+    if assets.is_dir():
+        target = images / "gen_assets"
+        target.mkdir(exist_ok=True)
+        for name in ("map_bg.jpg", "map_avaliable.jpg", "map_selected.jpg"):
+            if (assets / name).is_file():
+                shutil.copyfile(assets / name, target / name)
+        for source in assets.glob("map_icon_*.png"):
+            shutil.copyfile(source, target / source.name)
     fonts = game / "fonts"
     fonts.mkdir(exist_ok=True)
     for name in ("calibri.ttf", "corbel.ttf", "corbeli.ttf", "gothic.ttf"):
@@ -43,7 +56,9 @@ def main():
     styles = base[base.index("style dg_text:"):base.index("screen dg_scene(")]
     (game / "styles.rpy").write_bytes(styles.encode("utf-8"))
     (game / "test.rpy").write_bytes(HARNESS.encode("utf-8"))
-    subprocess.run([str(runner), str(sdk / "renpy.py"), str(output), "ui-render"], check=True)
+    env = dict(os.environ)
+    env["DG_UI_SCREEN"] = args.screen or ""
+    subprocess.run([str(runner), str(sdk / "renpy.py"), str(output), "ui-render"], check=True, env=env)
     print("Rendered UI screenshots:", output)
 
 
@@ -121,6 +136,8 @@ init 1100 python:
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
         for filename, name, scope in cases:
+            if os.environ.get("DG_UI_SCREEN") and os.environ["DG_UI_SCREEN"] != filename:
+                continue
             screen = renpy.display.screen.get_screen_variant(name)
             displayable = renpy.display.screen.ScreenDisplayable(screen, name, "screens", scope={"_args":(), "_kwargs":scope})
             displayable.per_interact()

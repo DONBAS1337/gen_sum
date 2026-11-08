@@ -93,12 +93,13 @@ class OptionalFeatures(unittest.TestCase):
             txt=fd.read().decode("utf-8")
         self.assertIn('$AssetsDir',txt)
         self.assertIn('map_icon_*.png',txt)
-        self.assertIn('map_default.png',txt)
+        self.assertIn('map_bg.jpg',txt)
         with open(os.path.join(ROOT,"don_gen","dg_rpg.rpy"),"rb") as fd:
             screen=fd.read().decode("utf-8")
-        self.assertIn('DG_MAP_USER = "mods/don_gen/images/gen_assets/map_default.png"',screen)
+        self.assertIn('DG_MAP_USER = DG_MAP_ROOT + "map_bg.jpg"',screen)
         self.assertIn('screen dg_rpg_artist_settings:',screen)
         self.assertIn('screen dg_rpg_adult_settings:',screen)
 
 if __name__=="__main__":
     unittest.main()
+
