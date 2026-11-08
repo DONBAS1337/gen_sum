@@ -1075,14 +1075,11 @@ screen dg_rpg_hub:
             text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#e7d9ac"
             text u"Можно осмотреться или открыть карту." style "dg_rpg_body" xpos 204 ypos 975 size 27
         hbox:
-            xpos 1118 ypos 974 spacing 12
+            xpos 950 ypos 974 spacing 12
+            textbutton u"Своё действие" style "dg_camp_nav" xminimum 200 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
             if inhabitants:
                 textbutton u"Своя реплика" style "dg_camp_action" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
                 textbutton u"Темы разговора" style "dg_camp_nav" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
-            else:
-                textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
-        if inhabitants:
-            textbutton u"Действие" style "dg_camp_nav" xpos 1680 ypos 36 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
         text u"M — карта   ·   J — дневник   ·   H — скрыть интерфейс" style "dg_rpg_hint" size 18 xpos 1052 ypos 108 color "#f1e7c5"
     else:
         textbutton u"Показать интерфейс · H" style "dg_camp_nav" xpos 52 ypos 990 action SetScreenVariable("show_interface", True)
