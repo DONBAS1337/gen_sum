@@ -594,11 +594,11 @@ default dg_rpg_actor_moods = {}
 
 screen dg_rpg_picker:
     modal True
-    add Solid("#d7ccae")
+    add Solid("#0b2029")
     text u"Твоя история в Совёнке" style "dg_note_heading" xpos 64 ypos 52
     text u"Свои решения, живые сцены и персонажи. Для новых сцен нужны ИИ и интернет." style "dg_note_hint" xpos 64 ypos 116 xmaximum 1680
     frame:
-        background Solid("#faf2de") xpos 64 ypos 192 xsize 728 ysize 716 padding (32, 28)
+        background Solid("#102b33e8") xpos 64 ypos 192 xsize 728 ysize 716 padding (32, 28)
         vbox:
             xsize 664 spacing 24
             text u"Новая смена" style "dg_note_heading"
@@ -606,15 +606,15 @@ screen dg_rpg_picker:
             textbutton u"Создать персонажа" style "dg_note_main" action Return(("new", None))
             text u"Игра сохраняет поступки автоматически. Смены хранятся отдельно от обычных сохранений «Бесконечного лета»." style "dg_note_hint"
     frame:
-        background Solid("#faf2de") xpos 816 ypos 192 xsize 1040 ysize 716 padding (32, 28)
+        background Solid("#102b33e8") xpos 816 ypos 192 xsize 1040 ysize 716 padding (32, 28)
         vbox:
             spacing 24
             text u"Продолжить историю" style "dg_note_heading"
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#d7ccae")
-                vscrollbar_thumb Solid("#69a89a")
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 xsize 976 ysize 580 mousewheel True draggable True scrollbars "vertical"
@@ -625,7 +625,7 @@ screen dg_rpg_picker:
                         text u"Сохранённых смен пока нет." style "dg_note_body"
                     for game in saved:
                         frame:
-                            background Solid("#eee4ce") xsize 936 padding (24, 20)
+                            background Solid("#17352edb") xsize 936 padding (24, 20)
                             vbox:
                                 xsize 888 spacing 12
                                 text dg_literal(game["name"]) style "dg_note_heading" size 34 xmaximum 880
@@ -1017,25 +1017,25 @@ default dg_rpg_action_context = None
 # Camp navigation stays outside the dialogue area.
 init 1002:
     style dg_camp_nav is button:
-        background dg_camp_button_surface("#faf1dcf0", "#b7a989")
-        hover_background dg_camp_button_surface("#cbe3d8f5", "#63a99a")
+        background dg_camp_button_surface("#071c17c9", "#a7996470")
+        hover_background dg_camp_button_surface("#bfa769e8", "#efdc9ecc")
         insensitive_background Solid("#071c1770")
         padding (22, 14)
         xminimum 142
         ysize 58
     style dg_camp_nav_text is dg_rpg_button_text:
         size 24
-        color "#30463f"
-        hover_color "#16594e"
+        color "#e7d9ac"
+        hover_color "#172b22"
         insensitive_color "#869087"
         outlines []
     style dg_camp_action is dg_camp_nav:
-        background dg_camp_button_surface("#307d70f0", "#7fbaaa")
-        hover_background dg_camp_button_surface("#449a88f5", "#a5d7c5")
+        background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
+        hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
         xminimum 238
     style dg_camp_action_text is dg_camp_nav_text:
-        color "#fff5da"
-        hover_color "#ffffff"
+        color "#fff0bc"
+        hover_color "#172b22"
     style dg_camp_arrow is dg_camp_nav:
         xminimum 44
         xsize 44
@@ -1047,29 +1047,29 @@ init 1002:
         size 32
 
     style dg_note_body is dg_rpg_body:
-        color "#30463f"
+        color "#e7d9ac"
         outlines []
     style dg_note_hint is dg_note_body:
-        color "#6c7b6c"
+        color "#b5c9c6"
         size 23
     style dg_note_heading is dg_rpg_heading:
-        color "#26574f"
+        color "#ffe0a2"
         outlines []
     style dg_note_button is dg_rpg_button:
-        background dg_camp_button_surface("#eee4ce", "#c8bda5")
-        hover_background dg_camp_button_surface("#d2e6dc", "#62a79b")
-        selected_background dg_camp_button_surface("#bbd9cd", "#408b7c")
-        insensitive_background Solid("#e4ddcd")
+        background dg_camp_button_surface("#17352edb", "#8c865a80")
+        hover_background dg_camp_button_surface("#3b5846ee", "#b6ac77")
+        selected_background dg_camp_button_surface("#506344ee", "#d8c786")
+        insensitive_background Solid("#1c3037")
     style dg_note_button_text is dg_note_body:
         size 27
-        hover_color "#16594e"
-        insensitive_color "#9c9d8d"
+        hover_color "#172b22"
+        insensitive_color "#869087"
     style dg_note_main is dg_note_button:
-        background dg_camp_button_surface("#307d70", "#216859")
-        hover_background dg_camp_button_surface("#469b89", "#83c6b4")
+        background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
+        hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
     style dg_note_main_text is dg_note_button_text:
-        color "#fff5da"
-        hover_color "#ffffff"
+        color "#fff0bc"
+        hover_color "#172b22"
     style dg_note_tab is dg_note_button:
         xfill False
         xsize 252
@@ -1077,7 +1077,7 @@ init 1002:
         size 26
     style dg_note_input is dg_rpg_edit_input:
         size 30
-        color "#30463f"
+        color "#e7d9ac"
         outlines []
 
 screen dg_rpg_hub:
@@ -1097,11 +1097,11 @@ screen dg_rpg_hub:
             add actor_image xpos actor_x xanchor .5 ypos 1.0 yanchor 1.0
     if show_interface:
         frame:
-            background Solid("#faf1dce8")
+            background Solid("#071914b0")
             xpos 52 ypos 36 xsize 650 padding (20, 12)
             vbox:
                 spacing 3
-                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" size 30 color "#26574f"
+                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" size 30 color "#e7d9ac"
                 text (dg_rpg.camp_time(dg_rpg_state) + u"   ·   Силы: %d" % dg_rpg_state["energy"]) style "dg_note_hint" size 23
         hbox:
             xpos 1052 ypos 36 spacing 8
@@ -1122,13 +1122,13 @@ screen dg_rpg_hub:
                     textbutton u"›" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person + 1)
             text u"Что ты хочешь сказать?" style "dg_rpg_body" xpos 204 ypos 975 size 27
         else:
-            text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#26574f"
+            text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#e7d9ac"
             text u"Можно осмотреться или открыть карту." style "dg_rpg_body" xpos 204 ypos 975 size 27
         hbox:
             xpos 950 ypos 974 spacing 12
-            textbutton u"Своё действие" style "dg_camp_nav" xminimum 200 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
+            textbutton u"Своё действие" style "dg_camp_action" xminimum 200 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
             if inhabitants:
-                textbutton u"Своя реплика" style "dg_camp_action" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
+                textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
                 textbutton u"Темы разговора" style "dg_camp_nav" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
         text u"M — карта   ·   J — дневник   ·   H — скрыть интерфейс" style "dg_rpg_hint" size 18 xpos 1052 ypos 108 color "#f1e7c5"
     else:
@@ -1143,16 +1143,12 @@ screen dg_rpg_controls:
     default dg_hub_tab = "story"
     default dg_expanded_npc = None
     add dg_rpg_bg()
-    $ board_image = dg_rpg_notice_board()
-    if board_image:
-        add Image(board_image)
-    else:
-        add Solid("#c3ad80")
+    add Solid("#071914b0")
     $ inhabitants = dg_rpg.at_place(dg_rpg_state)
     $ shift_open = not dg_rpg_state["finished"]
     $ day_event = dg_world.current(dg_rpg_state)
     frame:
-        background Solid("#faf2de")
+        background Solid("#102b33e8")
         xpos 48 ypos 32 xsize 1824 ysize 126 padding (28, 18)
         vbox:
             spacing 6
@@ -1165,13 +1161,13 @@ screen dg_rpg_controls:
         textbutton u"Занятия" style "dg_note_tab" selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
         textbutton u"Настройки" style "dg_note_tab" selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
     frame:
-        background Solid("#faf2defa")
+        background Solid("#102b33ed")
         xpos 48 ypos 258 xsize 1100 ysize 656 padding (28, 24)
         viewport:
             viewport_xfill True
             vscrollbar_xsize 16
-            vscrollbar_base_bar Solid("#d7ccae")
-            vscrollbar_thumb Solid("#69a89a")
+            vscrollbar_base_bar Solid("#0b2029")
+            vscrollbar_thumb Solid("#6d918e")
             vscrollbar_unscrollable "hide"
             side_spacing 12
             xsize 1044 ysize 608
@@ -1232,7 +1228,7 @@ screen dg_rpg_controls:
                     textbutton u"Диагностика" style "dg_note_button" action Return(("diag", None))
                     text (u"Навык %d · Доброта %d · Любознательность %d" % (dg_rpg_state["stats"]["skill"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["curiosity"])) style "dg_note_hint"
     frame:
-        background Solid("#faf2defa")
+        background Solid("#102b33ed")
         xpos 1172 ypos 178 xsize 700 ysize 736 padding (28, 24)
         vbox:
             spacing 18
@@ -1240,8 +1236,8 @@ screen dg_rpg_controls:
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#d7ccae")
-                vscrollbar_thumb Solid("#69a89a")
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 xsize 644 ysize 606 mousewheel True draggable True scrollbars "vertical"
@@ -1252,7 +1248,7 @@ screen dg_rpg_controls:
                         text u"Посмотри карту: персонажи перемещаются в течение дня." style "dg_note_hint"
                     for who, person in inhabitants:
                         frame:
-                            background Solid("#eee4ce")
+                            background Solid("#17352edb")
                             xsize 608 padding (18, 16)
                             vbox:
                                 spacing 12 xsize 572
@@ -1273,16 +1269,16 @@ screen dg_rpg_controls:
         textbutton u"Карта лагеря" style "dg_note_tab" action Return(("map", None))
         textbutton u"Дневник и связи" style "dg_note_tab" action Return(("journal", None))
         textbutton u"Своё действие" style "dg_note_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
-    text u"Переходы бесплатны. Поступки и разговоры двигают время." style "dg_note_hint" color "#35483b" xpos 882 ypos 960 xmaximum 970
+    text u"Переходы бесплатны. Поступки и разговоры двигают время." style "dg_note_hint" color "#d3d3b5" xpos 882 ypos 960 xmaximum 970
     key "K_ESCAPE" action Return(("camp", None))
 
 screen dg_rpg_hybrid_input(mode, who=None):
     modal True
     default action_text = dg_rpg_action_draft
     add dg_rpg_bg()
-    add Solid("#182c2390")
+    add Solid("#07191490")
     frame:
-        background Solid("#faf2de")
+        background Solid("#102b33e8")
         align (0.5, 0.5) xsize 1480 ysize 900 padding (40, 32)
         fixed:
             xsize 1400 ysize 836
@@ -1293,12 +1289,12 @@ screen dg_rpg_hybrid_input(mode, who=None):
                     text (u"Собеседник: " + dg_rpg.NPC_NAMES[who]) style "dg_note_body"
                 text u"Опиши один поступок или реплику. Затем можно проверить ход и продолжить сцену с ИИ." style "dg_note_body"
                 frame:
-                    background Solid("#eee6d4") padding (24, 20) xsize 1380 ysize 430
+                    background Solid("#071c17d9") padding (24, 20) xsize 1380 ysize 430
                     viewport:
                         viewport_xfill True
                         vscrollbar_xsize 16
-                        vscrollbar_base_bar Solid("#d7ccae")
-                        vscrollbar_thumb Solid("#69a89a")
+                        vscrollbar_base_bar Solid("#0b2029")
+                        vscrollbar_thumb Solid("#6d918e")
                         vscrollbar_unscrollable "hide"
                         side_spacing 12
                         xsize 1332 ysize 390 mousewheel True scrollbars "vertical"
@@ -1319,17 +1315,17 @@ screen dg_rpg_hybrid_input(mode, who=None):
 screen dg_rpg_hybrid_review(plan):
     modal True
     add dg_rpg_bg()
-    add Solid("#182c2390")
+    add Solid("#07191490")
     frame:
-        background Solid("#faf2de")
+        background Solid("#102b33e8")
         align (0.5, 0.5) xsize 1480 ysize 900 padding (40, 32)
         fixed:
             xsize 1400 ysize 836
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#d7ccae")
-                vscrollbar_thumb Solid("#69a89a")
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 xsize 1400 ysize 718 mousewheel True draggable True scrollbars "vertical"
@@ -1839,7 +1835,7 @@ screen dg_rpg_world_result(result):
 screen dg_rpg_journal:
     modal True
     default view = "timeline"
-    add Solid("#e6d9bd")
+    add Solid("#142832")
     textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1580 ypos 105 action Return(None)
     text u"Дневник смены" style "dg_note_heading" xpos 100 ypos 115 size 52
     hbox:
@@ -1852,14 +1848,14 @@ screen dg_rpg_journal:
     hbox:
         xpos 95 ypos 295 spacing 45
         frame:
-            background Solid("#faf2de")
+            background Solid("#102b33e8")
             padding (23, 21)
             xsize 970 ysize 660
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#d7ccae")
-                vscrollbar_thumb Solid("#69a89a")
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 mousewheel True
@@ -1877,7 +1873,7 @@ screen dg_rpg_journal:
                         for item in dg_rpg_state.get("dialogue_history", [])[::-1]:
                             text (u"День %d · %s · %s" % (item["day"], dg_rpg.NPC_NAMES[item["who"]], item["topic"])) style "dg_note_hint" size 23
                             text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 855
-                            text (u"Отношения +%d" % item["affinity_gain"]) style "dg_note_body" size 22 color "#307d70"
+                            text (u"Отношения +%d" % item["affinity_gain"]) style "dg_note_body" size 22 color "#e0ce93"
                             null height 12
                     elif view == "world":
                         if not dg_rpg_state["world"]["chronicle"]:
@@ -1888,13 +1884,13 @@ screen dg_rpg_journal:
                             text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 855
                             null height 12
                     elif view == "social":
-                        text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_note_hint" size 25 color "#307d70"
+                        text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_note_hint" size 25 color "#e0ce93"
                         if not dg_rpg_state["social"]["rumours"]:
                             text u"Пока ничего необычного. Новые слухи появляются со временем." style "dg_note_body" size 25
                         for item in dg_rpg_state["social"]["rumours"][::-1]:
                             text (u"День %d" % item["day"]) style "dg_note_hint" size 22
                             text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 850
-                        text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_note_hint" size 25 color "#307d70"
+                        text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_note_hint" size 25 color "#e0ce93"
                         for who, name in dg_social.NAMES.items():
                             if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
                                 text (name + u": " + str(dg_rpg_state["social"]["personal"].get(who, 0)) + u"/3 этапов") style "dg_note_body" size 24
@@ -1911,21 +1907,21 @@ screen dg_rpg_journal:
                             text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 855
                             null height 13
         frame:
-            background Solid("#faf2de")
+            background Solid("#102b33e8")
             padding (24, 19)
             xsize 750 ysize 660
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 16
-                vscrollbar_base_bar Solid("#d7ccae")
-                vscrollbar_thumb Solid("#69a89a")
+                vscrollbar_base_bar Solid("#0b2029")
+                vscrollbar_thumb Solid("#6d918e")
                 vscrollbar_unscrollable "hide"
                 side_spacing 12
                 mousewheel True scrollbars "vertical" ysize 610
                 vbox:
                     spacing 13
                     if view == "social":
-                        text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_note_hint" size 25 color "#307d70"
+                        text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_note_hint" size 25 color "#e0ce93"
                         for a, b, initial, caption, description in dg_social.PAIR_DEFS:
                             if dg_rpg_state.get("mystery", {}).get("yulia_discovered", False) or "uv" not in (a, b):
                                 text (caption + u": " + str(dg_social.bond(dg_rpg_state, a, b))) style "dg_note_body" size 25
@@ -1943,7 +1939,7 @@ screen dg_rpg_journal:
                           (dg_rpg_state["stats"]["curiosity"], dg_rpg_state["stats"]["kindness"],
                            dg_rpg_state["stats"]["skill"])) style "dg_note_body" size 23 xmaximum 680
                     null height 12
-                    text u"СОСТОЯНИЕ ЛАГЕРЯ" style "dg_note_hint" size 25 color "#307d70"
+                    text u"СОСТОЯНИЕ ЛАГЕРЯ" style "dg_note_hint" size 25 color "#e0ce93"
                     text (u"Сплочённость: %d/100 · Знания: %d/100" %
                           (dg_rpg_state["world"]["morale"], dg_rpg_state["world"]["knowledge"])) style "dg_note_body" size 23
                     text (u"Свобода: %d/100 · Ресурсы: %d/100" %
@@ -1952,7 +1948,7 @@ screen dg_rpg_journal:
                     text u"СЮЖЕТНЫЕ ЛИНИИ" style "dg_note_hint" size 25
                     for plot in dg_world.PLOT_ORDER:
                         text (dg_world.PLOTS[plot]["name"] + u" · " +
-                              str(dg_rpg_state["world"]["tracks"][plot]["stage"]) + u"/5") style "dg_note_body" size 25 color "#307d70"
+                              str(dg_rpg_state["world"]["tracks"][plot]["stage"]) + u"/5") style "dg_note_body" size 25 color "#e0ce93"
                         text dg_world.story_status(dg_rpg_state, plot) style "dg_note_body" size 21 xmaximum 680
                     null height 15
                     text u"ОТНОШЕНИЯ" style "dg_note_hint"
