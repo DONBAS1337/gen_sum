@@ -149,7 +149,8 @@ def context(state, kind, who=None, identity=None, moment=None):
     recent_decisions=state.get("world",{}).get("decisions",[])[-6:]
     return {
         "scene_id":key, "kind":kind, "hero":copy.deepcopy(state["hero"]),
-        "day":state["day"],"slot":time,"place":dg_rpg.PLACE_NAMES[state["place"]],
+        "day":state["day"],"slot":time,"time_of_day":dg_rpg.SLOTS[time],
+        "place":dg_rpg.PLACE_NAMES[state["place"]],
         "source":source,"route_style":STYLE_PROFILES.get(source,STYLE_PROFILES["vanilla"]),
         "who":who,"persona":(persona[:2] if persona else None),
         "present_people": [(code, name) for code, name in dg_rpg.at_place(state)],

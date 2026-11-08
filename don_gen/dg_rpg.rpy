@@ -18,6 +18,7 @@ init 1001 python:
     import dg_stage
     import dg_map
     import dg_resources
+    import dg_turn
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -84,6 +85,10 @@ init 1001 python:
 
     def dg_rpg_apply(action, arg=None):
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
+        transactional = action in ("conversation", "world", "personal", "incident", "route")
+        pending = dg_turn.begin(state) if transactional else None
+        if pending is not None:
+            state = pending["state"]
         if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous"):
             store.dg_rpg_scene_context = dg_stage.freeze(state)
         if action == "move":
@@ -107,6 +112,12 @@ init 1001 python:
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
         elif action == "remember_narrative":
+            if store.dg_rpg_pending_turn is not None:
+                state = dg_turn.finish(dg_rpg_root(), store.dg_rpg_pending_turn, arg[0], arg[1])
+                store.dg_rpg_pending_turn = None
+                store.dg_rpg_state = state
+                renpy.block_rollback()
+                return
             dg_narrative.remember_scene(state, arg[0], arg[1])
         elif action == "spontaneous":
             who=arg
@@ -137,7 +148,9 @@ init 1001 python:
             store.dg_rpg_last_contract = dg_rpg.accept_contract(state, arg)
         else:
             dg_rpg.activity(state, action)
-        dg_rpg.save(dg_rpg_root(), state)
+        if pending is None:
+            dg_rpg.save(dg_rpg_root(), state)
+        store.dg_rpg_pending_turn = pending
         store.dg_rpg_state = state
         if action == "move":
             store.dg_rpg_scene_context = dg_stage.freeze(state)
@@ -193,13 +206,17 @@ init 1001 python:
                                     fast_mode=persistent.dg_fast_mode)
         if not isinstance(story, basestring) or len(story.strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
             raise ValueError("AI returned invalid scene length")
+        dg_stage.validate_speakers(story, dg_stage.freeze(current, plan.get("who"))["present"])
         return story.strip()
 
     def dg_rpg_auto_generate(kind, who, identity, story, choices=None):
         # The worker only WRITES PROSE; world mechanics remain locked.
-        state=dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"])
+        import copy
+        pending = store.dg_rpg_pending_turn
+        state = (copy.deepcopy(pending["state"]) if pending is not None else
+                 dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"]))
         app=dg_runtime.app
-        if kind == "result" and dg_rpg_scene_context is not None:
+        if (kind == "result" or kind == "npc_result") and dg_rpg_scene_context is not None:
             import copy
             state = copy.deepcopy(state)
             for key in ("day", "slot", "place"):
@@ -235,6 +252,7 @@ init 1001 python:
             result=result.decode("utf-8")
         if not isinstance(result,unicode) or len(result.strip())<100 or len(result)>12000:
             raise ValueError("Narrator returned invalid scene text")
+        dg_stage.validate_speakers(result, dg_stage.freeze(state, who)["present"])
         return result.strip()
 
     # Classic resources stay in the private gen_assets pack, imported by install.ps1.
@@ -549,6 +567,7 @@ init 1001 python:
 
 default dg_rpg_hybrid_plan = None
 default dg_rpg_state = None
+default dg_rpg_pending_turn = None
 default dg_rpg_focus = None
 default dg_rpg_scene_context = None
 default dg_rpg_stage_active = False
@@ -977,6 +996,60 @@ default dg_rpg_action_context = None
 
 screen dg_rpg_hub:
     modal True
+    default selected_person = 0
+    default show_interface = True
+    $ inhabitants = dg_rpg.at_place(dg_rpg_state)
+    $ shift_open = not dg_rpg_state["finished"]
+    $ selected_who = inhabitants[selected_person % len(inhabitants)][0] if inhabitants else None
+    $ visible_cast = dg_stage.cast([], [item[0] for item in inhabitants], selected_who)
+    add dg_rpg_bg()
+    for actor, actor_x in dg_stage.positions(visible_cast, selected_who):
+        $ actor_image = dg_rpg_sprite(actor, "normal", "normal")
+        if actor_image is not None:
+            add actor_image xpos actor_x xanchor .5 ypos 1.0 yanchor 1.0
+    if show_interface:
+        if renpy.loadable("images/gui/dialogue_box/day/dialogue_box.png"):
+            add Transform(Image("images/gui/dialogue_box/day/dialogue_box.png"), xysize=(1572, 236)) xpos 174 ypos 816
+        else:
+            add Solid("#061a19d9") xpos 174 ypos 816 xsize 1572 ysize 236
+        frame:
+            background Solid("#071914b0")
+            xpos 174 ypos 30 xsize 1572 padding (22, 14)
+            hbox:
+                spacing 28
+                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_body" color "#e2d8aa"
+                text dg_rpg.camp_time(dg_rpg_state) style "dg_rpg_body"
+                text (u"Силы: %d" % dg_rpg_state["energy"]) style "dg_rpg_body"
+        frame:
+            background None
+            xpos 174 ypos 816 xsize 1572 ysize 236 padding (24, 16)
+            vbox:
+                spacing 12
+                hbox:
+                    spacing 18
+                    if inhabitants:
+                        textbutton u"‹" style "dg_rpg_tab" xsize 64 action SetScreenVariable("selected_person", selected_person - 1)
+                        text dg_rpg.NPC_NAMES[selected_who] style "dg_rpg_heading" size 32 color dg_stage.COLORS[selected_who] yalign .5
+                        textbutton u"›" style "dg_rpg_tab" xsize 64 action SetScreenVariable("selected_person", selected_person + 1)
+                        textbutton u"Заговорить" style "dg_rpg_tab" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
+                        textbutton u"Своя реплика" style "dg_rpg_tab" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
+                    else:
+                        text u"Рядом никого. Куда отправимся?" style "dg_rpg_body"
+                hbox:
+                    spacing 14
+                    textbutton u"Карта" style "dg_rpg_tab" action Return(("map", None))
+                    textbutton u"Своё действие" style "dg_rpg_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
+                    textbutton u"Дневник" style "dg_rpg_tab" action Return(("journal", None))
+                    textbutton u"События и занятия" style "dg_rpg_tab" action Return(("controls", None))
+                    textbutton u"Меню" style "dg_rpg_tab" action Return(("exit", None))
+                text u"H — скрыть интерфейс. Переходы бесплатны; действия и разговоры двигают время." style "dg_rpg_hint" size 22
+    else:
+        textbutton u"Показать интерфейс · H" style "dg_rpg_tab" xpos 174 ypos 990 action SetScreenVariable("show_interface", True)
+    key "h" action ToggleScreenVariable("show_interface")
+    key "K_ESCAPE" action Return(("controls", None))
+
+screen dg_rpg_controls:
+    modal True
     default dg_hub_tab = "story"
     default dg_expanded_npc = None
     add dg_rpg_bg()
@@ -1103,7 +1176,7 @@ screen dg_rpg_hub:
         textbutton u"Дневник и связи" style "dg_rpg_tab" action Return(("journal", None))
         textbutton u"Своё действие" style "dg_rpg_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
     text u"Переходы бесплатны. Поступки и разговоры двигают время." style "dg_rpg_hint" xpos 882 ypos 960 xmaximum 970
-    key "K_ESCAPE" action Return(("exit", None))
+    key "K_ESCAPE" action Return(("camp", None))
 
 screen dg_rpg_hybrid_input(mode, who=None):
     modal True
@@ -1944,6 +2017,8 @@ label dg_rpg_narrate(kind, who, identity, source_text, choices=None):
     $ dg_narrative_key = dg_narrative.context(dg_rpg_state,kind,who,identity)["scene_id"]
     $ dg_narrative_saved = dg_narrative.read_scene(dg_rpg_state,dg_narrative_key)
     if dg_narrative_saved is not None:
+        if dg_rpg_pending_turn is not None:
+            $ dg_rpg_apply("remember_narrative",(dg_narrative_key,dg_narrative_saved["text"]))
         return dg_narrative_saved["text"]
     while True:
         if not dg_runtime.app.client.authenticated():
@@ -2052,10 +2127,17 @@ label dg_rpg_create_loop:
     jump dg_rpg_create_loop
 
 label dg_rpg_loop:
+    # Abandoned/failed narration leaves the durable save untouched.
+    if dg_rpg_pending_turn is not None:
+        $ dg_rpg_pending_turn = None
+        $ dg_rpg_open(dg_rpg_state["id"])
     $ dg_rpg_stage_active = False
     $ dg_rpg_scene_context = dg_stage.freeze(dg_rpg_state)
     call screen dg_rpg_hub
     $ dg_rpg_cmd, dg_rpg_value = _return
+    if dg_rpg_cmd == "controls":
+        call screen dg_rpg_controls
+        $ dg_rpg_cmd, dg_rpg_value = _return
     if dg_rpg_cmd == "exit":
         jump dg_rpg_picker_label
     if dg_rpg_cmd == "journal":
@@ -2219,7 +2301,7 @@ label dg_rpg_loop:
         if _return:
             $ dg_rpg_route_stance = _return
             $ dg_rpg_apply("route", (dg_rpg_focus, dg_rpg_route_stance))
-            call dg_rpg_vn_text(dg_dialogue.route_conclusion(dg_rpg_focus, dg_rpg_route_level, dg_rpg_route_stance))
+            call dg_rpg_vn_scene(dg_dialogue.route_conclusion(dg_rpg_focus, dg_rpg_route_level, dg_rpg_route_stance), False, dg_rpg_focus, "route_result:%s:%d:%s" % (dg_rpg_focus,dg_rpg_route_level,dg_rpg_route_stance))
         jump dg_rpg_loop
     if dg_rpg_cmd == "ai":
         if not dg_runtime.app.client.authenticated():

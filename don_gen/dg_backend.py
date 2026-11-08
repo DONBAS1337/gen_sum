@@ -160,6 +160,10 @@ def _ssl_context():
 
 
 
+class _CurlTLSUnavailable(ClientError):
+    """Local Schannel failure before an HTTP request reached the service."""
+
+
 def _curl_response_open(url, body, headers):
     """Use Windows curl.exe for the long Codex SSE response.
 
@@ -231,6 +235,9 @@ def _curl_response_open(url, body, headers):
 
     if process.returncode != 0:
         detail = errors.decode("utf-8", "replace").strip()
+        if (process.returncode == 35 and status == 0 and not payload.strip()
+                and "SEC_E_NO_CREDENTIALS" in detail):
+            raise _CurlTLSUnavailable("Windows Schannel credentials unavailable")
         if process.returncode == 28:
             raise ClientError("Истекло время ожидания ответа ChatGPT через curl.")
         raise ClientError(
@@ -252,7 +259,12 @@ def _http_open(url, body=None, headers=None):
     if (url.startswith(BACKEND + "/responses")
             and sys.version_info[0] >= 3
             and os.name == "nt"):
-        return _curl_response_open(url, body, headers)
+        try:
+            return _curl_response_open(url, body, headers)
+        except _CurlTLSUnavailable:
+            # No HTTP response/body was received. Use Python's independent
+            # verified TLS stack; never replay a partial generation.
+            pass
 
     headers = dict(headers or {})
     headers.update({"User-Agent": "don_gen/0.1 (codex-compatible)",
@@ -928,3 +940,4 @@ class Client(object):
 
 if __name__ == "__main__":
     _image_worker()
+

@@ -42,6 +42,14 @@ def freeze(state, focus=None):
             "present": present, "hero_name": state["hero"]["name"]}
 
 
+def validate_speakers(text, present):
+    """Reject new generated speech from absent actors before committing a turn."""
+    speakers = set(re.findall(r"\[(" + "|".join(sorted(NAMES)) + r")\]", _text(text)))
+    if speakers.difference(present):
+        raise ValueError("Narrator introduced an absent speaker; regenerate the scene")
+    return text
+
+
 def _pages(value, limit=240):
     # Split overlong tokens too; a URL or an unspaced model output cannot overflow.
     pieces = []

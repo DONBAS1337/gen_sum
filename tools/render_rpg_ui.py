@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene"))
     args = parser.parse_args()
     sdk = args.sdk.resolve()
     runner = sdk / "lib/py2-windows-x86_64/python.exe"
@@ -129,6 +129,8 @@ init 1100 python:
     def dg_rpg_root():
         return os.path.join(config.gamedir, "test-saves")
     def dg_rpg_bg():
+        if vanilla_root:
+            return Image("images/bg/ext_houses_day.jpg")
         return Solid("#253f42")
     dg_test_native_sprite = dg_rpg_sprite
     def dg_rpg_sprite(*args):
@@ -166,7 +168,7 @@ init 1100 python:
         store.dg_create_adult = False
         store.dg_rpg_action_draft = u"Помочь подготовить выступление. " * 100
         plan = dg_hybrid.preview(store.dg_rpg_state, store.dg_rpg_action_draft)
-        cases = [("hub", "dg_rpg_hub", {}), ("setup", "dg_rpg_setup", {}),
+        cases = [("hub", "dg_rpg_hub", {}), ("controls", "dg_rpg_controls", {}), ("setup", "dg_rpg_setup", {}),
                  ("input", "dg_rpg_hybrid_input", {"mode":"free"}),
                  ("review", "dg_rpg_hybrid_review", {"plan":plan}),
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
