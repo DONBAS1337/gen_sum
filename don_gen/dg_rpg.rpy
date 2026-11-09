@@ -25,11 +25,28 @@ init 1001 python:
         root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
         return dg_bkrr.board(root)
 
+    class DgCampButton(renpy.Displayable):
+        def __init__(self, fill, edge, **kwargs):
+            super(DgCampButton, self).__init__(**kwargs)
+            self.fill, self.edge = fill, edge
+
+        def render(self, width, height, st, at):
+            width, height = int(width), int(height)
+            result = renpy.Render(width, height)
+            canvas = result.canvas()
+            def rounded(color, x, y, w, h, radius):
+                canvas.rect(color, (x + radius, y, w - radius * 2, h))
+                canvas.rect(color, (x, y + radius, w, h - radius * 2))
+                for cx, cy in ((x + radius, y + radius), (x + w - radius - 1, y + radius),
+                               (x + radius, y + h - radius - 1), (x + w - radius - 1, y + h - radius - 1)):
+                    canvas.circle(color, (cx, cy), radius)
+            radius = 7 if width >= 18 and height >= 18 else 1
+            rounded(self.edge, 0, 0, width, height, radius)
+            rounded(self.fill, 1, 1, width - 2, height - 2, radius - 1)
+            return result
+
     def dg_camp_button_surface(fill, edge):
-        # A scalable one-pixel rim, drawn natively by Ren'Py.
-        return Frame(Composite((12, 12),
-            (0, 0), Solid(edge, xsize=12, ysize=12),
-            (1, 1), Solid(fill, xsize=10, ysize=10)), 5, 5)
+        return DgCampButton(fill, edge)
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -443,14 +460,16 @@ init 1001 python:
         return None
 
     def dg_rpg_say_character(who):
-        if who is None:
-            return None
-        # Reuse the base game's Character and say screen whenever possible.
-        native = getattr(store, who, None) if who != "hero" else None
-        if isinstance(native, renpy.character.ADVCharacter):
-            return native
-        name = (dg_rpg_scene_context or {}).get("hero_name", dg_rpg_state["hero"]["name"]) if who == "hero" else dg_stage.NAMES[who]
-        return Character(dg_literal(name), who_color=dg_stage.COLORS.get(who, "#eeeeee"))
+        native = getattr(store, who or "narrator", None) if who != "hero" else None
+        name = None if who is None else ((dg_rpg_scene_context or {}).get("hero_name", dg_rpg_state["hero"]["name"]) if who == "hero" else dg_stage.NAMES[who])
+        # Keep the host's say screen, but give this mod explicit typography.
+        # Never modify the global characters or other installed mods' styles.
+        kind = native if isinstance(native, renpy.character.ADVCharacter) else None
+        return Character(dg_literal(name) if name is not None else None, kind=kind,
+                         who_font="fonts/calibri.ttf", who_size=28, who_bold=True,
+                         who_color=dg_stage.COLORS.get(who, "#ffaa00"), who_outlines=[],
+                         what_font="fonts/calibri.ttf", what_size=28, what_bold=False,
+                         what_color="#f3d887", what_outlines=[])
 
     def dg_rpg_stage_actors(turns, cast_ids, turn):
         # Update one actor's expression; narration does not make everybody cry/smile.
@@ -1024,7 +1043,8 @@ init 1002:
         xminimum 142
         ysize 58
     style dg_camp_nav_text is dg_rpg_button_text:
-        size 24
+        font "fonts/calibri.ttf"
+        size 26
         color "#e7d9ac"
         hover_color "#172b22"
         insensitive_color "#869087"
@@ -1080,6 +1100,17 @@ init 1002:
         color "#e7d9ac"
         outlines []
 
+    style dg_camp_name is dg_rpg_body:
+        font "fonts/calibri.ttf"
+        size 28
+        bold True
+        outlines []
+    style dg_camp_narration is dg_rpg_body:
+        font "fonts/calibri.ttf"
+        size 28
+        color "#f3d887"
+        outlines []
+
 screen dg_rpg_hub:
     modal True
     default selected_person = 0
@@ -1114,18 +1145,19 @@ screen dg_rpg_hub:
         else:
             add Solid("#061a19d9") xpos 174 ypos 916 xsize 1572 ysize 164
         if inhabitants:
-            hbox:
-                xpos 194 ypos 920 spacing 10
-                text dg_rpg.NPC_NAMES[selected_who] style "dg_rpg_heading" size 28 color dg_stage.COLORS[selected_who] yalign .5
-                if len(inhabitants) > 1:
+            text dg_rpg.NPC_NAMES[selected_who] style "dg_camp_name" color dg_stage.COLORS[selected_who] xpos 204 ypos 924
+            if len(inhabitants) > 1:
+                hbox:
+                    xpos 174 ypos 824 spacing 8
                     textbutton u"‹" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person - 1)
                     textbutton u"›" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person + 1)
-            text u"Что ты хочешь сказать?" style "dg_rpg_body" xpos 204 ypos 975 size 27
+                    text (u"Собеседник %d / %d" % (selected_person % len(inhabitants) + 1, len(inhabitants))) style "dg_rpg_hint" yalign .5
+            text u"Что ты хочешь сказать?" style "dg_camp_narration" xpos 204 ypos 962 xmaximum 1490
         else:
-            text u"Рядом никого" style "dg_rpg_heading" xpos 204 ypos 928 size 28 color "#e7d9ac"
-            text u"Можно осмотреться или открыть карту." style "dg_rpg_body" xpos 204 ypos 975 size 27
+            text u"Рядом никого" style "dg_camp_name" xpos 204 ypos 924 color "#ffaa00"
+            text u"Можно осмотреться или открыть карту." style "dg_camp_narration" xpos 204 ypos 962 xmaximum 1490
         hbox:
-            xpos 950 ypos 974 spacing 12
+            xpos 950 ypos 824 spacing 12
             textbutton u"Своё действие" style "dg_camp_action" xminimum 200 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
             if inhabitants:
                 textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)

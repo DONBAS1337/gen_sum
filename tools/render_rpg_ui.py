@@ -163,6 +163,12 @@ init 1100 python:
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
         if dg_rpg_say_character("dv").name != u"Алиса" or dg_rpg_say_character("hero").name != u"Тестовый герой":
             raise ValueError("Incorrect native character names")
+        for speaker in (None, "dv", "hero"):
+            character = dg_rpg_say_character(speaker)
+            if character.what_args.get("color") != "#f3d887" or character.what_args.get("font") != "fonts/calibri.ttf":
+                raise ValueError("Incorrect narration typography")
+            if speaker is not None and not character.who_args.get("bold"):
+                raise ValueError("Character name must be bold")
         dg_rpg.move(store.dg_rpg_state, os.environ.get("DG_UI_PLACE", "cabins"))
         store.dg_rpg_state["slot"] = int(os.environ.get("DG_UI_SLOT", "0"))
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
@@ -240,8 +246,8 @@ screen dg_ui_native_scene:
     for who, x in dg_stage.positions(["un", "mi", "sl", "dv"], "dv"):
         add dg_rpg_sprite(who, "smile", "normal") xpos x xanchor .5 ypos 1.0 yanchor 1.0
     add "images/gui/dialogue_box/day/dialogue_box.png" xpos 174 ypos 916
-    text u"Алиса" font "fonts/calibri.ttf" size 28 color "#ffaa00" xpos 204 ypos 924
-    text u"«Костры»!" font "fonts/calibri.ttf" size 28 color "#f3ddb1" xpos 204 ypos 962
+    text u"Алиса" style "dg_camp_name" color "#ffaa00" xpos 204 ypos 924
+    text u"«Костры»!" style "dg_camp_narration" xpos 204 ypos 962
 
 '''
 
