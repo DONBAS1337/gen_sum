@@ -112,3 +112,22 @@ def background_names(base, slot):
         names.append(base)
     return names
 
+
+
+def background_key(place,slot):
+    import dg_rpg
+    if place not in dg_rpg.PLACE_NAMES or slot not in (0,1,2,3):
+        raise ValueError('Invalid background moment')
+    return place + ('_day' if slot in (0,1) else '_sunset' if slot==2 else '_night')
+
+
+def narrated_moods(text,present):
+    import dg_stage
+    result={}
+    for clause in re.split(u'[.!?;,\n]',_unicode(text)):
+        named=[who for who in present if dg_stage.NAMES[who].lower() in clause.lower()]
+        if len(named)==1:
+            emotion=mood(clause)
+            if emotion!='normal':
+                result[named[0]]=emotion
+    return result

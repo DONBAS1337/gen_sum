@@ -107,7 +107,7 @@ def _clean(value, maximum):
     return value
 
 
-def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его"):
+def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его", cabin="cabin_01", roommate="mt"):
     name = _clean(name, 100)
     background = _clean(background, 8000)
     age, days = int(age), int(days)
@@ -130,6 +130,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "activity_counts": {"help": 0, "explore": 0}, "quests_done": [], "route_events_done": [],
         "dialogue_history": [], "dialogue_counts": {}
     }
+    __import__("dg_housing").assign(state,cabin,roommate)
     dg_world.prepare(state)
     dg_social.ensure(state)
     dg_social.prepare_incident(state)
@@ -148,6 +149,7 @@ def validate(state):
         raise ValueError("Unsupported save format")
     __import__('dg_memory').validate(state)
     __import__('dg_agents').validate(state)
+    __import__('dg_housing').validate(state)
     state.setdefault("mystery", {"yulia_discovered": False})
     dg_adult.ensure(state)
     if state["adult_mode"].get("enabled") and int(state["hero"]["age"]) < 18:
@@ -201,6 +203,9 @@ def where_is(state, who):
     if (state.get("source") == "bkrr:mi" and who == "mi" and event
             and event.get("arc") == "festival" and event.get("day") == state["day"]):
         return event["place"]
+    home = __import__('dg_housing').location(state,who)
+    if home:
+        return home
     goal_place = __import__('dg_agents').location(state, who)
     if goal_place:
         return goal_place
@@ -653,7 +658,7 @@ def asset_path(root, game_id, kind, key):
     """Ren'Py-loadable path beneath the DON-GEN save search root."""
     _path(root, game_id)
     if kind == "background":
-        if key not in PLACE_NAMES:
+        if key not in PLACE_NAMES and not (isinstance(key,(str,text_type)) and key.rsplit("_",1)[-1] in ("day","sunset","night") and key.rsplit("_",1)[0] in PLACE_NAMES):
             raise ValueError("Unknown location")
     elif kind == "sprite":
         # Legacy read-only sprite cache compatibility. New generation disabled.

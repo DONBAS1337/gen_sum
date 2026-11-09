@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -71,6 +71,8 @@ def main():
     (game / "test.rpy").write_bytes(HARNESS.encode("utf-8"))
     env = dict(os.environ)
     env["DG_UI_SCREEN"] = args.screen or ""
+    if args.assets:
+        env["DON_GEN_MAP_ROOT"] = str(args.assets.resolve())
     env["DG_UI_WORKSHOP"] = str(args.workshop.resolve()) if args.workshop else ""
     env["DG_UI_VANILLA"] = str(args.vanilla.resolve()) if args.vanilla else ""
     env["DG_UI_PLACE"] = args.place
@@ -206,6 +208,10 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") == "housing":
+            cases = [("housing","dg_rpg_housing_picker",{})]
+        if os.environ.get("DG_UI_SCREEN") == "emotions":
+            cases = [("emotions","dg_ui_emotions",{})]
         if os.environ.get("DG_UI_SCREEN") == "agendas":
             dg_rpg.activity(store.dg_rpg_state,"rest")
             cases = [("agendas", "dg_rpg_journal", {"initial_view":"social"})]
@@ -260,6 +266,10 @@ init 1100 python:
                     dg_rpg_stage_actors(staged, ["mi"], turn)
                 if len(transitions) != 2 or len(shown) != 2:
                     raise ValueError("Actor director did not apply both stage changes")
+                narrated = dg_stage.parse(u"[narrator] Мику злится, Алиса смеётся.",("mi","dv"))
+                dg_rpg_stage_actors(narrated,["mi","dv"],narrated[0])
+                if store.dg_rpg_actor_moods.get("mi") != "angry" or store.dg_rpg_actor_moods.get("dv") != "laugh":
+                    raise ValueError("Named narrated reactions did not reach the actor director")
             finally:
                 for name, value in original.items():
                     if value is None:
@@ -286,6 +296,7 @@ init 1100 python:
             displayable.visit_all(lambda d: d.per_interact())
             render = renpy.display.render.render(displayable, 1920, 1080, 0.0, 0.0)
             surface = renpy.display.draw.render_to_texture(render, True)
+            pygame.image.save(surface, os.path.join(config.basedir, filename + ".png"))
             def debug_viewport(d):
                 if isinstance(d, renpy.display.viewport.Viewport):
                     if d.width <= 0 or d.height <= 0:
@@ -309,6 +320,12 @@ screen dg_ui_native_scene:
     add "images/gui/dialogue_box/day/dialogue_box.png" xpos 174 ypos 916
     text u"Алиса" style "dg_camp_name" color "#ffaa00" xpos 204 ypos 924
     text u"«Костры»!" style "dg_camp_narration" xpos 204 ypos 962
+
+screen dg_ui_emotions:
+    add "images/bg/int_dining_hall_people_day.jpg"
+    for index, emotion in enumerate(("angry","laugh","sad","shy")):
+        add dg_rpg_sprite("mi",emotion,"normal") xpos (.15+index*.23) xanchor .5 ypos 1.0 yanchor 1.0
+        text emotion xpos (150+index*440) ypos 55 size 36 color "#ffe0a2"
 
 screen dg_ui_staging:
     add "images/bg/int_dining_hall_people_day.jpg"

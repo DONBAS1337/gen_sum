@@ -80,10 +80,16 @@ if (Test-Path -LiteralPath $Dest) {
 # optional private images already installed inside the DON-GEN folder.
 Copy-Item -Path (Join-Path $Source "*") -Destination $Dest -Force -Recurse
 
-if ($WorkshopDir) {
-    @{ seven_dl_root = $WorkshopDir } | ConvertTo-Json |
-        Set-Content -LiteralPath (Join-Path $Dest "resource_sources.json") -Encoding UTF8
-    Write-Host "7DL CE resources linked from: $WorkshopDir"
+$ResourceConfig = Join-Path $Dest "resource_sources.json"
+$ResourceLinks = @{}
+if (Test-Path -LiteralPath $ResourceConfig) {
+    $ExistingLinks = Get-Content -LiteralPath $ResourceConfig -Raw | ConvertFrom-Json
+    foreach ($Property in $ExistingLinks.PSObject.Properties) { $ResourceLinks[$Property.Name] = $Property.Value }
+}
+if ($WorkshopDir) { $ResourceLinks["seven_dl_root"] = $WorkshopDir }
+if ($Maps) { $ResourceLinks["maps_root"] = $Maps }
+if ($ResourceLinks.Count -gt 0) {
+    $ResourceLinks | ConvertTo-Json | Set-Content -LiteralPath $ResourceConfig -Encoding UTF8
 }
 
 if ($Maps) {

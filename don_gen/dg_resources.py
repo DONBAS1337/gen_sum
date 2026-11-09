@@ -103,3 +103,31 @@ def background(manifest, place, slot):
         if path:
             return path
     return None
+
+
+def local_map_root(config_path=None,environ=None):
+    environ=os.environ if environ is None else environ
+    paths=[environ.get('DON_GEN_MAP_ROOT')]
+    if config_path:
+        try:
+            with io.open(config_path,'r',encoding='utf-8') as handle:
+                config=json.loads(handle.read().lstrip(u'\ufeff'))
+            if isinstance(config,dict):
+                paths.append(config.get('maps_root'))
+        except (IOError,OSError,ValueError):
+            pass
+    for path in paths:
+        if not isinstance(path,(str,text_type)) or not path:
+            continue
+        path=os.path.abspath(path)
+        if os.path.isdir(os.path.join(path,'maps')):
+            path=os.path.join(path,'maps')
+        if all(asset(path,name) for name in ('map_bg.jpg','map_avaliable.jpg','map_selected.jpg')):
+            return path
+    return None
+
+
+def local_map_asset(root,filename):
+    if filename not in ('map_bg.jpg','map_avaliable.jpg','map_selected.jpg') and not filename.startswith('map_icon_'):
+        return None
+    return asset(root,filename)

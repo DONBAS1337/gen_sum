@@ -280,6 +280,7 @@ def locked_context(state, plan):
         "recent_dialogue":copy_state["dialogue_history"][-3:],
         "long_term_memory":__import__('dg_memory').recall(copy_state, focus),
         "npc_agendas":__import__('dg_agents').report(copy_state),
+        "housing":__import__("dg_housing").report(copy_state),
         "recent_hybrid_scenes":[{"day":item["day"],"action":item["action"],
                                 "scene":item["scene"][-1500:],
                                 "effects":item["effects"]}

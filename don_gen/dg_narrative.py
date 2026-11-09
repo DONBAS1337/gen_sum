@@ -171,6 +171,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "social_bonds":copy.deepcopy(state.get("social",{}).get("bonds",{})),
         "long_term_memory":__import__('dg_memory').recall(state, who),
         "npc_agendas":__import__('dg_agents').report(state),
+        "housing":__import__("dg_housing").report(state),
         "weather":dg_world.weather(state)[1]
     }
 

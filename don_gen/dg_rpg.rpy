@@ -20,6 +20,7 @@ init 1001 python:
     import dg_resources
     import dg_turn
     import dg_agents
+    import dg_housing
     import dg_intent
     import dg_cgvision
     import dg_bkrr
@@ -98,8 +99,8 @@ init 1001 python:
     def dg_rpg_root():
         return dg_runtime.app.library.root
 
-    def dg_rpg_start(name, age, days, history, source, pronouns, adult=False):
-        state = dg_rpg.new_game(name, age, days, history, source, pronouns)
+    def dg_rpg_start(name, age, days, history, source, pronouns, adult=False, cabin="cabin_01", roommate="mt"):
+        state = dg_rpg.new_game(name, age, days, history, source, pronouns, cabin, roommate)
         if adult:
             dg_adult.set_enabled(state, True, confirmed=True)
         dg_rpg.save(dg_rpg_root(), state)
@@ -335,11 +336,21 @@ init 1001 python:
         roots = dg_runtime.app.catalog.get("source_roots", {})
         return roots.get("7dl") or dg_detect_7dl_root()
 
+    def dg_rpg_local_map_root():
+        return dg_resources.local_map_root(os.path.join(config.gamedir,"mods","don_gen","resource_sources.json"))
+
     def dg_rpg_map_asset(filename):
+        local = dg_resources.local_map_asset(dg_rpg_local_map_root(),filename)
+        if local:
+            return local
         external = dg_resources.map_asset(dg_rpg_workshop_root(), filename)
         return external or DG_MAP_ROOT + filename
 
     def dg_map_npc_icon(who):
+        code = "me" if who == "hero" else DG_MAP_ICON_BY_NPC.get(who)
+        local = dg_resources.local_map_asset(dg_rpg_local_map_root(),"map_icon_%s.png" % code)
+        if local:
+            return im.Scale(local,42,42)
         external = dg_resources.map_icon(dg_rpg_workshop_root(), who)
         if external:
             return im.Scale(external, 42, 42)
@@ -445,7 +456,7 @@ init 1001 python:
         place = dg_rpg_visual_state()["place"]
         native = dg_rpg_bg_native(place)
         return dg_art.resolve(dg_rpg_root(), dg_rpg_state["id"],
-                              "background", place, native,
+                              "background", dg_visual.background_key(place,dg_rpg_visual_state()["slot"]), native,
                               getattr(persistent,"dg_prefer_generated",True))
 
     def dg_rpg_bg():
@@ -520,6 +531,11 @@ init 1001 python:
                          what_color="#f3d887", what_outlines=[])
 
     def dg_rpg_stage_actors(turns, cast_ids, turn):
+        # Named reactions in narration affect only the explicitly named actor.
+        if turn["who"] is None:
+            for actor, emotion in dg_visual.narrated_moods(turn["text"],cast_ids).items():
+                if actor not in turn.get('stage',{}):
+                    store.dg_rpg_actor_moods[actor]=emotion
         # Update one actor's expression; narration does not make everybody cry/smile.
         if turn["who"] in dg_stage.NAMES:
             if turn['who'] not in turn.get('stage', {}):
@@ -675,7 +691,7 @@ init 1001 python:
             if key != state["place"]:
                 raise ValueError("Player moved before background request")
             prompt=dg_art.background_prompt(state,key)
-            asset_key=key
+            asset_key=dg_visual.background_key(key,state["slot"])
         elif kind in ("cg","cg18"):
             # The screen sends immutable UTF-8 JSON rather than a Ren'Py store
             # dictionary that might change during the background thread.
@@ -710,6 +726,8 @@ init 1001 python:
 
 default dg_rpg_hybrid_plan = None
 default dg_rpg_state = None
+default dg_create_cabin = "cabin_01"
+default dg_create_roommate = "mt"
 default dg_cg_vision_attempted = None
 default dg_cg_vision_note = u""
 default dg_rpg_pending_turn = None
@@ -905,6 +923,12 @@ screen dg_rpg_setup:
                                 textbutton u"7ДЛ · Мику" style "dg_ink_act" text_size 29 action SetVariable("dg_create_source", "7dl:mi_7dl") selected dg_create_source == "7dl:mi_7dl"
                                 textbutton u"7ДЛ · DJ" style "dg_ink_act" text_size 29 action SetVariable("dg_create_source", "7dl:mi_dj") selected dg_create_source == "7dl:mi_dj"
                                 textbutton u"7ДЛ · Классика" style "dg_ink_act" text_size 29 action SetVariable("dg_create_source", "7dl:mi_cl") selected dg_create_source == "7dl:mi_cl"
+                    text u"ЗАСЕЛЕНИЕ" style "dg_ink_label"
+                    hbox:
+                        spacing 24
+                        textbutton (u"Домик №%d · выбрать" % int(dg_create_cabin.split("_")[1])) style "dg_ink_act" text_size 27 action Return(("housing",))
+                        textbutton (u"Сосед: " + dg_rpg.NPC_NAMES.get(dg_create_roommate,u"Жить одному")) style "dg_ink_act" text_size 27 action Return(("housing",))
+                    text u"Обычное заселение: не задаёт отношения и не предрешает сюжет." style "dg_ink_small" size 21
                     text u"РЕЖИМ ИСТОРИИ" style "dg_ink_label"
                     textbutton (u"18+ · ВЗРОСЛАЯ AU: ВКЛЮЧЕНА" if dg_create_adult else u"18+ · ВЗРОСЛАЯ AU: ВЫКЛЮЧЕНА") style "dg_ink_act" text_size 24 selected dg_create_adult sensitive (dg_create_age.isdigit() and int(dg_create_age) >= 18) action SetVariable("dg_create_adult", not dg_create_adult)
                     text u"Только для совершеннолетнего героя. В альтернативной версии допустимы зрелые романтические сцены между взрослыми. Ульяна и Юля исключены." style "dg_ink_small" size 21
@@ -1021,7 +1045,11 @@ screen dg_rpg_map:
     frame:
         background Solid("#12272bc9") padding (18, 12)
         xpos 24 ypos 22
-        text dg_rpg.camp_time(dg_rpg_state) style "dg_rpg_body" size 25
+        vbox:
+            spacing 8
+            text dg_rpg.camp_time(dg_rpg_state) style "dg_rpg_body" size 25
+            if dg_rpg_state.get("housing"):
+                textbutton (u"Мой домик №%d" % int(dg_rpg_state["housing"]["cabin"].split("_")[1])) style "dg_camp_nav" action Return(("go",dg_rpg_state["housing"]["cabin"]))
     hbox:
         xpos 1410 ypos 22 spacing 12
         textbutton u"Найти место" style "dg_rpg_tab" xsize 238 action Return(("places", None))
@@ -1146,6 +1174,8 @@ init 1002:
     style dg_camp_nav is button:
         background dg_camp_button_surface("#071c17c9", "#a7996470")
         hover_background dg_camp_button_surface("#bfa769e8", "#efdc9ecc")
+        selected_background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
+        selected_hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
         insensitive_background Solid("#071c1770")
         padding (22, 14)
         xminimum 142
@@ -2344,6 +2374,8 @@ label dg_rpg_picker_label:
         $ dg_create_source = "bkrr:mi"
         $ dg_create_pronouns = u"он/его"
         $ dg_create_adult = False
+        $ dg_create_cabin = "cabin_01"
+        $ dg_create_roommate = "mt"
         jump dg_rpg_create_loop
     $ dg_rpg_open(dg_rpg_value)
     jump dg_rpg_loop
@@ -2353,6 +2385,9 @@ label dg_rpg_create_loop:
     $ dg_create_cmd = _return
     if not dg_create_cmd or dg_create_cmd[0] == "cancel":
         jump dg_rpg_picker_label
+    if dg_create_cmd[0] == "housing":
+        call screen dg_rpg_housing_picker
+        jump dg_rpg_create_loop
     if dg_create_cmd[0] == "edit":
         $ dg_edit_name = dg_create_cmd[1]
         if dg_edit_name == "name":
@@ -2376,7 +2411,7 @@ label dg_rpg_create_loop:
                 $ dg_create_history = dg_edit_result[1]
         jump dg_rpg_create_loop
     if dg_create_cmd[0] == "start":
-        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns, dg_create_adult)
+        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns, dg_create_adult, dg_create_cabin, dg_create_roommate)
         jump dg_rpg_loop
     jump dg_rpg_create_loop
 
@@ -2731,3 +2766,29 @@ label dg_rpg_cg_label:
         jump dg_rpg_cg_label
     jump dg_rpg_loop
 
+
+
+screen dg_rpg_housing_picker:
+    modal True
+    add Solid("#102831f5")
+    frame:
+        background Solid("#17352ef2")
+        xpos 160 ypos 85 xsize 1600 ysize 920 padding (40,30)
+        vbox:
+            spacing 20
+            text u"Твой домик и сосед" style "dg_note_heading"
+            text u"Выбери номер на классической карте. Сосед будет возвращаться сюда ночью, если не занят сюжетной встречей." style "dg_note_body" size 26 xmaximum 1500
+            text u"ДОМИК" style "dg_note_hint"
+            grid 8 4:
+                spacing 10
+                for cabin in dg_housing.CABINS:
+                    textbutton (u"№%d" % int(cabin.split("_")[1])) style "dg_camp_nav" xsize 160 ysize 48 selected dg_create_cabin==cabin action SetVariable("dg_create_cabin",cabin)
+                null
+            text u"СОСЕД" style "dg_note_hint"
+            grid 3 4:
+                spacing 10
+                for roommate in (None,)+dg_housing.ROOMMATES:
+                    textbutton dg_rpg.NPC_NAMES.get(roommate,u"Жить одному") style "dg_camp_nav" xsize 460 ysize 48 selected dg_create_roommate==roommate action SetVariable("dg_create_roommate",roommate)
+                null
+            textbutton u"Готово" style "dg_camp_action" action Return(None)
+    key "K_ESCAPE" action Return(None)
