@@ -143,6 +143,10 @@ init 1001 python:
         renpy.block_rollback()
 
     def dg_rpg_apply(action, arg=None):
+        if action == "inventory":
+            arg = dg_inventory.command(arg)
+            if arg is None:
+                return False
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         transactional = action in ("conversation", "world", "personal", "incident", "route", "visit", "project", "relation", "inventory")
         pending = dg_turn.begin(state) if transactional else None
@@ -1087,7 +1091,7 @@ screen dg_rpg_artist_settings:
             text u"Подстановки __DG_PROMPT__ и __DG_NEGATIVE__. Seed у Anima берётся как число прямо из KSampler и обновляется автоматически. Спрайты не генерируются." style "dg_text" size 24 xmaximum 1300
             text u"Генерация только вручную, если фона или CG нет; ранее созданные изображения читаются из кэша. Сервис 8189 не используется." style "dg_text" size 23 color "#c0dbd7" xmaximum 1300
             textbutton (u"Приоритет: сгенерированные" if getattr(persistent, "dg_prefer_generated", True) else u"Приоритет: оригинальные") style "dg_act" action SetField(persistent, "dg_prefer_generated", not getattr(persistent, "dg_prefer_generated", True))
-            textbutton u"ЗАКРЫТЬ" style "dg_act" action Return(None)
+            textbutton u"ЗАКРЫТЬ" style "dg_act" action Return(False)
 
 screen dg_rpg_adult_settings:
     modal True
@@ -1108,7 +1112,7 @@ screen dg_rpg_adult_settings:
                 textbutton u"ПОДТВЕРЖДАЮ 18+ · ВКЛЮЧИТЬ ВЗРОСЛУЮ AU" style "dg_primary" action Return("enable")
             else:
                 text u"Герой несовершеннолетний. Включение недоступно." style "dg_text" size 26 color "#ffe5b4"
-            textbutton u"ОТМЕНА" style "dg_act" action Return(None)
+            textbutton u"ОТМЕНА" style "dg_act" action Return(False)
 
 screen dg_rpg_map:
     modal True
@@ -1633,8 +1637,8 @@ screen dg_rpg_hybrid_input(mode, who=None):
             hbox:
                 ypos 756 spacing 18
                 textbutton u"Продолжить" style "dg_note_main" xsize 430 sensitive bool(action_text.strip()) action [SetVariable("dg_rpg_action_draft", action_text), Return(("submit", action_text.strip()))]
-                textbutton u"Назад" style "dg_note_button" xsize 260 action [SetVariable("dg_rpg_action_draft", action_text), Return(None)]
-    key "K_ESCAPE" action [SetVariable("dg_rpg_action_draft", action_text), Return(None)]
+                textbutton u"Назад" style "dg_note_button" xsize 260 action [SetVariable("dg_rpg_action_draft", action_text), Return(False)]
+    key "K_ESCAPE" action [SetVariable("dg_rpg_action_draft", action_text), Return(False)]
 
 screen dg_rpg_hybrid_review(plan):
     modal True
@@ -1698,7 +1702,7 @@ screen dg_rpg_art_error(message):
                 side_spacing 12
                 mousewheel True scrollbars "vertical" ysize 245
                 text dg_literal(message) style "dg_text" size 27 xmaximum 1300
-            textbutton u"ВЕРНУТЬСЯ К СЦЕНЕ" style "dg_primary" action Return(None)
+            textbutton u"ВЕРНУТЬСЯ К СЦЕНЕ" style "dg_primary" action Return(False)
 
 screen dg_rpg_cg_gallery:
     modal True
@@ -1734,7 +1738,7 @@ screen dg_rpg_cg_gallery:
                                     spacing 22
                                     text (u"18+" if cg_item["kind"] == "cg18" else u"CG") style "dg_meta" size 26 color "#ffe0ad"
                                     textbutton dg_literal(cg_item["title"]) style "dg_navlink" text_size 27 action Return(("view",cg_item))
-            textbutton u"ВЕРНУТЬСЯ В ЛАГЕРЬ" style "dg_primary" action Return(None)
+            textbutton u"ВЕРНУТЬСЯ В ЛАГЕРЬ" style "dg_primary" action Return(False)
 
 screen dg_rpg_cg_art(plan):
     modal True
@@ -1777,7 +1781,7 @@ screen dg_rpg_cg_art(plan):
             text dg_literal(plan["title"]) style "dg_text" size 24 xmaximum 1000
     if resource["status"] in ("generated","builtin"):
         textbutton u"ПЕРЕРИСОВАТЬ" style "dg_map_pin" xpos 1375 ypos 30 action Return("generate")
-    textbutton u"НАЗАД К ИСТОРИИ" style "dg_map_pin" xpos 1500 ypos 990 action Return(None)
+    textbutton u"НАЗАД К ИСТОРИИ" style "dg_map_pin" xpos 1500 ypos 990 action Return(False)
 
 screen dg_rpg_hybrid_read(entry):
     modal True
@@ -1806,7 +1810,7 @@ screen dg_rpg_hybrid_read(entry):
             text u"ИГРОВЫЕ ПОСЛЕДСТВИЯ · зафиксированы движком, а не моделью" style "dg_meta" size 22
             text dg_literal(u" · ".join(entry["effects"]) if entry["effects"] else u"Показатели не менялись.") style "dg_text" size 24 xmaximum 1390
             textbutton u"Иллюстрация сцены · CG (необязательно)" style "dg_act" action Return("cg")
-            textbutton u"ПРОДОЛЖИТЬ" style "dg_primary" action Return(None)
+            textbutton u"ПРОДОЛЖИТЬ" style "dg_primary" action Return(False)
 
 screen dg_rpg_free_input:
     modal True
@@ -1853,8 +1857,8 @@ screen dg_rpg_free_input:
             hbox:
                 spacing 45
                 textbutton u"СОВЕРШИТЬ ПОСТУПОК" style "dg_primary" sensitive bool(action_text.strip()) action Return(action_text.strip())
-                textbutton u"ОТМЕНА" style "dg_act" action Return(None)
-    key "K_ESCAPE" action Return(None)
+                textbutton u"ОТМЕНА" style "dg_act" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_action_result(result, cg_worthy=False):
     modal True
@@ -1883,7 +1887,7 @@ screen dg_rpg_action_result(result, cg_worthy=False):
                     text dg_literal(result["text"]) style "dg_text" size 30 xmaximum 1195
             if cg_worthy:
                 textbutton u"Иллюстрировать событие (CG)" style "dg_act" action Return("cg")
-            textbutton u"Вернуться в лагерь" style "dg_primary" action Return(None)
+            textbutton u"Вернуться в лагерь" style "dg_primary" action Return(False)
 
 screen dg_rpg_npc_incident:
     modal True
@@ -1916,10 +1920,10 @@ screen dg_rpg_npc_incident:
                 text (u"Их отношение сейчас: " + str(dg_social.bond(dg_rpg_state, event["pair"][0], event["pair"][1]))) style "dg_text" size 26 color "#ffe5a0"
                 for code, title in dg_social.INCIDENT_CHOICES:
                     textbutton title style "dg_navlink" text_size 28 sensitive dg_rpg_state["energy"] >= 9 action Return(code)
-                textbutton u"Не вмешиваться сейчас" style "dg_navlink" text_size 26 action Return(None)
+                textbutton u"Не вмешиваться сейчас" style "dg_navlink" text_size 26 action Return(False)
     else:
         text u"Участники уже разошлись. Сегодня эта встреча закончилась." style "dg_text" xpos 360 ypos 500
-        textbutton u"Закрыть" style "dg_primary" xpos 850 ypos 800 action Return(None)
+        textbutton u"Закрыть" style "dg_primary" xpos 850 ypos 800 action Return(False)
 
 screen dg_rpg_personal(who):
     modal True
@@ -1953,12 +1957,12 @@ screen dg_rpg_personal(who):
             text u"ОТ ТЕБЯ ЗАВИСИТ, КАК ПРОДОЛЖИТСЯ ВАША ИСТОРИЯ" style "dg_meta" size 23
             for code, caption in scene["choices"]:
                 textbutton caption style "dg_navlink" text_size 27 action Return(code)
-            textbutton u"Вернуться к разговору позже" style "dg_navlink" text_size 24 action Return(None)
+            textbutton u"Вернуться к разговору позже" style "dg_navlink" text_size 24 action Return(False)
 
 screen dg_rpg_contracts:
     modal True
     add Solid("#102a35")
-    use dg_chrome(u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ", Return(None))
+    use dg_chrome(u"ДОЛГОСРОЧНЫЕ ПОРУЧЕНИЯ", Return(False))
     text u"Дела, за которые отвечаешь" style "dg_title" size 62 xpos 110 ypos 115
     text u"Принятые задания выполняются через свободные действия в нужном месте. Сроки идут, даже пока ты занят другими историями." style "dg_sub" size 25 xpos 115 ypos 210 xmaximum 1610
     frame:
@@ -1995,7 +1999,7 @@ screen dg_rpg_contracts:
                             else:
                                 text u"СРОК ИСТЁК · другие пионеры продолжили дело без тебя" style "dg_text" size 25 color "#f4b0a9"
 
-    key "K_ESCAPE" action Return(None)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
     modal True
@@ -2050,14 +2054,14 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
                 for choice_id, caption in scene["options"]:
                     textbutton dg_literal(caption) style "dg_navlink" text_size 27 action Return(choice_id)
                 textbutton u"НАПИСАТЬ СВОЮ РЕПЛИКУ · AI-РЕАКЦИЯ" style "dg_navlink" text_size 25 action Return("custom")
-                textbutton u"Завершить разговор без выбора" style "dg_navlink" text_size 24 action Return(None)
+                textbutton u"Завершить разговор без выбора" style "dg_navlink" text_size 24 action Return(False)
             else:
                 textbutton u"Закончить встречу" style "dg_primary" text_size 33 action Return("done")
 
 screen dg_rpg_finale:
     modal True
     add Solid("#0e252f")
-    use dg_chrome(u"ИТОГИ СМЕНЫ", Return(None))
+    use dg_chrome(u"ИТОГИ СМЕНЫ", Return(False))
     frame:
         background DG_PAPER
         xpos 260 ypos 175 xsize 1400 ysize 785
@@ -2076,7 +2080,7 @@ screen dg_rpg_finale:
                 scrollbars "vertical"
                 ysize 570
                 text dg_literal(dg_world.finale(dg_rpg_state)) style "dg_ink_small" size 30 xmaximum 1260
-            textbutton u"Вернуться в лагерь" style "dg_ink_act" action Return(None)
+            textbutton u"Вернуться в лагерь" style "dg_ink_act" action Return(False)
 
 screen dg_rpg_world_event:
     modal True
@@ -2131,10 +2135,10 @@ screen dg_rpg_world_event:
                 else:
                     text u"Для сюжетного выбора нужно 8 энергии. Сначала отдохни." style "dg_text" size 27 color "#ffe19b"
                 textbutton u"НАПИСАТЬ СВОЁ ДЕЙСТВИЕ · гибридная сцена" style "dg_navlink" text_size 24 sensitive (dg_rpg_state["energy"] >= 8) action Return("custom")
-                textbutton u"Вернуться в лагерь (решение можно принять позже)" style "dg_navlink" text_size 24 action Return(None)
+                textbutton u"Вернуться в лагерь (решение можно принять позже)" style "dg_navlink" text_size 24 action Return(False)
     else:
         text u"На этом месте сегодня больше нет активных событий." style "dg_text" xpos 500 ypos 500
-        textbutton u"Назад" style "dg_primary" xpos 1000 ypos 800 action Return(None)
+        textbutton u"Назад" style "dg_primary" xpos 1000 ypos 800 action Return(False)
 
 screen dg_rpg_world_result(result):
     modal True
@@ -2167,13 +2171,13 @@ screen dg_rpg_world_result(result):
                   (dg_rpg_state["world"]["morale"], dg_rpg_state["world"]["knowledge"],
                    dg_rpg_state["world"]["freedom"], dg_rpg_state["world"]["resources"])) style "dg_text" size 26 color "#ffe19b"
             textbutton u"Создать / посмотреть CG сцены" style "dg_act" action Return("cg")
-            textbutton u"Продолжить историю" style "dg_primary" action Return(None)
+            textbutton u"Продолжить историю" style "dg_primary" action Return(False)
 
 screen dg_rpg_journal(initial_view="timeline"):
     modal True
     default view = initial_view
     add Solid("#142832")
-    textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1580 ypos 105 action Return(None)
+    textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1580 ypos 105 action Return(False)
     text u"Дневник смены" style "dg_note_heading" xpos 100 ypos 115 size 52
     hbox:
         xpos 100 ypos 215 spacing 16
@@ -2322,7 +2326,7 @@ screen dg_rpg_journal(initial_view="timeline"):
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):
                         text (u"%s: %d/%d%s" % (title, (progress if progress <= goal else goal), goal, u" (готово)" if key in dg_rpg_state["quests_done"] else u"")) style "dg_note_body" size 24
 
-    key "K_ESCAPE" action Return(None)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_route_choice(who):
     modal True
@@ -2360,7 +2364,7 @@ screen dg_rpg_route_choice(who):
                 textbutton caption style "dg_navlink" text_size 28 sensitive (dg_rpg_state["energy"] >= 12) action Return(choice)
             if dg_rpg_state["energy"] < 12:
                 text u"Для сюжетного события нужно 12 энергии." style "dg_text" size 24 color "#ffe19b"
-            textbutton u"Вернуться позже" style "dg_navlink" text_size 25 action Return(None)
+            textbutton u"Вернуться позже" style "dg_navlink" text_size 25 action Return(False)
 
 screen dg_rpg_route_result(who, level, stance):
     modal True
@@ -2374,7 +2378,7 @@ screen dg_rpg_route_result(who, level, stance):
             spacing 29
             text (u"Событие рута: " + dg_rpg.NPC_NAMES[who]) style "dg_ink_title"
             text dg_literal(dg_dialogue.route_conclusion(who, level, stance)) style "dg_ink_small" size 33 xmaximum 1100
-            textbutton u"Продолжить смену" style "dg_ink_act" action Return(None)
+            textbutton u"Продолжить смену" style "dg_ink_act" action Return(False)
 
 transform dg_rpg_portrait_transform:
     zoom 0.56
@@ -2402,7 +2406,7 @@ screen dg_rpg_ai_input(who):
 screen dg_rpg_read_scene(scene_text):
     modal True
     add Solid("#091827")
-    use dg_chrome(u"ОСОБАЯ СЦЕНА", Return())
+    use dg_chrome(u"ОСОБАЯ СЦЕНА", Return(False))
     frame:
         background DG_PAPER
         padding (55, 45)
@@ -2605,8 +2609,8 @@ label dg_rpg_loop:
         jump dg_rpg_projects_label
     if dg_rpg_cmd == "inventory":
         call screen dg_rpg_inventory
-        if _return:
-            $ dg_item_action=_return
+        $ dg_item_action=dg_inventory.command(_return)
+        if dg_item_action is not None:
             $ dg_rpg_apply("inventory",dg_item_action)
             call dg_rpg_vn_scene(dg_rpg_last_inventory["text"],True,dg_rpg_last_inventory["who"],"inventory:"+dg_hybrid.fingerprint(dg_rpg_state))
         jump dg_rpg_loop
@@ -2983,8 +2987,8 @@ screen dg_rpg_housing_picker:
                 for roommate in (None,)+dg_housing.ROOMMATES:
                     textbutton dg_rpg.NPC_NAMES.get(roommate,u"Жить одному") style "dg_camp_nav" xsize 460 ysize 48 selected dg_create_roommate==roommate action SetVariable("dg_create_roommate",roommate)
                 null
-            textbutton u"Готово" style "dg_camp_action" action Return(None)
-    key "K_ESCAPE" action Return(None)
+            textbutton u"Готово" style "dg_camp_action" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 
 label dg_rpg_visit_label:
@@ -3022,7 +3026,7 @@ screen dg_rpg_projects:
                 xpos 850 ypos 0 spacing 16
                 textbutton u"Предложить новое дело" style "dg_camp_action" action Return(("propose",None))
                 textbutton u"Предметы" style "dg_camp_nav" action Return(("inventory",None))
-                textbutton u"Назад" style "dg_camp_nav" action Return(None)
+                textbutton u"Назад" style "dg_camp_nav" action Return(False)
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 14
@@ -3089,8 +3093,8 @@ screen dg_rpg_relationship(who):
                         textbutton u"Извиниться и выслушать · 6 сил, один период" style "dg_camp_action" action Return(("apologize",None))
                     if who in dg_rpg_state.get("npc_visits",{}).get("romance",[]):
                         textbutton u"Завершить романтические отношения" style "dg_camp_nav" action Return(("end_romance",None))
-            textbutton u"Назад" style "dg_camp_nav" xpos 0 ypos 812 action Return(None)
-    key "K_ESCAPE" action Return(None)
+            textbutton u"Назад" style "dg_camp_nav" xpos 0 ypos 812 action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_dialogue_history:
     modal True
@@ -3116,8 +3120,8 @@ screen dg_rpg_dialogue_history:
                         text dg_literal(row["text"]) size 24 color "#F2E4BB" xmaximum 1580
                     if not dg_presentation.history(dg_rpg_state):
                         text u"Здесь появятся прочитанные сцены и свободные разговоры." size 24 color "#A9B9C6"
-            textbutton u"Назад" style "dg_camp_nav" action Return(None)
-    key "K_ESCAPE" action Return(None)
+            textbutton u"Назад" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 
 screen dg_rpg_inventory:
@@ -3151,8 +3155,8 @@ screen dg_rpg_inventory:
                     text u"Доступные действия" size 26 color "#65D8D0"
                     for operation,item,who,caption in dg_inventory.actions(dg_rpg_state):
                         textbutton caption style "dg_camp_nav" action Return((operation,item,who))
-            textbutton u"Назад" style "dg_camp_nav" action Return(None)
-    key "K_ESCAPE" action Return(None)
+            textbutton u"Назад" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_project_request:
     modal True
@@ -3173,8 +3177,8 @@ screen dg_rpg_project_request:
             hbox:
                 spacing 20
                 textbutton u"Предложить вариант" style "dg_camp_action" sensitive bool(idea.strip()) action Return(idea.strip())
-                textbutton u"Назад" style "dg_camp_nav" action [SetVariable("dg_project_draft",idea),Return(None)]
-    key "K_ESCAPE" action [SetVariable("dg_project_draft",idea),Return(None)]
+                textbutton u"Назад" style "dg_camp_nav" action [SetVariable("dg_project_draft",idea),Return(False)]
+    key "K_ESCAPE" action [SetVariable("dg_project_draft",idea),Return(False)]
 
 screen dg_rpg_project_review(proposal):
     modal True
@@ -3196,8 +3200,8 @@ screen dg_rpg_project_review(proposal):
                 spacing 20
                 textbutton u"Начать общее дело" style "dg_camp_action" action Return("start")
                 textbutton u"Изменить идею" style "dg_camp_nav" action Return("retry")
-                textbutton u"Отмена" style "dg_camp_nav" action Return(None)
-    key "K_ESCAPE" action Return(None)
+                textbutton u"Отмена" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 label dg_rpg_projects_label:
     call screen dg_rpg_projects
@@ -3207,8 +3211,9 @@ label dg_rpg_projects_label:
     if dg_project_command=="inventory":
         $ dg_rpg_cmd="inventory"
         call screen dg_rpg_inventory
-        if _return:
-            $ dg_rpg_apply("inventory",_return)
+        $ dg_item_action=dg_inventory.command(_return)
+        if dg_item_action is not None:
+            $ dg_rpg_apply("inventory",dg_item_action)
             call dg_rpg_vn_scene(dg_rpg_last_inventory["text"],True,dg_rpg_last_inventory["who"],"inventory:"+dg_hybrid.fingerprint(dg_rpg_state))
         jump dg_rpg_loop
     if dg_project_command=="propose":

@@ -332,6 +332,20 @@ init 1100 python:
                     if d.width <= 0 or d.height <= 0:
                         raise ValueError(filename + ": empty viewport")
             displayable.visit_all(debug_viewport)
+            if filename == "inventory":
+                import dg_inventory
+                buttons = []
+                displayable.visit_all(lambda d: buttons.append(d) if isinstance(d, renpy.display.behavior.Button) else None)
+                results = [renpy.display.behavior.run(d.clicked) for d in buttons if isinstance(d.clicked, Return)]
+                if False not in results or any(result is True for result in results):
+                    raise ValueError("Inventory cancellation did not return False")
+                commands = [dg_inventory.command(result) for result in results if result is not False]
+                if not commands or any(command is None for command in commands):
+                    raise ValueError("Inventory buttons did not return valid commands")
+                escape = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=u'', repeat=False)
+                if displayable.event(escape, 0, 0, .3) is not False:
+                    raise ValueError("Inventory Escape did not cancel")
+                print("Checked actual inventory buttons and Escape: valid commands or False")
             if filename in ("input", "editor"):
                 # Synthetic clipboard, never reads or writes the user's clipboard.
                 inputs = []

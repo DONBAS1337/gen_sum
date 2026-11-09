@@ -20,6 +20,21 @@ CATALOG={
 RECIPES={'poster':{'title':u'Нарисовать плакат','place':'clubs','inputs':{'paper':1,'paint':1},'tools':('pencil',)},
          'patch':{'title':u'Сделать ремонтную заплату','place':'clubs','inputs':{'tape':1,'cloth':1},'tools':('toolkit',)}}
 
+def command(value):
+    """Decode a screen result; RenPy Return(None) actually produces True."""
+    if not isinstance(value, (tuple, list)) or len(value) != 3:
+        return None
+    operation, item, who = value
+    if operation not in ('take','give','lend','return','use','craft'):
+        return None
+    if not isinstance(item, (str, type(u''))) or item not in CATALOG:
+        return None
+    import dg_rpg
+    if who is not None and (not isinstance(who, (str, type(u''))) or who not in dg_rpg.NPC_NAMES):
+        return None
+    return operation, item, who
+
+
 def ensure(state):
     import dg_projects
     projects=dg_projects.ensure(state)
