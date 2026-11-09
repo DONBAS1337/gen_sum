@@ -1538,11 +1538,11 @@ screen dg_rpg_controls(initial_tab="story"):
     textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1578 ypos 65 action Return(("camp", None))
     hbox:
         xpos 48 ypos 178 spacing 12
-        textbutton u"События" style "dg_note_tab" selected dg_hub_tab == "story" action SetScreenVariable("dg_hub_tab","story")
-        textbutton u"Занятия" style "dg_note_tab" selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
-        textbutton u"Настройки" style "dg_note_tab" selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
-        textbutton u"Общие дела" style "dg_note_tab" action Return(("projects",None))
-        textbutton u"Предметы" style "dg_note_tab" action Return(("inventory",None))
+        textbutton u"События" style "dg_note_tab" xsize 196 xminimum 0 text_size 24 padding (16,10) selected dg_hub_tab == "story" action SetScreenVariable("dg_hub_tab","story")
+        textbutton u"Занятия" style "dg_note_tab" xsize 196 xminimum 0 text_size 24 padding (16,10) selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
+        textbutton u"Настройки" style "dg_note_tab" xsize 196 xminimum 0 text_size 24 padding (16,10) selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
+        textbutton u"Общие дела" style "dg_note_tab" xsize 196 xminimum 0 text_size 24 padding (16,10) action Return(("projects",None))
+        textbutton u"Предметы" style "dg_note_tab" xsize 196 xminimum 0 text_size 24 padding (16,10) action Return(("inventory",None))
     frame:
         background Solid("#102b33ed")
         xpos 48 ypos 258 xsize 1100 ysize 656 padding (28, 24)
@@ -1606,7 +1606,7 @@ screen dg_rpg_controls(initial_tab="story"):
                     textbutton (u"Музыка сцен: вкл" if persistent.dg_rpg_music else u"Музыка сцен: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_music"),Function(dg_rpg_audio_sync)]
                     textbutton (u"Атмосфера: вкл" if persistent.dg_rpg_ambience else u"Атмосфера: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_ambience"),Function(dg_rpg_audio_sync)]
                     textbutton (u"Звуки действий: вкл" if persistent.dg_rpg_effects else u"Звуки действий: выкл") style "dg_note_button" action ToggleField(persistent,"dg_rpg_effects")
-                    text u"Громкость музыки и звуков — в общих настройках игры. Беседа: до 6 обменов репликами в одном периоде; уход или завершение закрывает период." style "dg_note_hint"
+                    text u"Громкость музыки и звуков — в общих настройках игры. Беседа: до 6 обменов репликами в одном периоде; уход или завершение закрывает период." style "dg_note_hint" xmaximum 1008
                     textbutton u"Настройки изображений" style "dg_note_button" action Return(("artist", None))
                     $ bg_state = dg_rpg_bg_status()
                     if shift_open and bg_state["status"] == "missing":
@@ -1657,7 +1657,7 @@ screen dg_rpg_controls(initial_tab="story"):
         textbutton u"Карта лагеря" style "dg_note_tab" action Return(("map", None))
         textbutton u"Дневник и связи" style "dg_note_tab" action Return(("journal", None))
         textbutton u"Своё действие" style "dg_note_tab" action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
-    text u"Переходы бесплатны. Поступки и разговоры двигают время." style "dg_note_hint" color "#d3d3b5" xpos 882 ypos 960 xmaximum 970
+    text u"Уход завершает начатую беседу. Остальные переходы бесплатны." style "dg_note_hint" color "#d3d3b5" xpos 882 ypos 960 xmaximum 970
     key "K_ESCAPE" action Return(("camp", None))
 
 screen dg_rpg_hybrid_input(mode, who=None):
