@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -206,6 +206,19 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") == "agendas":
+            dg_rpg.activity(store.dg_rpg_state,"rest")
+            cases = [("agendas", "dg_rpg_journal", {"initial_view":"social"})]
+        if os.environ.get("DG_UI_SCREEN") == "intent-review":
+            proposal = {'status':'ready','intent':'search','target':None,'canonical':u'Исследовать старые записи',
+                        'deferred':[u'Завтра показать найденные ноты Мику.'],'when':None}
+            plan = dg_hybrid.preview(store.dg_rpg_state,u'Сначала поискать записи, а завтра поговорить с Мику','free',interpretation=proposal)
+            cases = [("intent-review", "dg_rpg_hybrid_review", {"plan":plan})]
+        if os.environ.get("DG_UI_SCREEN") == "cg-check":
+            dg_rpg.save(dg_rpg_root(),store.dg_rpg_state)
+            plan = dg_art.scene_plan(store.dg_rpg_state,'hybrid',u'Репетиция Мику',u'Мику играет на гитаре в музыкальном кружке. Герой слушает её музыку рядом с окном.', 'mi')
+            plan.update(cast=['mi'],scene_slot=0,setting='interior',hero_pronouns=u'он/его')
+            cases = [("cg-check", "dg_rpg_cg_art", {"plan":plan})]
         if os.environ.get("DG_UI_SCREEN") == "scene":
             if not vanilla_root:
                 raise ValueError("--vanilla is required for the scene preview")

@@ -478,7 +478,7 @@ def _external_python3():
 
 
 def _generate_via_python3(client, executable, instructions, prompt, model, effort,
-                          cancel, trace, fast_mode):
+                          cancel, trace, fast_mode, images=None):
     """Run only the long text SSE exchange in modern Python.
 
     Ren'Py and the rest of the runtime stay on bundled Python 2.7, so pygame_sdl2
@@ -508,6 +508,7 @@ def _generate_via_python3(client, executable, instructions, prompt, model, effor
         "effort": effort,
         "fast_mode": bool(fast_mode),
         "result_path": result_path,
+        "images": images or [],
     }
 
     options = {"creationflags": 0x08000000} if os.name == "nt" else {}
@@ -879,7 +880,7 @@ class Client(object):
         except (binascii.Error, ValueError, TypeError):
             raise ClientError("Сервис вернул повреждённое изображение фона.")
 
-    def generate(self, instructions, prompt, model=None, effort=DEFAULT_EFFORT, cancel=None, trace=None, fast_mode=True):
+    def generate(self, instructions, prompt, model=None, effort=DEFAULT_EFFORT, cancel=None, trace=None, fast_mode=True, images=None):
         # Ren'Py 7.4 / Python 2.7 is unreliable on the long Codex SSE stream.
         # If a modern Python is installed, isolate only this text request there.
         if sys.version_info[0] < 3 and not os.environ.get("DG_TEXT_WORKER"):
@@ -887,7 +888,7 @@ class Client(object):
             if executable:
                 return _generate_via_python3(
                     self, executable, instructions, prompt, model, effort,
-                    cancel, trace, fast_mode
+                    cancel, trace, fast_mode, images
                 )
 
         models = self._models or self.list_models()
@@ -906,6 +907,14 @@ class Client(object):
             "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
             "store": False, "stream": True, "tools": [], "tool_choice": "auto",
             "parallel_tool_calls": False, "include": []}
+        if images:
+            if not isinstance(images,list) or len(images)>2:
+                raise ClientError("Допустимо не более двух изображений для анализа.")
+            for picture in images:
+                if (not isinstance(picture,text_type) or len(picture)>12*1024*1024
+                        or not re.match(r'^data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+\Z',picture)):
+                    raise ClientError("Некорректное изображение для анализа.")
+                body['input'][0]['content'].append({'type':'input_image','image_url':picture,'detail':'auto'})
         # Codex backend controls retention and rejects the public API's TTL fields.
         # Only the stable prefix participates; chapters, repairs and restarts reuse it.
         body["prompt_cache_key"] = hashlib.sha256(instructions.encode("utf-8")).hexdigest()
@@ -926,7 +935,10 @@ class Client(object):
         self.effective_effort = body.get("reasoning", {}).get("effort")
         if trace is not None:
             # Only the JSON body and selected SSE fields; never auth headers or reasoning items.
-            trace["request"] = body
+            trace["request"] = json.loads(json.dumps(body))
+            for item in trace['request']['input'][0]['content']:
+                if item.get('type') == 'input_image':
+                    item['image_url'] = '[local image omitted from trace]'
             trace["endpoint"] = BACKEND + "/responses"
             trace["response"] = {}
         response = self._authorized("/responses", json.dumps(body, ensure_ascii=False).encode("utf-8"), stream=True)

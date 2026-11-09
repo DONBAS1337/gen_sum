@@ -435,6 +435,10 @@ def action(state, text, nearby):
                               "intent":intent,"target":target,"place":place,
                               "text":parsed["original"],"impact":impact})
     social["actions"]=social["actions"][-80:]
+    if target:
+        agenda = __import__('dg_agents').assist(state, target, intent)
+        if agenda:
+            narration += u' ' + agenda
     return {"status":"done","text":narration,"intent":intent,"target":target,
             "quest_updates":notes,"arc":arc,"impact":impact}
 

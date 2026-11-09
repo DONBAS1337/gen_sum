@@ -60,13 +60,13 @@ def catalog(directories):
     return result
 
 
-def match(rows, plan):
+def candidates(rows, plan):
     if not plan or plan.get('kind') != 'cg' or not plan.get('who'):
-        return None
+        return []
     # Many labelled donor CGs also depict the original male protagonist.
     # Without manual solo-cast annotations, abstain for a different hero.
     if plan.get('hero_pronouns', u'он/его') != u'он/его':
-        return None
+        return []
     import dg_stage
     text = dg_stage.readable(plan.get('description',u'')).lower()
     present = set(plan.get('cast') or (plan['who'],))
@@ -93,4 +93,9 @@ def match(rows, plan):
         score = len(topics) * 10 + (2 if row['source'] == '451835368' and plan.get('profile') == 'bkrr:mi' else 0)
         ranked.append((score, row['path'], row))
     ranked.sort(key=lambda item:(-item[0],item[1]))
-    return dict(ranked[0][2], confidence='metadata_match') if ranked else None
+    return [dict(item[2], confidence='metadata_match') for item in ranked[:3]]
+
+
+def match(rows, plan):
+    rows = candidates(rows,plan)
+    return rows[0] if rows else None

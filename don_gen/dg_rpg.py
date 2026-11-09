@@ -147,6 +147,7 @@ def validate(state):
     if not isinstance(state, dict) or state.get("version") != 1:
         raise ValueError("Unsupported save format")
     __import__('dg_memory').validate(state)
+    __import__('dg_agents').validate(state)
     state.setdefault("mystery", {"yulia_discovered": False})
     dg_adult.ensure(state)
     if state["adult_mode"].get("enabled") and int(state["hero"]["age"]) < 18:
@@ -200,6 +201,9 @@ def where_is(state, who):
     if (state.get("source") == "bkrr:mi" and who == "mi" and event
             and event.get("arc") == "festival" and event.get("day") == state["day"]):
         return event["place"]
+    goal_place = __import__('dg_agents').location(state, who)
+    if goal_place:
+        return goal_place
     # Deterministic day-specific schedule variation; no random rolls on screen redraw.
     slot = state["slot"]
     if slot == 2 and state["day"] % 3 == 0 and who in ("sl", "un", "mi"):
@@ -322,6 +326,12 @@ def _tick(state):
                 _journal(state, interaction)
             dg_world.prepare(state)
             dg_social.prepare_incident(state)
+    if not state.get('finished'):
+        changes = __import__('dg_agents').tick(state)
+        if changes:
+            _journal(state, u'Пока идёт время, лагерь живёт своими делами. ' + changes[-1]['text'])
+        dg_world.refresh_open_event(state)
+        dg_social.prepare_incident(state)
 
 
 def move(state, place):

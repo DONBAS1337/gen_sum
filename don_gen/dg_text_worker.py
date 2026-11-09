@@ -75,6 +75,7 @@ def main():
             effort=request.get("effort", dg_backend.DEFAULT_EFFORT),
             trace=trace,
             fast_mode=bool(request.get("fast_mode", True)),
+            images=request.get('images') or None,
         )
         _write_result(result_path, {
             "ok": True,
@@ -101,3 +102,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

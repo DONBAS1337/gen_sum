@@ -122,12 +122,12 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(st["slot"],1)
         self.assertIsNone(dg_social.personal_scene(st,"mi"))
         st["affinity"]["mi"]=35
-        dg_rpg.move(st,"clubs")
+        dg_rpg.move(st,dg_rpg.where_is(st,"mi"))
         dg_rpg.personal_choice(st,"mi","question")
         self.assertEqual(st["social"]["personal"]["mi"],2)
         st["affinity"]["mi"]=60
         st["slot"]=0
-        dg_rpg.move(st,"stage")
+        dg_rpg.move(st,dg_rpg.where_is(st,"mi"))
         dg_rpg.personal_choice(st,"mi","initiative")
         self.assertEqual(st["social"]["personal"]["mi"],3)
         self.assertIsNone(dg_social.personal_scene(st,"mi"))
@@ -193,6 +193,8 @@ class SocialSandboxTests(unittest.TestCase):
         self.assertEqual(st["affinity"]["mi"],3)
         # Force same slot to exercise once-per-day diminishing rewards.
         st["slot"]=0
+        st["npc_agendas"]["people"]["mi"]["active"]=False
+        dg_rpg.move(st,"stage")
         second=dg_rpg.free_action(st,u"Помочь Мику")
         self.assertEqual(second["impact"],0)
         self.assertEqual(st["affinity"]["mi"],3)

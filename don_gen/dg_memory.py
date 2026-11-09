@@ -20,7 +20,7 @@ def topic(text):
                  if any(word in text for word in TOPICS[key])), None)
 
 
-def record(state, key, action, result, scene, who=None, origin=None, spawn_thread=True):
+def record(state, key, action, result, scene, who=None, origin=None, spawn_thread=True, deferred=None):
     import dg_stage
     origin = origin or state
     memory = state.setdefault('story_memory', {'episodes':[], 'threads':[], 'people':{}})
@@ -32,6 +32,7 @@ def record(state, key, action, result, scene, who=None, origin=None, spawn_threa
     row = {'id':key, 'day':origin['day'], 'slot':origin['slot'], 'place':origin['place'],
            'who':who, 'intention':action[:500], 'confirmed_result':result[:700],
            'narrated_scene':dg_stage.readable(scene)[:900]}
+    row['deferred'] = list(deferred or [])
     memory['episodes'].append(row)
     memory['episodes'] = memory['episodes'][-96:]
     if who:
@@ -98,6 +99,9 @@ def validate(state):
         for field, limit in (('intention',500), ('confirmed_result',700), ('narrated_scene',900)):
             if not isinstance(row.get(field), (str, type(u''))) or len(row[field]) > limit:
                 raise ValueError('Invalid remembered text')
+        deferred = row.get('deferred', [])
+        if not isinstance(deferred,list) or len(deferred)>3 or any(not isinstance(item,(str,type(u''))) or len(item)>250 for item in deferred):
+            raise ValueError('Invalid deferred intentions')
     for row in memory.get('threads', []):
         if (row.get('topic') not in TOPICS or row.get('status') not in ('open','resolved','abandoned')
                 or row.get('place') not in dg_rpg.PLACE_NAMES or not isinstance(row.get('day'), int)

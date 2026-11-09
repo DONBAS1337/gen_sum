@@ -19,6 +19,9 @@ init 1001 python:
     import dg_map
     import dg_resources
     import dg_turn
+    import dg_agents
+    import dg_intent
+    import dg_cgvision
     import dg_bkrr
 
     def dg_rpg_notice_board():
@@ -200,10 +203,24 @@ init 1001 python:
         logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
 
-    def dg_rpg_hybrid_preview(mode, action, who=None, topic=None):
+    def dg_rpg_interpret_action(action, mode, who):
+        current = dg_rpg.load(dg_rpg_root(), dg_rpg_state['id'])
+        instructions, prompt = dg_intent.request(current, action, mode, who)
+        app = dg_runtime.app
+        if not app.models:
+            app.refresh_models()
+        model = dg_backend.default_model(app.models, persistent.dg_model)
+        app.set_status(u'Разбираем намерение и условия…')
+        text = app.client.generate(instructions, prompt, model=model,
+                                  effort=dg_backend.DEFAULT_EFFORT, fast_mode=persistent.dg_fast_mode)
+        proposal = dg_intent.validate(current, dg_intent.decode(text))
+        proposal['_state'] = dg_hybrid.fingerprint(current)
+        return proposal
+
+    def dg_rpg_hybrid_preview(mode, action, who=None, topic=None, interpretation=None):
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         try:
-            plan = dg_hybrid.preview(current, action, mode, who, topic)
+            plan = dg_hybrid.preview(current, action, mode, who, topic, interpretation)
         except (ValueError, TypeError, UnicodeError) as exc:
             try:
                 readable_error = unicode(exc)
@@ -541,8 +558,34 @@ init 1001 python:
             except (IOError, OSError, ValueError, TypeError):
                 pass
         import dg_gallery
-        candidate = dg_gallery.match(dg_gallery.catalog(dg_gallery.roots(dg_rpg_workshop_root())), plan)
-        return candidate['path'] if candidate and renpy.loadable(candidate['path']) else None
+        for candidate in dg_rpg_cg_candidates(plan):
+            try:
+                verdict = dg_cgvision.cached(dg_rpg_root(), candidate['path'], plan)
+                if verdict and verdict['accepted'] and renpy.loadable(candidate['path']):
+                    return candidate['path']
+            except (IOError, OSError, ValueError):
+                continue
+        return None
+
+    def dg_rpg_cg_candidates(plan):
+        import dg_gallery
+        return dg_gallery.candidates(dg_gallery.catalog(dg_gallery.roots(dg_rpg_workshop_root())), plan)
+
+    def dg_rpg_verify_cg(payload):
+        current = dg_rpg.load(dg_rpg_root(), dg_rpg_state['id'])
+        plan = dg_art.validate_scene_request(current, 'cg', payload)
+        app = dg_runtime.app
+        if not app.models:
+            app.refresh_models()
+        model = dg_backend.default_model(app.models, persistent.dg_model)
+        reasons = []
+        for candidate in dg_rpg_cg_candidates(plan):
+            app.set_status(u'Сверяем иллюстрацию с содержанием сцены…')
+            verdict = dg_cgvision.verify(app.client, candidate['path'], plan, dg_rpg_root(), model)
+            if verdict['accepted']:
+                return candidate['path']
+            reasons.extend(verdict['reasons'])
+        return u'Подходящей иллюстрации не найдено. ' + u' '.join(reasons[:3])
 
     def dg_rpg_cg_for(source, title, description, who=None, action=u""):
         state=dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
@@ -667,6 +710,8 @@ init 1001 python:
 
 default dg_rpg_hybrid_plan = None
 default dg_rpg_state = None
+default dg_cg_vision_attempted = None
+default dg_cg_vision_note = u""
 default dg_rpg_pending_turn = None
 default dg_rpg_focus = None
 default dg_rpg_scene_context = None
@@ -1430,6 +1475,10 @@ screen dg_rpg_hybrid_review(plan):
                     text dg_literal(plan.get("action", u"")[:700] + (u"…" if len(plan.get("action", u"")) > 700 else u"")) style "dg_note_body"
                     if len(plan.get("action", u"")) > 700:
                         text u"Полный текст сохранён. Его можно открыть кнопкой «Изменить текст»." style "dg_note_hint"
+                    if plan.get("interpretation") and plan["interpretation"].get("status") == "ready":
+                        text (u"Сейчас: " + dg_literal(plan["interpretation"]["canonical"])) style "dg_note_body"
+                        for later in plan["interpretation"].get("deferred", []):
+                            text (u"Потом, ещё не выполнено: " + dg_literal(later)) style "dg_note_hint"
                     if plan["status"] != "ready":
                         text dg_literal(plan["message"]) style "dg_note_body"
                     else:
@@ -1518,14 +1567,22 @@ screen dg_rpg_cg_art(plan):
                 add dg_cg_preview_sprite at dg_rpg_portrait_transform xpos 1130 ypos 100
         frame:
             background Solid("#0d2734e8")
-            xpos 115 ypos 470 xsize 1640 ysize 490 padding (43,30)
+            xpos 115 ypos 370 xsize 1640 ysize 590 padding (43,30)
             vbox:
                 spacing 22
                 text u"ИЛЛЮСТРАЦИЯ · CG" style "dg_title" size 43 color "#ffe4a6"
                 text dg_literal(plan["title"]) style "dg_text" size 34 xmaximum 1520
                 text u"Готовой картинки для этого эпизода пока нет. Сцену можно оставить текстовой или сгенерировать изображение отдельно." style "dg_text" size 27 xmaximum 1480
                 text (u"Взрослый CG · локальный ComfyUI" if plan["kind"]=="cg18" else u"Обычный CG · широкий кадр 16:9") style "dg_small" size 24 color "#e3c691"
-                textbutton u"СОЗДАТЬ CG" style "dg_primary" action Return("generate")
+                hbox:
+                    spacing 24
+                    textbutton u"Создать CG" style "dg_camp_action" action Return("generate")
+                    if plan["kind"] == "cg" and dg_rpg_cg_candidates(plan):
+                        textbutton u"Проверить готовые" style "dg_camp_nav" action Return("verify")
+                if dg_cg_vision_note:
+                    viewport:
+                        ysize 85 mousewheel True scrollbars "vertical"
+                        text dg_literal(dg_cg_vision_note) style "dg_small" size 22 xmaximum 1450
                 text (u"ID эпизода: " + plan["key"]) style "dg_small" size 19 color "#afc6cc"
     frame:
         background Solid("#082432db")
@@ -1925,9 +1982,9 @@ screen dg_rpg_world_result(result):
             textbutton u"Создать / посмотреть CG сцены" style "dg_act" action Return("cg")
             textbutton u"Продолжить историю" style "dg_primary" action Return(None)
 
-screen dg_rpg_journal:
+screen dg_rpg_journal(initial_view="timeline"):
     modal True
-    default view = "timeline"
+    default view = initial_view
     add Solid("#142832")
     textbutton u"Вернуться в лагерь" style "dg_note_tab" xpos 1580 ypos 105 action Return(None)
     text u"Дневник смены" style "dg_note_heading" xpos 100 ypos 115 size 52
@@ -1988,7 +2045,10 @@ screen dg_rpg_journal:
                             null height 12
                     elif view == "social":
                         text u"ЖИЗНЬ ЛАГЕРЯ БЕЗ ТЕБЯ" style "dg_note_hint" size 25 color "#e0ce93"
-                        if not dg_rpg_state["social"]["rumours"]:
+                        for item in dg_agents.report(dg_rpg_state)["recent_actions"][::-1]:
+                            text (u"День %d · %s · %s" % (item["day"],dg_rpg.SLOTS[item["slot"]],dg_rpg.NPC_NAMES[item["who"]])) style "dg_note_hint" size 22
+                            text dg_literal(item["text"]) style "dg_note_body" size 25 xmaximum 850
+                        if not dg_rpg_state["social"]["rumours"] and not dg_agents.report(dg_rpg_state)["recent_actions"]:
                             text u"Пока ничего необычного. Новые слухи появляются со временем." style "dg_note_body" size 25
                         for item in dg_rpg_state["social"]["rumours"][::-1]:
                             text (u"День %d" % item["day"]) style "dg_note_hint" size 22
@@ -2024,6 +2084,11 @@ screen dg_rpg_journal:
                 vbox:
                     spacing 13
                     if view == "social":
+                        text u"СОБСТВЕННЫЕ ДЕЛА ПЕРСОНАЖЕЙ" style "dg_note_hint" size 25
+                        for npc, person in sorted(dg_agents.report(dg_rpg_state)["people"].items()):
+                            text (dg_rpg.NPC_NAMES[npc] + u": " + person["goal"]["title"]) style "dg_note_body" size 24 xmaximum 680
+                            text (u"%d/%d · " % (person["goal"]["progress"],person["goal"]["required"]) + {"working":(u"занимается делом" if person["active"] else u"в планах"),"blocked":u"нужна помощь","completed":u"завершено","abandoned":u"план изменён"}[person["goal"]["status"]]) style "dg_note_hint" size 21
+                            text (dg_rpg.PLACE_NAMES.get(dg_rpg.where_is(dg_rpg_state,npc),u"Вне лагеря") + u" · силы: %d" % person["energy"]) style "dg_note_hint" size 21
                         text u"ОТНОШЕНИЯ МЕЖДУ NPC" style "dg_note_hint" size 25 color "#e0ce93"
                         for a, b, initial, caption, description in dg_social.PAIR_DEFS:
                             if dg_rpg_state.get("mystery", {}).get("yulia_discovered", False) or "uv" not in (a, b):
@@ -2571,7 +2636,18 @@ label dg_rpg_hybrid_entry:
         jump dg_rpg_loop
     $ dg_rpg_hybrid_action_text = dg_rpg_hybrid_submission[1]
     $ logging.getLogger("don_gen").info("Hybrid input submitted mode=%s chars=%d",dg_rpg_hybrid_mode,len(dg_rpg_hybrid_action_text))
-    $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who, dg_rpg_hybrid_topic)
+    $ dg_rpg_interpretation = None
+    if dg_intent.needs_ai(dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode):
+        if not dg_runtime.app.client.authenticated():
+            call dg_connect
+            if not dg_runtime.app.client.authenticated():
+                jump dg_rpg_hybrid_entry
+        $ dg_run("chapter", dg_rpg_interpret_action, dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode, dg_rpg_hybrid_who)
+        if dg_runtime.app.error:
+            call screen dg_error
+            jump dg_rpg_hybrid_entry
+        $ dg_rpg_interpretation = dg_runtime.app.result
+    $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who, dg_rpg_hybrid_topic, dg_rpg_interpretation)
     jump dg_rpg_hybrid_review_label
 
 label dg_rpg_hybrid_review_label:
@@ -2617,9 +2693,22 @@ label dg_rpg_hybrid_review_label:
 label dg_rpg_cg_label:
     if dg_cg_plan is None:
         jump dg_rpg_loop
+    if dg_cg_vision_attempted != dg_cg_plan["key"]:
+        $ dg_cg_vision_attempted = dg_cg_plan["key"]
+        $ dg_cg_vision_note = u""
+        if dg_cg_plan["kind"] == "cg" and dg_rpg_cg_status(dg_cg_plan)["status"] == "missing" and dg_rpg_cg_candidates(dg_cg_plan) and dg_runtime.app.client.authenticated():
+            $ dg_run("chapter", dg_rpg_verify_cg, dg_art.freeze_scene_request(dg_cg_plan))
+            $ dg_cg_vision_note = (u"Не удалось проверить картинки: " + dg_runtime.app.error) if dg_runtime.app.error else (u"" if dg_rpg_cg_builtin(dg_cg_plan) else dg_runtime.app.result)
     if dg_rpg_cg_status(dg_cg_plan)["status"] in ("generated","builtin"):
         $ dg_rpg_apply("cg_record",dg_cg_plan)
     call screen dg_rpg_cg_art(dg_cg_plan)
+    if _return == "verify":
+        if not dg_runtime.app.client.authenticated():
+            call dg_connect
+        if dg_runtime.app.client.authenticated():
+            $ dg_run("chapter", dg_rpg_verify_cg, dg_art.freeze_scene_request(dg_cg_plan))
+            $ dg_cg_vision_note = (u"Не удалось проверить картинки: " + dg_runtime.app.error) if dg_runtime.app.error else (u"" if dg_rpg_cg_builtin(dg_cg_plan) else dg_runtime.app.result)
+        jump dg_rpg_cg_label
     if _return == "generate":
         if not dg_art.marker(dg_rpg_state,dg_cg_plan):
             jump dg_rpg_loop
