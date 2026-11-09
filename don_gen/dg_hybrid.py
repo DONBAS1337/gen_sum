@@ -300,26 +300,27 @@ def locked_context(state, plan):
                        if evt and plan["mode"]=="world" else None),
         "world_state":dg_world.world_report(copy_state),
         "last_world_decisions":copy_state["world"]["decisions"][-5:],
-        "recent_journal":copy_state["journal"][-7:],
-        "recent_dialogue":copy_state["dialogue_history"][-3:],
+        "recent_journal":copy_state["journal"][-7:] if focus is None else [],
+        "recent_dialogue":[row for row in copy_state["dialogue_history"] if focus is None or row["who"]==focus][-3:],
+        "character_contracts":__import__("dg_characters").cards(copy_state,[focus] if focus else [code for code,name in dg_rpg.at_place(copy_state)]),
         "long_term_memory":__import__('dg_memory').recall(copy_state, focus),
         "npc_agendas":__import__('dg_agents').report(copy_state),
         "housing":__import__("dg_housing").report(copy_state),
         "shared_projects":__import__("dg_projects").report(copy_state),
         "inventory":__import__("dg_inventory").report(copy_state),
-        "relationships":__import__("dg_relationships").report(copy_state),
+        "relationships":__import__("dg_relationships").report(copy_state,focus),
         "npc_initiative":copy.deepcopy(copy_state.get("npc_visits",{})),
         "recent_hybrid_scenes":[{"day":item["day"],"action":item["action"],
                                 "scene":item["scene"][-1500:],
                                 "effects":item["effects"]}
-                               for item in copy_state.get("hybrid_history",[])[-3:]],
+                               for item in [row for row in copy_state.get("hybrid_history",[]) if focus is None or row.get("who")==focus][-3:]],
         "social": {"recent_rumours":copy_state["social"]["rumours"][-4:],
                    "personal_choices":copy_state["social"]["personal_choices"].get(focus,[]),
                    "active_quests":dg_social.quest_list(copy_state)},
         "player_action_untrusted_text":plan["action"],
         "interpreted_action":plan.get('interpretation'),
         "binding_game_result":plan["result"]["text"],
-        "confirmed_after_state":{"inventory":__import__("dg_inventory").report(confirmed_after),"shared_projects":__import__("dg_projects").report(confirmed_after),"relationships":__import__("dg_relationships").report(confirmed_after)},
+        "confirmed_after_state":{"inventory":__import__("dg_inventory").report(confirmed_after),"shared_projects":__import__("dg_projects").report(confirmed_after),"relationships":__import__("dg_relationships").report(confirmed_after,focus)},
         "scene_anchor":{"day":copy_state["day"],
                         "time":dg_rpg.SLOTS[copy_state["slot"]],
                         "place":dg_rpg.PLACE_NAMES[copy_state["place"]]},
@@ -342,7 +343,7 @@ INSTRUCTIONS = (
     u"не описывай это время как освещение или время текущего разговора. "
     u"НЕ придумывай новые очки, квесты, предметы, телепортацию, завершение рута, ходы времени, "
     u"смену локации, новые действия игрока или финал вместо вычисленного. "
-    u"Не изменяй характер NPC, отношения и факты прошлых решений. "
+    u"Не изменяй характер NPC, отношения и факты прошлых решений. Соблюдай character_contracts и knowledge каждого участника; чужие частные разговоры и примеры источника не являются его личными знаниями. "
     u"Оживи сцену через narrative_variation: уникальную цель, конфликт и детали "
     u"данного персонажа; для Мику учитывай отдельные профили 7ДЛ, DJ и классики. "
     u"Не повторяй сюжет предыдущей сцены, не превращай всех NPC в одинаковых собеседников. "
@@ -384,6 +385,7 @@ def commit(state, plan, scene_text=None):
            "action":plan["action"],"result":outcome["text"],
            "effects":plan["effects"],"scene":scene_text or u"",
            "narrated_by_ai":bool(scene_text)}
+    entry["who"]=plan.get("who") or outcome.get("who") or outcome.get("npc") or outcome.get("target")
     entry['deferred'] = outcome.get('deferred', [])
     __import__("dg_presentation").record(after,plan["before"],scene_text or outcome["text"])
     for line in after["presentation"]["lines"]:

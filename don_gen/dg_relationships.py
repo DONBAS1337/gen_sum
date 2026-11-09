@@ -19,8 +19,11 @@ ACTIVITY_NAMES={'music':u'музыка','repair':u'техника','read':u'чт
 
 def ensure(state): return state.setdefault('relationships',{'people':{},'promises':[]})
 def person(state,who): return ensure(state)['people'].setdefault(who,{'trust':0,'tension':0,'home_visits':True,'invitations':True,'last_apology':None})
-def report(state):
+def report(state,who=None):
     result=copy.deepcopy(state.get('relationships',{}));result['preferences']=copy.deepcopy(PREFERENCES)
+    if who is not None:
+        result['people']=dict((code,value) for code,value in result.get('people',{}).items() if code==who)
+        result['promises']=[row for row in result.get('promises',[]) if row['who']==who]
     return result
 
 def promise(state,who,key):

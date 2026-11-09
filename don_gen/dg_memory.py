@@ -32,6 +32,10 @@ def record(state, key, action, result, scene, who=None, origin=None, spawn_threa
     row = {'id':key, 'day':origin['day'], 'slot':origin['slot'], 'place':origin['place'],
            'who':who, 'intention':action[:500], 'confirmed_result':result[:700],
            'narrated_scene':dg_stage.readable(scene)[:900]}
+    private=bool(re.search(u'наедине|ш[её]потом|личн|не рассказывай|между нами',action.lower()))
+    row['witnesses']=([who] if who else []) if private else [code for code,name in __import__('dg_rpg').at_place(origin)]
+    if who and who not in row['witnesses']:row['witnesses'].append(who)
+    row['public']=False if private else (origin['place'] in ('stage','radio','square') and (state.get('world',{}).get('decisions')!=origin.get('world',{}).get('decisions') or any(record['stage']==4 and origin.get('projects',{}).get('records',{}).get(key,{}).get('stage',0)<4 for key,record in state.get('projects',{}).get('records',{}).items())))
     row['deferred'] = list(deferred or [])
     memory['episodes'].append(row)
     memory['episodes'] = memory['episodes'][-96:]
@@ -57,13 +61,14 @@ def record(state, key, action, result, scene, who=None, origin=None, spawn_threa
         memory['threads'].append({'id':ident, 'topic':subject, 'who':who,
                                   'place':origin['place'], 'day':origin['day'],
                                   'title':LABELS[subject], 'intention':action[:300],
-                                  'status':'open', 'attempts':0})
+                                  'status':'open', 'attempts':0,'witnesses':copy.deepcopy(row['witnesses']),'public':row['public']})
         memory['threads'] = memory['threads'][-48:]
 
 
 def recall(state, who=None):
     memory = state.get('story_memory', {})
-    episodes = memory.get('episodes', [])
+    known=lambda row:who is None or row.get('who')==who or who in row.get('witnesses',[]) or row.get('public',False)
+    episodes = [row for row in memory.get('episodes',[]) if known(row)]
     relevant = [row for row in episodes if (who and row.get('who') == who)
                 or row['place'] == state['place']]
     rows = relevant[-5:] + episodes[-3:]
@@ -71,11 +76,12 @@ def recall(state, who=None):
     for row in rows:
         if row['id'] not in [item['id'] for item in unique]:
             unique.append(copy.deepcopy(row))
-    return {'relevant_episodes':unique, 'people':copy.deepcopy(memory.get('people', {})),
-            'milestones':copy.deepcopy(memory.get('milestones', [])[-8:]),
+    return {'relevant_episodes':unique, 'people':copy.deepcopy(dict((code,person) for code,person in memory.get('people',{}).items() if who is None or code==who)),
+            'milestones':copy.deepcopy([row for row in memory.get('milestones',[]) if known(row)][-8:]),
             'open_threads':copy.deepcopy([row for row in memory.get('threads', [])
-                                         if row['status'] == 'open'][-8:]),
-            'rule':u'Намерения и реплики не доказывают достижения. Только confirmed_result — механический исход; narrated_scene — запись прежнего рассказа.'}
+                                         if row['status'] == 'open' and known(row)][-8:]),
+            'knowledge_owner':who,
+            'rule':u'Личная память отфильтрована по свидетелям и публичным фактам. Отсутствующий NPC не знает частного разговора. Намерения и реплики не доказывают достижения. Только confirmed_result — механический исход; narrated_scene — запись прежнего рассказа.'}
 
 
 def validate(state):
@@ -99,6 +105,7 @@ def validate(state):
         for field, limit in (('intention',500), ('confirmed_result',700), ('narrated_scene',900)):
             if not isinstance(row.get(field), (str, type(u''))) or len(row[field]) > limit:
                 raise ValueError('Invalid remembered text')
+        if not isinstance(row.get('witnesses',[]),list) or len(row.get('witnesses',[]))>11 or any(code not in dg_rpg.NPC_NAMES for code in row.get('witnesses',[])) or not isinstance(row.get('public',False),bool):raise ValueError('Invalid memory witnesses')
         deferred = row.get('deferred', [])
         if not isinstance(deferred,list) or len(deferred)>3 or any(not isinstance(item,(str,type(u''))) or len(item)>250 for item in deferred):
             raise ValueError('Invalid deferred intentions')
@@ -132,13 +139,14 @@ def opportunity(state):
     if dg_world.weather(state)[0] == 'rain' and place in ('stage','square','gate','beach','lake','forest','forest_path','sports','campfire','outdoor_stage') and who != 'uv':
         place = 'music' if who in ('mi','dv','us') else 'library' if who in ('un','mz') else 'canteen'
         moved = u' Из-за дождя встречу перенесли под крышу: %s.' % dg_rpg.PLACE_NAMES[place]
+    introduction=(u' Подробности личной инициативы героя ещё не известны собеседнику; сначала герой должен рассказать о ней.' if not (thread.get('who')==who or who in thread.get('witnesses',[]) or thread.get('public')) else u'')
     return {'id':'%d:thread:%s' % (state['day'], thread['id']), 'day':state['day'],
             'arc':'daily', 'stage':0, 'place':place, 'npc':who, 'thread_id':thread['id'],
             'title':thread['title'],
             'story':(u'Продолжение твоего поступка из дня %d: «%s». %s готовит следующий шаг. '
                      u'Предыдущий разговор не решил всё за один раз: теперь можно продолжить дело, '
                      u'разобраться в затруднении или предложить другой путь. Не считай прежнее намерение уже выполненной работой.') %
-                    (thread['day'], thread['intention'], dg_rpg.NPC_NAMES[who]) + moved}
+                    (thread['day'], thread['intention'], dg_rpg.NPC_NAMES[who]) + moved + introduction}
 
 
 def resolve(state, event, choice):

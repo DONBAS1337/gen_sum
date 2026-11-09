@@ -630,7 +630,7 @@ def _query_terms(query):
     return expanded
 
 
-def query(index, text, route=None, day=None, characters=None, limit=8, day_window=None):
+def query(index, text, route=None, day=None, characters=None, limit=8, day_window=None, max_day=None):
     terms = _query_terms(text)
     chars = set(characters or [])
     docs = index.get("scenes", [])
@@ -659,6 +659,8 @@ def query(index, text, route=None, day=None, characters=None, limit=8, day_windo
         if day is not None and day_window is not None and scene.get("day") is not None:
             if abs(int(day) - int(scene["day"])) > int(day_window):
                 continue
+        if max_day is not None and (scene.get("day") is None or int(scene["day"])>int(max_day)):
+            continue
         score = 0.0
         raw = (scene.get("label", "") + " " + scene.get("story_text", "")).lower()
         for term in terms:
@@ -855,7 +857,7 @@ def load_or_build(root, cache_dir):
     return index
 
 
-def source_context(root, cache_dir, route, query_text, mode="anchored", day=None, max_chars=24000, limit=8):
+def source_context(root, cache_dir, route, query_text, mode="anchored", day=None, max_chars=24000, limit=8, characters=None, voices_only=False):
     """Return non-executable 7DL reference prose for one GS generation."""
     if route not in ROUTE_PROFILES:
         raise ValueError("Unknown 7DL route: %s" % route)
@@ -863,8 +865,22 @@ def source_context(root, cache_dir, route, query_text, mode="anchored", day=None
         mode = "anchored"
     index = load_or_build(root, cache_dir)
     query_day = day if mode == "anchored" else None
-    hits = query(index, query_text, route=route, day=query_day, characters=["mi"], limit=limit,
-                 day_window=1 if query_day is not None else None)
+    hits = query(index, query_text, route=route, day=query_day, characters=characters or ["mi"], limit=(max(limit*4,16) if voices_only else limit),
+                 day_window=1 if query_day is not None else None,max_day=day if voices_only else None)
+    if voices_only:
+        actors=set(characters or ['mi']);rows=[]
+        for hit in hits:
+            scene=hit['scene']
+            for line in scene.get('story_text',u'').splitlines():
+                if ':' not in line:continue
+                actor,text=line.split(':',1)
+                if actor not in actors or not 15<=len(text)<=260 or re.search(u'люблю|поцел|интим|обнаж|свад|навсегда',text.lower()):continue
+                rows.append({'who':actor,'text':text.strip(),'label':scene['label'],'day':scene['day'],'file':scene['file']})
+                if len(rows)>=limit*2:break
+            if len(rows)>=limit*2:break
+        result={'source':'7dl:'+route,'usage':'voice_reference_only','examples':rows,'rule':u'Образцы речи, не факты текущей смены. Не цитировать и не переносить отношения или знания исходного героя.'}
+        while rows and len(json.dumps(result,ensure_ascii=False))>max_chars:rows.pop()
+        return json.dumps(result,ensure_ascii=False)
     return render_context(index, hits, route=route, mode=mode, current_day=day, max_chars=max_chars)
 
 
@@ -915,3 +931,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+

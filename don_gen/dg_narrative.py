@@ -160,13 +160,14 @@ def context(state, kind, who=None, identity=None, moment=None):
         "day":state["day"],"slot":time,"time_of_day":dg_rpg.SLOTS[time],
         "place":dg_rpg.PLACE_NAMES[state["place"]],
         "source":source,"route_style":STYLE_PROFILES.get(source,STYLE_PROFILES["vanilla"]),
+        "character_contracts":__import__("dg_characters").cards(state,[who] if who else [code for code,name in dg_rpg.at_place(state)]),
         "who":who,"persona":(persona[:2] if persona else None),
         "present_people": [(code, name) for code, name in dg_rpg.at_place(state)],
         "relationship":state["affinity"].get(who,0) if who else None,
         "motivation":motif,"physical_detail":detail,"unexpected_twist":twist,
-        "character_hook":hook,"recent_journal":copy.deepcopy(recent),
+        "character_hook":hook,"recent_journal":copy.deepcopy(recent) if who is None else [],
         "recent_decisions":copy.deepcopy(recent_decisions),
-        "recent_conversations":copy.deepcopy(state.get("dialogue_history",[])[-4:]),
+        "recent_conversations":copy.deepcopy([row for row in state.get("dialogue_history",[]) if who is None or row["who"]==who][-4:]),
         "world":copy.deepcopy(state.get("world",{}).get("preparations",{})),
         "social_bonds":copy.deepcopy(state.get("social",{}).get("bonds",{})),
         "long_term_memory":__import__('dg_memory').recall(state, who),
@@ -174,7 +175,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "housing":__import__("dg_housing").report(state),
         "shared_projects":__import__("dg_projects").report(state),
         "inventory":__import__("dg_inventory").report(state),
-        "relationships":__import__("dg_relationships").report(state),
+        "relationships":__import__("dg_relationships").report(state,who),
         "npc_initiative":copy.deepcopy(state.get("npc_visits",{})),
         "weather":dg_world.weather(state)[1]
     }
@@ -305,7 +306,8 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
            u"УЧИТЫВАЙ указанные различия профилей 7ДЛ Мику, не перемешивай "
            u"маршруты mi_7dl, mi_dj, mi_cl. "
            u"Если предоставлен исходный контекст 7ДЛ, используй только "
-           u"факты и характер, НЕ цитируй и не пересказывай близко оригинальные реплики. "
+           u"манеру речи и характер, НЕ переносить события источника в текущую историю, НЕ цитируй и не пересказывай близко оригинальные реплики. "
+           u"Характеры соблюдай по character_contracts; личные воспоминания NPC ограничены его knowledge. Справочные примеры источника не являются его воспоминаниями и не подтверждают события текущей истории. "
            u"Важно: локальный движок уже закрепил персонажей, локацию, время, "
            u"события прошлого и возможные варианты выбора. "
            u"НЕ придумывай завершённые действия игрока, последствия, очки отношений, "

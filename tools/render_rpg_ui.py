@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -204,6 +204,7 @@ init 1100 python:
         plan = dg_hybrid.preview(store.dg_rpg_state, store.dg_rpg_action_draft)
         cases = [("hub", "dg_rpg_hub", {}), ("controls", "dg_rpg_controls", {}), ("setup", "dg_rpg_setup", {}),
                  ("input", "dg_rpg_hybrid_input", {"mode":"free"}),
+                 ("editor", "dg_rpg_edit_field", {"field":"history", "current":u"Биография"}),
                  ("review", "dg_rpg_hybrid_review", {"plan":plan}),
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
@@ -331,6 +332,46 @@ init 1100 python:
                     if d.width <= 0 or d.height <= 0:
                         raise ValueError(filename + ": empty viewport")
             displayable.visit_all(debug_viewport)
+            if filename in ("input", "editor"):
+                # Synthetic clipboard, never reads or writes the user's clipboard.
+                inputs = []
+                displayable.visit_all(lambda d: inputs.append(d) if isinstance(d, renpy.display.behavior.Input) else None)
+                if len(inputs) != 1:
+                    raise ValueError("Expected one production input")
+                widget = inputs[0]
+                old_get = pygame.scrap.get
+                try:
+                    pygame.scrap.get = lambda kind: u"Проверка вставки".encode("utf-8")
+                    widget.editable = True
+                    widget.update_text(u"Начало конец", True)
+                    widget.caret_pos = 7
+                    event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_v, mod=pygame.KMOD_CTRL, unicode=u'v', repeat=False)
+                    try:
+                        widget.event(event, 0, 0, .3)
+                    except renpy.display.core.IgnoreEvent:
+                        pass
+                    if widget.content != u"Начало Проверка вставкиконец":
+                        raise ValueError("Ctrl+V failed at caret: " + repr(widget.content))
+                    pygame.scrap.get = lambda kind: (u"я" * 9000).encode("utf-8")
+                    try:
+                        widget.event(event, 0, 0, .3)
+                    except renpy.display.core.IgnoreEvent:
+                        pass
+                    if len(widget.content) != (8000 if filename == "editor" else 4000):
+                        raise ValueError("Paste length limit failed")
+                    before = widget.content
+                    wheel = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=4, pos=(0,0), mod=0, repeat=False)
+                    try:
+                        displayable.event(wheel, 0, 0, .3)
+                    except renpy.display.core.IgnoreEvent:
+                        pass
+                    else:
+                        raise ValueError("Rollback wheel escaped input screen")
+                    if widget.content != before:
+                        raise ValueError("Wheel changed draft")
+                    print("Checked Ctrl+V at caret, field length limit and rollback wheel")
+                finally:
+                    pygame.scrap.get = old_get
             pygame.image.save(surface, os.path.join(config.basedir, filename + ".png"))
             print("Rendered " + filename)
         return False

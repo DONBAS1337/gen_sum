@@ -321,16 +321,30 @@ init 1001 python:
             "Hybrid preview mode=%s day=%d valid=%s", mode, current["day"],
             plan["status"] == "ready")
 
+    def dg_rpg_voice_reference(state,who,query):
+        if state['source']!=dg_bkrr.SOURCE:return None
+        try:
+            import dg_source_bkrr
+            root=dg_bkrr.find_root(config.gamedir,dg_rpg_workshop_root())
+            people=([who] if who in dg_rpg.NPC_NAMES else [code for code,name in dg_rpg.at_place(state)])
+            result=dg_source_bkrr.context(root,people,query,state['day'])
+            result['available']=bool(root)
+            return result
+        except (IOError,OSError,ValueError,UnicodeError):
+            logging.getLogger('don_gen').warning('BKRR voice references unavailable')
+            return {'source':'БКРР','available':False,'examples':[]}
+
     def dg_rpg_hybrid_generate(plan):
         # The background worker ONLY generates a text string. No save writes.
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         instructions, prompt = dg_hybrid.build_request(current, plan)
         context = json.loads(prompt)
         context['visual_scene_facts'] = dg_rpg_visual_brief(current)
+        context['voice_reference']=dg_rpg_voice_reference(current,plan.get('who'),plan['action'])
         prompt = json.dumps(context, ensure_ascii=False, sort_keys=True)
         app = dg_runtime.app
         # The 7DL source is read-only reference context, never executed.
-        if current["source"].startswith("7dl:") and plan.get("who") == "mi":
+        if current["source"].startswith("7dl:"):
             root=(app.catalog.get("source_roots") or {}).get("7dl")
             if root and os.path.isdir(root):
                 try:
@@ -338,9 +352,9 @@ init 1001 python:
                     raw=dg_source_7dl.source_context(
                         root,os.path.join(dg_rpg_root(),"_source_cache"),
                         current["source"].split(":",1)[1],
-                        u"Мику "+plan["action"][:190],mode="divergent",
+                        dg_rpg.NPC_NAMES.get(plan.get("who"),u"Лагерь")+u" "+plan["action"][:190],mode="divergent",
                         day=(current["day"] if current["day"]<=7 else 7),
-                        limit=3,max_chars=5200)
+                        limit=3,max_chars=5200,voices_only=True,characters=([plan["who"]] if plan.get("who") else dg_stage.freeze(current)["present"]))
                     context=json.loads(prompt)
                     context["reference_7dl_source"]=raw
                     prompt=json.dumps(context,ensure_ascii=False,sort_keys=True)
@@ -373,7 +387,7 @@ init 1001 python:
         ref=u""
         # Use the actual installed 7DL route text when available. If no 7DL
         # resources exist, the route-specific persona profile still applies.
-        if who=="mi" and state["source"].startswith("7dl:"):
+        if state["source"].startswith("7dl:"):
             root=(app.catalog.get("source_roots") or {}).get("7dl")
             if root and os.path.isdir(root):
                 try:
@@ -381,9 +395,9 @@ init 1001 python:
                     ref=dg_source_7dl.source_context(
                         root,os.path.join(dg_rpg_root(),"_source_cache"),
                         state["source"].split(":",1)[1],
-                        dg_rpg.NPC_NAMES[who]+u" "+story[:160],
+                        dg_rpg.NPC_NAMES.get(who,u"Лагерь")+u" "+story[:160],
                         mode="divergent",day=(state["day"] if state["day"]<=7 else 7),
-                        limit=3,max_chars=5200)
+                        limit=3,max_chars=5200,voices_only=True,characters=([who] if who else dg_stage.freeze(state)["present"]))
                 except (IOError,OSError,ValueError,TypeError):
                     logging.getLogger("don_gen").warning(
                         "7DL context unavailable for auto scene",exc_info=True)
@@ -391,6 +405,7 @@ init 1001 python:
             state,kind,who,identity,story,choices=choices,source_reference=ref)
         context = json.loads(prompt)
         context['visual_scene_facts'] = dg_rpg_visual_brief(state)
+        context['voice_reference']=dg_rpg_voice_reference(state,who,story)
         present=dg_stage.freeze(state,who)['present']
         if kind in ('result','npc_result') and dg_rpg_scene_context is not None:
             present=list(dg_rpg_scene_context['present'])
@@ -730,6 +745,7 @@ init 1001 python:
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         context = dg_rpg.summary_for_ai(state, who, intent)
         context["narrative_direction"] = dg_narrative.context(state, "special", who, intent)
+        context["voice_reference"]=dg_rpg_voice_reference(state,who,intent)
         context['visual_scene_facts'] = dg_rpg_visual_brief(state)
         app = dg_runtime.app
         if state["source"].startswith("7dl:"):
@@ -742,7 +758,7 @@ init 1001 python:
                         state["source"].split(":", 1)[1],
                         dg_rpg.NPC_NAMES[who] + u" " + intent,
                         mode="divergent", day=(state["day"] if state["day"] <= 7 else 7),
-                        limit=3, max_chars=7000)
+                        limit=3, max_chars=7000,voices_only=True,characters=[who])
                 except (IOError, OSError, ValueError, TypeError):
                     pass
         if not app.models:
@@ -878,6 +894,8 @@ style dg_rpg_edit_input is dg_ink_input:
 
 screen dg_rpg_edit_field(field, current):
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default editor_text = current
     $ title = {"name": u"Имя героя", "age": u"Возраст героя", "days": u"Дней в смене", "history": u"Предыстория героя"}[field]
     $ tip = {"name": u"Как к тебе будут обращаться другие пионеры? До 100 символов.",
@@ -908,6 +926,7 @@ screen dg_rpg_edit_field(field, current):
                 ysize (160 if field == "history" else 128)
                 if field == "age":
                     input:
+                        copypaste True
                         value ScreenVariableInputValue("editor_text")
                         allow "0123456789"
                         length 9
@@ -916,6 +935,7 @@ screen dg_rpg_edit_field(field, current):
                         default_focus True
                 elif field == "days":
                     input:
+                        copypaste True
                         value ScreenVariableInputValue("editor_text")
                         allow "0123456789"
                         length 3
@@ -924,6 +944,7 @@ screen dg_rpg_edit_field(field, current):
                         default_focus True
                 elif field == "name":
                     input:
+                        copypaste True
                         value ScreenVariableInputValue("editor_text")
                         length 100
                         xmaximum 1220
@@ -931,6 +952,7 @@ screen dg_rpg_edit_field(field, current):
                         default_focus True
                 else:
                     input:
+                        copypaste True
                         value ScreenVariableInputValue("editor_text")
                         length 8000
                         xmaximum 1220
@@ -1159,6 +1181,8 @@ screen dg_rpg_map:
 
 screen dg_rpg_places:
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default place_query = u""
     add Solid("#0b2029")
     text u"Куда пойдём?" style "dg_rpg_heading" xpos 80 ypos 54
@@ -1166,6 +1190,7 @@ screen dg_rpg_places:
     frame:
         background Solid("#193840") xpos 80 ypos 174 xsize 1760 ysize 84 padding (20, 16)
         input:
+            copypaste True
             value ScreenVariableInputValue("place_query") style "dg_rpg_edit_input"
             length 80 xmaximum 1680 default_focus True
     viewport:
@@ -1570,6 +1595,8 @@ screen dg_rpg_controls(initial_tab="story"):
 
 screen dg_rpg_hybrid_input(mode, who=None):
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default action_text = dg_rpg_action_draft
     add dg_rpg_bg()
     add Solid("#07191490")
@@ -1595,6 +1622,7 @@ screen dg_rpg_hybrid_input(mode, who=None):
                         side_spacing 12
                         xsize 1332 ysize 390 mousewheel True scrollbars "vertical"
                         input:
+                            copypaste True
                             value ScreenVariableInputValue("action_text")
                             style "dg_note_input"
                             length 4000
@@ -1782,6 +1810,8 @@ screen dg_rpg_hybrid_read(entry):
 
 screen dg_rpg_free_input:
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default action_text = u""
     add dg_rpg_bg()
     add Solid("#041725ee")
@@ -1798,6 +1828,7 @@ screen dg_rpg_free_input:
                 padding (24, 20)
                 xsize 1350 ysize 146
                 input:
+                    copypaste True
                     value ScreenVariableInputValue("action_text")
                     style "dg_rpg_edit_input"
                     length 4000
@@ -2351,6 +2382,8 @@ transform dg_rpg_portrait_transform:
 
 screen dg_rpg_ai_input(who):
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default intent = u"Хочу побеседовать и узнать персонажа получше"
     add Solid("#0a1823d9")
     frame:
@@ -2360,7 +2393,7 @@ screen dg_rpg_ai_input(who):
             spacing 22
             text (u"Особая сцена: " + dg_rpg.NPC_NAMES[who]) style "dg_ink_title"
             text u"Опишите действие или тему разговора. Только этот запрос вызовет LLM." style "dg_ink_small"
-            input value ScreenVariableInputValue("intent") style "dg_ink_input" length 500 xmaximum 940
+            input value ScreenVariableInputValue("intent") style "dg_ink_input" length 500 xmaximum 940 copypaste True
             hbox:
                 spacing 35
                 textbutton u"Сгенерировать" style "dg_ink_act" sensitive bool(intent.strip()) action Return(intent.strip())
@@ -3123,6 +3156,8 @@ screen dg_rpg_inventory:
 
 screen dg_rpg_project_request:
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default idea=dg_project_draft
     add Solid("#101923f5")
     frame:
@@ -3134,12 +3169,12 @@ screen dg_rpg_project_request:
             text u"ИИ предложит тему и участников. Материалы, места и этапы проверит движок; проект появится только после твоего выбора." size 24 color "#A9B9C6" xmaximum 1460
             frame:
                 background Solid("#243441") padding (20,18) xsize 1460 ysize 180
-                input value ScreenVariableInputValue("idea") length 500 color "#F2E4BB" size 24 xmaximum 1390
+                input value ScreenVariableInputValue("idea") length 500 color "#F2E4BB" size 24 xmaximum 1390 copypaste True
             hbox:
                 spacing 20
                 textbutton u"Предложить вариант" style "dg_camp_action" sensitive bool(idea.strip()) action Return(idea.strip())
-                textbutton u"Назад" style "dg_camp_nav" action Return(None)
-    key "K_ESCAPE" action Return(None)
+                textbutton u"Назад" style "dg_camp_nav" action [SetVariable("dg_project_draft",idea),Return(None)]
+    key "K_ESCAPE" action [SetVariable("dg_project_draft",idea),Return(None)]
 
 screen dg_rpg_project_review(proposal):
     modal True

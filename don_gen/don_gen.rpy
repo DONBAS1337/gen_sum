@@ -669,6 +669,8 @@ screen dg_home():
 
 screen dg_new():
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     default premise = ""
     use dg_chrome(u"НОВАЯ ИСТОРИЯ", Return(""))
     vbox:
@@ -700,6 +702,7 @@ screen dg_new():
                     scrollbars "vertical"
                     style_prefix "dg_paper"
                     input:
+                        copypaste True
                         value ScreenVariableInputValue("premise")
                         style "dg_ink_input"
                         length 4000
@@ -753,6 +756,8 @@ screen dg_source_select():
 
 screen dg_choice_input():
     modal True
+    key "rollback" action NullAction()
+    key "rollforward" action NullAction()
     key "game_menu" action Return("")
     key ["K_RETURN", "K_KP_ENTER"] action If(bool(dg_custom_choice.strip()), Return(dg_custom_choice.strip()), NullAction())
     add Solid("#00000080")
