@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -209,6 +209,48 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") == "party":
+            state=store.dg_rpg_state
+            state['source']='bkrr:mi'
+            state['place']='music'
+            state['slot']=1
+            state['social']['incident'].update(pair=['mi','dv'],place='music',status='open',day=state['day'])
+            present=[who for who,name in dg_rpg.at_place(state)]
+            visible=dg_stage.cast([],present,'mi')
+            if not all(who in [actor for actor,x in dg_stage.positions(visible,'mi')] for who in ('mi','dv')):
+                raise ValueError("Nearby actors missing from hub")
+            for actor in ('mi','dv'):
+                if dg_rpg_sprite(actor) is None: raise ValueError("Actual sprite missing: "+actor)
+            # Execute production audio direction with real archive paths. Capture
+            # scheduling instead of accessing speakers in the headless renderer.
+            audio_api=dg_rpg_audio_sync.func_globals['renpy']
+            methods=('play','stop','get_pause','set_pause')
+            original=dict((name,getattr(audio_api.music,name)) for name in methods)
+            calls=[]
+            try:
+                audio_api.music.play=lambda path,**kw:calls.append((path,kw))
+                audio_api.music.stop=lambda **kw:None
+                audio_api.music.get_pause=lambda **kw:False
+                audio_api.music.set_pause=lambda *args,**kw:None
+                store.dg_rpg_audio_pauses=None
+                dg_rpg_audio_sync('mi')
+                if len(calls)!=2 or not all(audio_api.loadable(path) for path,kw in calls):
+                    raise ValueError("Production audio could not resolve music and atmosphere")
+                if not all(kw.get('if_changed') and kw.get('loop') for path,kw in calls):
+                    raise ValueError("Audio would restart on each dialogue")
+                dg_rpg_audio_stop()
+                if store.dg_rpg_audio_pauses is not None:raise ValueError("Host channels not restored")
+                print("Checked production audio: actual music and ambience files; host channel restoration")
+            finally:
+                for name,value in original.items():setattr(audio_api.music,name,value)
+            import dg_source_bkrr
+            donor=os.path.join(os.path.dirname(workshop_root),'451835368') if workshop_root else None
+            if donor and os.path.isdir(donor):
+                samples=dg_source_bkrr.context(donor,['mi','dv'],u'музыка',4)['examples']
+                if not samples:raise ValueError("BKRR source reader failed in actual RenPy runtime")
+                print("Checked BKRR text reader in actual RenPy runtime: "+str(len(samples))+" references")
+            store.dg_rpg_scene_context=dg_stage.freeze(state)
+            cases=[("party","dg_rpg_hub",{})]
         if os.environ.get("DG_UI_SCREEN") == "visit":
             store.dg_rpg_state['source']='vanilla'
             store.dg_rpg_state['social']['incident']['status']='resolved'

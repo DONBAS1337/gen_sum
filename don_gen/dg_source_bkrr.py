@@ -25,8 +25,8 @@ def load(root):
     rows=[]
     for path,day,size,mtime in paths:
         label='';expression={}
-        with io.open(path,'r',encoding='utf-8-sig') as handle:
-            for number,line in enumerate(handle,1):
+        with open(path,'rb') as handle:
+            for number,line in enumerate(handle.read().decode('utf-8','replace').lstrip(u'\ufeff').splitlines(),1):
                 if len(line)>4096:continue
                 heading=re.match(r'^label\s+([a-zA-Z0-9_]+):',line)
                 if heading:label=heading.group(1)

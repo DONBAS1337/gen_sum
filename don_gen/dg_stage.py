@@ -159,6 +159,10 @@ def cast(turns, present=(), focus=None):
     for who in present:
         if who in NAMES and who not in result and re.search(r"(?<!\w)" + NAMES[who] + r"(?!\w)", text):
             result.append(who)
+    # Everyone physically present remains visible, including silent listeners.
+    for who in present:
+        if who in NAMES and who not in result:
+            result.append(who)
     return result
 
 

@@ -27,9 +27,56 @@ init 1001 python:
     import dg_relationships
     import dg_presentation
     import dg_consistency
+    import dg_conversation
+    import dg_audio
     import dg_intent
     import dg_cgvision
     import dg_bkrr
+
+    def dg_rpg_audio_sync(who=None):
+        if store.dg_rpg_audio_pauses is None:
+            store.dg_rpg_audio_pauses=[(ch,renpy.music.get_pause(channel=ch)) for ch in ("music","ambience")]
+            for ch,paused in store.dg_rpg_audio_pauses:
+                renpy.music.set_pause(True,channel=ch)
+        context = dg_rpg_scene_context if dg_rpg_stage_active else None
+        audio_state = dict(dg_rpg_state)
+        if context:
+            for field in ("place","slot","day"):
+                audio_state[field] = context[field]
+        direction = dg_audio.plan(audio_state,who)
+        # Separate DG channels obey the host music/SFX mixers and do not restart.
+        for channel, group, volume, enabled in (("dg_theme","music",.35,persistent.dg_rpg_music),("dg_nature","ambience",.5,persistent.dg_rpg_ambience)):
+            choices = dict(dg_runtime.app.catalog.get(group,{}) or {})
+            for key in direction[group]:
+                if key not in choices:
+                    folder="music" if group=="music" else "ambiences"
+                    basename=key if group=="music" else key[len("ambience_"):]
+                    path="sound/"+folder+"/"+basename+".ogg"
+                    if renpy.loadable(path): choices[key]=path
+            path = dg_audio.resolve(choices,direction[group],renpy.loadable) if enabled else None
+            if path:
+                renpy.music.play(path,channel=channel,loop=True,fadein=1.5,fadeout=1.2,if_changed=True,relative_volume=volume)
+            else:
+                renpy.music.stop(channel=channel,fadeout=1.2)
+
+    def dg_rpg_audio_stop():
+        if store.dg_rpg_audio_pauses is not None:
+            for ch,paused in store.dg_rpg_audio_pauses:
+                renpy.music.set_pause(paused,channel=ch)
+            store.dg_rpg_audio_pauses=None
+        for channel in ("dg_theme","dg_nature"):
+            renpy.music.stop(channel=channel,fadeout=1.0)
+
+    def dg_rpg_move_sound(before,after):
+        if not persistent.dg_rpg_effects: return
+        keys = dg_audio.movement(before,after)
+        choices = dict(dg_runtime.app.catalog.get("sounds",{}) or {})
+        for key in keys:
+            if key not in choices:
+                path="sound/sfx/"+key[len("sfx_"):]+".ogg"
+                if renpy.loadable(path): choices[key]=path
+        path=dg_audio.resolve(choices,keys,renpy.loadable)
+        if path: renpy.music.play(path,channel="sound")
 
     def dg_rpg_notice_board():
         root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
@@ -154,8 +201,12 @@ init 1001 python:
             state = pending["state"]
         if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous", "visit", "project", "relation", "inventory"):
             store.dg_rpg_scene_context = dg_stage.freeze(state)
-        if action == "move":
+        if action == "end_conversation":
+            dg_conversation.end(state)
+        elif action == "move":
+            before_place=state["place"]
             dg_rpg.move(state, arg)
+            dg_rpg_move_sound(before_place,state["place"])
         elif action == "talk":
             dg_rpg.activity(state, "talk", arg)
         elif action == "route":
@@ -845,6 +896,10 @@ default dg_rpg_focus = None
 default dg_rpg_scene_context = None
 default dg_rpg_stage_active = False
 default dg_rpg_actor_moods = {}
+default dg_rpg_audio_pauses = None
+default persistent.dg_rpg_music = True
+default persistent.dg_rpg_ambience = True
+default persistent.dg_rpg_effects = True
 default dg_rpg_visual_cast = None
 
 screen dg_rpg_picker:
@@ -1385,6 +1440,8 @@ screen dg_rpg_hub(initial_show=True):
     $ shift_open = not dg_rpg_state["finished"]
     $ selected_who = inhabitants[selected_person % len(inhabitants)][0] if inhabitants else None
     $ visible_cast = dg_stage.cast([], [item[0] for item in inhabitants], selected_who)
+    on "show" action Function(dg_rpg_audio_sync,selected_who)
+    on "replace" action Function(dg_rpg_audio_sync,selected_who)
     add dg_rpg_bg()
     for actor, actor_x in dg_stage.positions(visible_cast,selected_who):
         $ actor_image = dg_rpg_sprite(actor,"normal","normal")
@@ -1418,7 +1475,7 @@ screen dg_rpg_hub(initial_show=True):
                     button:
                         style "dg_camp_nav" xsize 58 xminimum 58 ysize 62 padding (3,3)
                         selected selected_who==pair[0]
-                        action SetScreenVariable("selected_person",index)
+                        action [SetScreenVariable("selected_person",index),Function(dg_rpg_audio_sync,pair[0])]
                         $ portrait = dg_rpg_sprite(pair[0],"normal","normal")
                         if portrait is not None:
                             add portrait xysize (50,58) fit "cover" crop (250,120,400,450)
@@ -1427,6 +1484,8 @@ screen dg_rpg_hub(initial_show=True):
             text dg_presentation.status(dg_rpg_state,selected_who) xpos 90 ypos 808 size 20 color "#A9B9C6"
         hbox:
             xalign .5 ypos 838 spacing 14
+            if dg_conversation.rounds(dg_rpg_state) and shift_open:
+                textbutton (u"Завершить беседу · %d/%d" % (dg_conversation.rounds(dg_rpg_state),dg_conversation.EXCHANGES)) style "dg_camp_nav" action Return(("end_conversation",None))
             if inhabitants and shift_open:
                 if dg_rpg_state["energy"]>=8:
                     textbutton u"Темы" style "dg_camp_nav" action Return(("talk",selected_who))
@@ -1544,6 +1603,10 @@ screen dg_rpg_controls(initial_tab="story"):
                     text (u"ИИ подключён" if dg_runtime.app.client.authenticated() else u"Для новых сцен подключи ИИ") style "dg_note_body"
                     textbutton u"Подключение ИИ" style "dg_note_button" action Return(("connect", None))
                     textbutton (u"Взрослая AU: включена" if dg_adult.enabled(dg_rpg_state) else u"Взрослая AU: выключена") style "dg_note_button" action Return(("adult", None))
+                    textbutton (u"Музыка сцен: вкл" if persistent.dg_rpg_music else u"Музыка сцен: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_music"),Function(dg_rpg_audio_sync)]
+                    textbutton (u"Атмосфера: вкл" if persistent.dg_rpg_ambience else u"Атмосфера: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_ambience"),Function(dg_rpg_audio_sync)]
+                    textbutton (u"Звуки действий: вкл" if persistent.dg_rpg_effects else u"Звуки действий: выкл") style "dg_note_button" action ToggleField(persistent,"dg_rpg_effects")
+                    text u"Громкость музыки и звуков — в общих настройках игры. Беседа: до 6 обменов репликами в одном периоде; уход или завершение закрывает период." style "dg_note_hint"
                     textbutton u"Настройки изображений" style "dg_note_button" action Return(("artist", None))
                     $ bg_state = dg_rpg_bg_status()
                     if shift_open and bg_state["status"] == "missing":
@@ -2429,6 +2492,7 @@ label dg_rpg_vn_text(scene_text, who=None):
     if dg_rpg_scene_context is None:
         $ dg_rpg_scene_context = dg_stage.freeze(dg_rpg_state, who)
     $ dg_rpg_stage_active = True
+    $ dg_rpg_audio_sync(who)
     scene expression dg_rpg_bg()
     $ dg_rpg_actor_moods = {}
     $ dg_rpg_visual_cast = None
@@ -2532,6 +2596,7 @@ label dg_rpg_main:
     # covering Ren'Py master-layer backgrounds and actor sprites.
     $ renpy.hide_screen("dg_scene")
 label dg_rpg_picker_label:
+    $ dg_rpg_audio_stop()
     call screen dg_rpg_picker
     $ dg_rpg_cmd, dg_rpg_value = _return
     if dg_rpg_cmd == "back":
@@ -2602,6 +2667,9 @@ label dg_rpg_loop:
         $ dg_rpg_apply("events_seen")
         call screen dg_rpg_controls(dg_initial_tab)
         $ dg_rpg_cmd, dg_rpg_value = _return
+    if dg_rpg_cmd == "end_conversation":
+        $ dg_rpg_apply("end_conversation")
+        jump dg_rpg_loop
     if dg_rpg_cmd == "history":
         call screen dg_rpg_dialogue_history
         jump dg_rpg_loop

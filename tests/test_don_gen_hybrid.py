@@ -145,7 +145,8 @@ class HybridTests(unittest.TestCase):
         self.assertEqual(self.st["affinity"][who],0)
         dg_hybrid.commit(self.st,plan,TEXT)
         self.assertEqual(self.st["affinity"][who],0)
-        self.assertEqual(self.st["slot"],1)
+        self.assertEqual(self.st["slot"],0)
+        self.assertEqual(self.st["dialogue_clock"]["rounds"],1)
         self.assertEqual(self.st["dialogue_history"][-1]["stance"],"custom")
 
     def test_custom_npc_speech_keeps_selected_dialogue_topic(self):
@@ -188,3 +189,4 @@ class HybridTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

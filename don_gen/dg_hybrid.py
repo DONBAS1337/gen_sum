@@ -100,7 +100,7 @@ def _neutral_talk(state, action, who):
     state["dialogue_history"] = state["dialogue_history"][-80:]
     dg_rpg._journal(state, u"Свободная беседа с %s: %s" % (dg_rpg.NPC_NAMES[who], action[:115]))
     dg_rpg._check_quests(state)
-    dg_rpg._tick(state)
+    __import__("dg_conversation").consume(state, who)
     return {"status":"done","text":text,"who":who,"kind":"custom_npc",
             "affinity_gain":gain}
 
@@ -230,6 +230,9 @@ def _effects(before, after):
     old_bag=before.get('projects',{}).get('inventory',{})
     for item,count in after.get('projects',{}).get('inventory',{}).items():
         if count!=old_bag.get(item,0):changes.append(__import__('dg_projects').ITEMS[item]+u': %+d'%(count-old_bag.get(item,0)))
+    rounds=__import__('dg_conversation').rounds(after)
+    if rounds and rounds!=__import__('dg_conversation').rounds(before):
+        changes.append(u"Беседа: %d/6 обменов репликами; период дня пока не изменился." % rounds)
     if after["day"] != before["day"] or after["slot"] != before["slot"]:
         changes.append(u"Время: день %d, %s" % (after["day"],
                        (u"утро",u"день",u"вечер",u"ночь")[after["slot"]]))

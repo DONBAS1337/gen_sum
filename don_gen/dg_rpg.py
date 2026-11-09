@@ -177,6 +177,7 @@ def validate(state):
     state.setdefault("route_events_done", [])
     state.setdefault("dialogue_history", [])
     state.setdefault("dialogue_counts", {})
+    __import__("dg_conversation").validate(state)
     dg_world.ensure(state)
     dg_social.ensure(state)
     if not state.get("finished"):
@@ -314,6 +315,7 @@ def route_event(state, who, approach):
 
 
 def _tick(state):
+    state.pop("dialogue_clock", None)
     previous = dict((who,where_is(state,who)) for who in NPC_NAMES)
     if state["slot"] == 3:
         expired = dg_world.missed(state)
@@ -357,6 +359,10 @@ def move(state, place):
         return state
     if place not in PLACE_NAMES:
         raise ValueError("Unknown destination")
+    if state["place"] != place:
+        __import__("dg_conversation").end(state)
+        if state["finished"]:
+            return state
     state["place"] = place
     state["visits"][place] = state["visits"].get(place, 0) + 1
     _check_quests(state)
@@ -478,7 +484,7 @@ def conversation(state, who, topic_index, stance):
     _journal(state, event)
     _check_quests(state)
     dg_world.refresh_open_event(state)
-    _tick(state)
+    __import__("dg_conversation").consume(state, who)
     return scene
 
 
