@@ -77,6 +77,18 @@ def _neutral_talk(state, action, who):
     if state["energy"] < 6:
         return {"status":"unknown","text":u"Недостаточно энергии для разговора (нужно 6)."}
     state["energy"] -= 6
+    # Explicit social intentions have bounded local consequences. Quoted
+    # claims about achievements still cannot award items or finish a quest.
+    folded = action.lower()
+    gain = 0
+    if not re.search(u"\\b(?:не|нет|никогда)\\b", folded):
+        if any(word in folded for word in (u"извини", u"спасибо", u"благодар", u"могу помочь", u"чем помочь")):
+            gain = 2
+        elif any(word in folded for word in (u"дура", u"ненавиж", u"заткни", u"тупая", u"идиот")):
+            gain = -3
+    previous = state["affinity"][who]
+    state["affinity"][who] = dg_world.clamp(previous + gain)
+    gain = state["affinity"][who] - previous
     if who not in state["met"]:
         state["met"].append(who)
     text = u"Ты обращаешься к %s: «%s». Собеседник внимательно слушает; подробнее разговор раскроется, если заказать AI-сцену." % (
@@ -84,13 +96,13 @@ def _neutral_talk(state, action, who):
     state.setdefault("dialogue_history", []).append({
         "day":state["day"],"slot":state["slot"],"who":who,
         "topic":u"Свободная реплика","stance":"custom","text":text,
-        "affinity_gain":0})
+        "affinity_gain":gain})
     state["dialogue_history"] = state["dialogue_history"][-80:]
     dg_rpg._journal(state, u"Свободная беседа с %s: %s" % (dg_rpg.NPC_NAMES[who], action[:115]))
     dg_rpg._check_quests(state)
     dg_rpg._tick(state)
     return {"status":"done","text":text,"who":who,"kind":"custom_npc",
-            "affinity_gain":0}
+            "affinity_gain":gain}
 
 def _neutral_free_action(state, action, mode):
     """A freeform action that isn't one of the recognised skill commands.
@@ -223,7 +235,7 @@ def locked_context(state, plan):
     dg_rpg.validate(copy_state)
     if fingerprint(copy_state)!=plan["before"]:
         raise ValueError("Game state changed before generation")
-    focus=plan.get("who") or plan["result"].get("who") or plan["result"].get("npc")
+    focus=plan.get("who") or plan["result"].get("who") or plan["result"].get("npc") or plan["result"].get("target")
     selected_topic = None
     if plan.get("mode") == "npc" and plan.get("topic") is not None:
         import dg_dialogue
@@ -247,6 +259,7 @@ def locked_context(state, plan):
         "last_world_decisions":copy_state["world"]["decisions"][-5:],
         "recent_journal":copy_state["journal"][-7:],
         "recent_dialogue":copy_state["dialogue_history"][-3:],
+        "long_term_memory":__import__('dg_memory').recall(copy_state, focus),
         "recent_hybrid_scenes":[{"day":item["day"],"action":item["action"],
                                 "scene":item["scene"][-1500:],
                                 "effects":item["effects"]}
@@ -290,7 +303,7 @@ def build_request(state, plan):
     if plan.get("status") != "ready":
         raise ValueError("Only accepted local action plans may reach the narrator")
     result = plan["result"]
-    narrator_policy = dg_adult.scene_policy(state, plan.get("who") or result.get("who") or result.get("npc"))
+    narrator_policy = dg_adult.scene_policy(state, plan.get("who") or result.get("who") or result.get("npc") or result.get("target"))
     return INSTRUCTIONS + u" " + narrator_policy + u" " + dg_stage.FORMATTING, json.dumps(locked_context(state,plan),ensure_ascii=False,
                                     sort_keys=True)
 
@@ -312,7 +325,7 @@ def commit(state, plan, scene_text=None):
         if not isinstance(scene_text,text_type):
             raise ValueError("Model must return text")
         scene_text=scene_text.strip()
-        if len(scene_text)<45 or len(scene_text)>MAX_SCENE:
+        if len(dg_stage.readable(scene_text).strip())<45 or len(scene_text)>MAX_SCENE:
             raise ValueError("Model scene too short or too long; game state unchanged")
         dg_stage.validate_speakers(scene_text, dg_stage.freeze(original, plan.get("who"))["present"])
     entry={"day":state["day"],"place":state["place"],"mode":plan["mode"],
@@ -321,6 +334,11 @@ def commit(state, plan, scene_text=None):
            "narrated_by_ai":bool(scene_text)}
     after.setdefault("hybrid_history",[]).append(entry)
     after["hybrid_history"]=after["hybrid_history"][-45:]
+    import dg_memory
+    dg_memory.record(after, fingerprint(original) + ':' + plan['action'][:80],
+                     plan['action'], outcome['text'], scene_text or u'',
+                     plan.get('who') or outcome.get('npc') or outcome.get('target'), origin=original,
+                     spawn_thread=not (plan['mode'] == 'world' and (original.get('world', {}).get('event') or {}).get('thread_id')))
     dg_rpg._journal(after,u"Гибридная сцена: "+plan["action"][:110])
     # Assign only after ALL validation; caller persists via the usual atomic save.
     state.clear()

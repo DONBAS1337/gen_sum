@@ -5,6 +5,10 @@ Never executes model text or applies game effects. Python 2.7/3 compatible.
 """
 from __future__ import unicode_literals
 import re
+import copy
+
+EMOTIONS = ('normal', 'smile', 'laugh', 'sad', 'cry', 'angry', 'surprise', 'shy', 'serious')
+STAGING = re.compile(r'\[stage ([a-z]+) ([a-z]+) ([a-z]+) (auto|[1-6])\]')
 
 try:
     text_type = unicode
@@ -24,6 +28,11 @@ FORMATTING = (
     u"соответствующего присутствующего персонажа. Одна метка — один абзац. "
     u"Не включай авторские описания в реплику: выноси их в [narrator]. "
     u"Не добавляй отсутствующих участников. Это только разметка текста, не команды игры."
+    u" Перед изменением выражения/позы вставь отдельную режиссёрскую метку, например "
+    u"[stage mi smile normal 2]. Поля: код присутствующего персонажа; эмоция "
+    u"normal/smile/laugh/sad/cry/angry/surprise/shy/serious; дистанция normal/close/far; "
+    u"номер позы 1–6 или auto. Не чаще одного изменения за смысловой момент. "
+    u"Не описывай эту техническую метку словами в реплике."
 )
 
 
@@ -47,6 +56,14 @@ def validate_speakers(text, present):
     speakers = set(re.findall(r"\[(" + "|".join(sorted(NAMES)) + r")\]", _text(text)))
     if speakers.difference(present):
         raise ValueError("Narrator introduced an absent speaker; regenerate the scene")
+    if len(re.findall(r'\[stage\b', _text(text), re.I)) != len(STAGING.findall(_text(text))):
+        raise ValueError('Malformed scene direction; regenerate the scene')
+    for match in re.finditer(r'\[stage[^\]]*\]', _text(text)):
+        directive = STAGING.match(match.group(0))
+        if (not directive or directive.end() != len(match.group(0))
+                or directive.group(1) not in present or directive.group(2) not in EMOTIONS
+                or directive.group(3) not in ('normal', 'close', 'far')):
+            raise ValueError('Invalid scene direction; regenerate the scene')
     return text
 
 
@@ -72,7 +89,7 @@ def _pages(value, limit=240):
     return pieces
 
 
-def parse(scene_text, present=(), focus=None):
+def _parse_text(scene_text, present=(), focus=None):
     """Parse safe text labels; legacy unmarked prose remains narrator prose."""
     text = _text(scene_text).replace("\r\n", "\n")
     # Tagged turns may share a paragraph, but ordinary inline [brackets] are data.
@@ -107,10 +124,31 @@ def parse(scene_text, present=(), focus=None):
     return result
 
 
+def parse(scene_text, present=(), focus=None):
+    """Directions are inert, whitelisted data; only existing actors can change."""
+    text = _text(scene_text)
+    result, staging, cursor = [], {}, 0
+    for directive in STAGING.finditer(text):
+        for turn in _parse_text(text[cursor:directive.start()], present, focus):
+            turn['stage'] = copy.deepcopy(staging)
+            result.append(turn)
+        who, emotion, distance, pose = directive.groups()
+        if who in present and emotion in EMOTIONS and distance in ('normal', 'close', 'far'):
+            staging[who] = {'emotion':emotion, 'distance':distance, 'pose':None if pose == 'auto' else pose}
+        cursor = directive.end()
+    for turn in _parse_text(text[cursor:], present, focus):
+        turn['stage'] = copy.deepcopy(staging)
+        result.append(turn)
+    return result
+
+
 def cast(turns, present=(), focus=None):
     allowed = set(present)
     result = []
     for turn in turns:
+        for actor in turn.get('stage', {}):
+            if actor in allowed and actor not in result:
+                result.append(actor)
         who = turn["who"]
         if who in allowed and who in NAMES and who not in result:
             result.append(who)
@@ -131,7 +169,7 @@ def readable(text):
         if who == "narrator":
             return ""
         return (u"Герой" if who == "hero" else NAMES[who]) + ": "
-    return re.sub(r"\[(narrator|hero|" + "|".join(sorted(NAMES)) + r")\]\s*", replace, _text(text))
+    return re.sub(r"\[(narrator|hero|" + "|".join(sorted(NAMES)) + r")\]\s*", replace, STAGING.sub('', _text(text)))
 
 
 def positions(cast_ids, speaker=None):

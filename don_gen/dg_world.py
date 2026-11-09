@@ -266,6 +266,14 @@ def make_event(state):
     day, duration = int(state["day"]), int(state["duration"])
     if day > duration or state.get("finished"):
         return None
+    import dg_memory
+    followup = dg_memory.opportunity(state) if day % 2 == 0 else None
+    if followup:
+        followup['choices'] = [dict(key=key, text=caption, metric=metric, delta=delta,
+                                   stat=stat, stat_gain=gain, affinity=affinity)
+                               for key, caption, metric, delta, stat, gain, affinity in OPTIONS]
+        import dg_narrative
+        return dg_narrative.decorate_event(state, followup)
     arc = _arc(state)
     if arc is not None:
         plot = PLOTS[arc]
@@ -388,6 +396,7 @@ def choose(state, choice_key):
     if not choices:
         raise ValueError("Invalid story choice")
     selected = choices[0]
+    __import__('dg_memory').resolve(state, event, choice_key)
     state["energy"] -= 8
     world[selected["metric"]] = clamp(world[selected["metric"]] + selected["delta"])
     if choice_key == "independent":
@@ -465,6 +474,7 @@ def missed(state):
     event = world["event"]
     if not event or event.get("day") != state["day"]:
         return None
+    __import__('dg_memory').resolve(state, event, 'missed')
     world["morale"] = clamp(world["morale"] - 2)
     world["resources"] = clamp(world["resources"] - 1)
     # Crucial for an autonomous world: the story advances EVEN if player is absent.

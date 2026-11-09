@@ -472,7 +472,13 @@ def prepare_incident(state):
         social["incident"]={"day":state["day"],"pair":[a,b],
                             "place":place,"title":title,
                             "text":description,"status":"open"}
-    return social["incident"]
+    event = state.get('world', {}).get('event')
+    active = social['incident']
+    if (event and event.get('thread_id') and event.get('day') == state['day']
+            and event.get('npc') in active['pair'] and active['status'] == 'open'):
+        active['place'] = event['place']
+        active['text'] = u'%s и %s обсуждают продолжение общего дела рядом с местом сегодняшней встречи.' % tuple(NAMES[who] for who in active['pair'])
+    return active
 
 
 def incident(state):

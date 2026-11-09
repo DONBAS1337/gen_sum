@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -216,6 +216,54 @@ init 1100 python:
                 if dg_rpg_sprite(actor, "smile", "normal") is None:
                     raise ValueError("Missing sprite: " + actor)
             cases = [("scene", "dg_ui_native_scene", {})]
+        if os.environ.get("DG_UI_SCREEN") == "staging":
+            for distance, pose, emotion in (("normal", "1", "normal"), ("close", "2", "smile")):
+                if dg_rpg_sprite("mi", emotion, distance, pose) is None:
+                    raise ValueError("Missing staged sprite")
+                if not any(value and key.startswith("mi ") and key.endswith("|pose:" + pose)
+                           and ((" close|" in key) == (distance == "close"))
+                           for key, value in dg_runtime.source_images.items()):
+                    raise ValueError("Requested pose fell back: %s/%s/%s; available=%r; body=%r cloth=%r face=%r" %
+                        (distance, pose, emotion, dg_7dl_sprite_poses(distance, "mi"),
+                         dg_7dl_sprite_layer(distance,"mi",pose,"body"),
+                         dg_7dl_sprite_layer(distance,"mi",pose,"pioneer"),
+                         dg_7dl_sprite_layer(distance,"mi",pose,emotion)))
+            turns = dg_stage.parse(u"[stage mi smile close 2]\n[mi] Привет!", ("mi",))
+            if turns[0]["stage"]["mi"]["pose"] != "2":
+                raise ValueError("Direction lost during parsing")
+            # Execute the production actor director without opening a window.
+            # Image composition above is real; only scene-layer I/O is captured.
+            actor_api = dg_rpg_stage_actors.func_globals['renpy']
+            original = dict((name, getattr(actor_api, name, None)) for name in ("show", "hide", "with_statement"))
+            shown, transitions = [], []
+            try:
+                actor_api.show = lambda tag, **kwargs: shown.append((tag, kwargs))
+                actor_api.hide = lambda tag: None
+                actor_api.with_statement = lambda transition: transitions.append(transition)
+                store.dg_rpg_actor_moods = {}
+                store.dg_rpg_visual_cast = None
+                staged = dg_stage.parse(u"[stage mi normal normal 1]\n[mi] Привет!\n[stage mi smile close 2]\n[mi] Хорошо!", ("mi",))
+                for turn in staged:
+                    dg_rpg_stage_actors(staged, ["mi"], turn)
+                if len(transitions) != 2 or len(shown) != 2:
+                    raise ValueError("Actor director did not apply both stage changes")
+            finally:
+                for name, value in original.items():
+                    if value is None:
+                        delattr(actor_api, name)
+                    else:
+                        setattr(actor_api, name, value)
+            cases = [("staging", "dg_ui_staging", {})]
+        if os.environ.get("DG_UI_SCREEN") == "cg":
+            import dg_gallery
+            rows = dg_gallery.catalog(dg_gallery.roots(workshop_root))
+            example = {'kind':'cg', 'who':'mi', 'description':u'Мику играет на гитаре в музыкальном кружке.',
+                       'place':'music', 'scene_slot':1, 'profile':'bkrr:mi', 'cast':['mi']}
+            selected = dg_gallery.match(rows, example)
+            if not selected:
+                raise ValueError("No suitable CG found in actual Workshop resources")
+            store.dg_ui_cg = selected['path']
+            cases = [("cg", "dg_ui_cg", {})]
         for filename, name, scope in cases:
             if os.environ.get("DG_UI_SCREEN") and os.environ["DG_UI_SCREEN"] != filename:
                 continue
@@ -248,6 +296,17 @@ screen dg_ui_native_scene:
     add "images/gui/dialogue_box/day/dialogue_box.png" xpos 174 ypos 916
     text u"Алиса" style "dg_camp_name" color "#ffaa00" xpos 204 ypos 924
     text u"«Костры»!" style "dg_camp_narration" xpos 204 ypos 962
+
+screen dg_ui_staging:
+    add "images/bg/int_dining_hall_people_day.jpg"
+    add dg_rpg_sprite("mi", "normal", "normal", "1") xpos .28 xanchor .5 ypos 1.0 yanchor 1.0
+    add dg_rpg_sprite("mi", "smile", "close", "2") xpos .72 xanchor .5 ypos 1.0 yanchor 1.0
+    add Solid("#071914d0") xpos 40 ypos 30 xsize 1840 ysize 80
+    text u"Проверка ресурсов: средний план / поза 1 — крупный план / поза 2" font "fonts/calibri.ttf" size 30 color "#f3d887" xpos 70 ypos 50
+
+screen dg_ui_cg:
+    add Solid("#000000")
+    add dg_rpg_fit_cg(dg_ui_cg) align (.5,.5)
 
 '''
 

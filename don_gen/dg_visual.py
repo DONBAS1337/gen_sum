@@ -4,6 +4,7 @@
 Works without network/PNG synthesis; all candidates are existing game assets.
 """
 from __future__ import unicode_literals
+import re
 
 try:
     text_type=unicode
@@ -20,6 +21,7 @@ EMOTION_CUES=(
     ("smile", (u"улыб",u"довольн",u"радост",u"счастлив")),
 )
 EMOTION_FALLBACK={
+    "serious":("serious","normal","sad"),
     "cry":("cry","sad","shy","normal"),
     "sad":("sad","shy","normal","smile"),
     "angry":("angry","rage","serious","normal"),
@@ -27,7 +29,7 @@ EMOTION_FALLBACK={
     "shy":("shy","smile","normal"),
     "laugh":("laugh","smile","happy","normal"),
     "smile":("smile","happy","normal"),
-    "normal":("normal","smile","shy"),
+    "normal":("normal","smile","happy","serious","shy"),
 }
 DISTANCE_CUES=(
     ("close",(u"совсем рядом",u"подошла вплотную",u"подошёл вплотную",
@@ -45,8 +47,11 @@ def _unicode(value):
 def mood(text):
     text=_unicode(text or u"").lower()
     for name,stems in EMOTION_CUES:
-        if any(stem in text for stem in stems):
-            return name
+        for stem in stems:
+            for match in re.finditer(re.escape(stem), text):
+                prefix = text[max(0, match.start()-24):match.start()]
+                if not re.search(u'\\bне(?:\\s+\\w+){0,2}\\s*$', prefix):
+                    return name
     return "normal"
 
 def distance(text):
@@ -106,3 +111,4 @@ def background_names(base, slot):
     if base not in names:
         names.append(base)
     return names
+

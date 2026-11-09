@@ -124,17 +124,30 @@ init 1001 python:
         elif action == "talk":
             dg_rpg.activity(state, "talk", arg)
         elif action == "route":
+            route_level = dg_rpg.available_route_events(state, arg[0])[0][0]
             dg_rpg.route_event(state, arg[0], arg[1])
+            pending.update(who=arg[0], intention=u"Важный разговор: " + arg[1],
+                           result=dg_dialogue.route_conclusion(arg[0], route_level, arg[1]))
         elif action == "conversation":
             store.dg_rpg_last_scene = dg_rpg.conversation(state, arg[0], arg[1], arg[2])
+            if store.dg_rpg_last_scene:
+                pending.update(who=arg[0], intention=store.dg_rpg_last_scene['topic'] + u" — " + arg[2],
+                               result=store.dg_rpg_last_scene['text'])
         elif action == "world":
             store.dg_rpg_last_world = dg_rpg.story_choice(state, arg)
+            pending.update(who=store.dg_rpg_last_world['npc'],
+                           intention=store.dg_rpg_last_world['title'] + u" — " + arg,
+                           result=store.dg_rpg_last_world['text'])
         elif action == "free":
             store.dg_rpg_last_action = dg_rpg.free_action(state, arg)
         elif action == "personal":
             store.dg_rpg_last_personal = dg_rpg.personal_choice(state, arg[0], arg[1])
+            pending.update(who=arg[0], intention=store.dg_rpg_last_personal['title'] + u" — " + arg[1],
+                           result=store.dg_rpg_last_personal['text'])
         elif action == "incident":
             store.dg_rpg_last_incident = dg_rpg.social_encounter(state, arg)
+            pending.update(who=None, intention=store.dg_rpg_last_incident['title'] + u" — " + arg,
+                           result=store.dg_rpg_last_incident['text'])
         elif action == "hybrid":
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
         elif action == "adult_mode":
@@ -209,6 +222,9 @@ init 1001 python:
         # The background worker ONLY generates a text string. No save writes.
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         instructions, prompt = dg_hybrid.build_request(current, plan)
+        context = json.loads(prompt)
+        context['visual_scene_facts'] = dg_rpg_visual_brief(current)
+        prompt = json.dumps(context, ensure_ascii=False, sort_keys=True)
         app = dg_runtime.app
         # The 7DL source is read-only reference context, never executed.
         if current["source"].startswith("7dl:") and plan.get("who") == "mi":
@@ -234,7 +250,7 @@ init 1001 python:
         story = app.client.generate(instructions, prompt, model=model,
                                     effort=dg_backend.DEFAULT_EFFORT,
                                     fast_mode=persistent.dg_fast_mode)
-        if not isinstance(story, basestring) or len(story.strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
+        if not isinstance(story, basestring) or len(dg_stage.readable(story).strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
             raise ValueError("AI returned invalid scene length")
         dg_stage.validate_speakers(story, dg_stage.freeze(current, plan.get("who"))["present"])
         return story.strip()
@@ -270,6 +286,9 @@ init 1001 python:
                         "7DL context unavailable for auto scene",exc_info=True)
         instructions,prompt=dg_narrative.request(
             state,kind,who,identity,story,choices=choices,source_reference=ref)
+        context = json.loads(prompt)
+        context['visual_scene_facts'] = dg_rpg_visual_brief(state)
+        prompt = json.dumps(context, ensure_ascii=False, sort_keys=True)
         instructions+=u" "+dg_adult.scene_policy(state,who)+u" "+dg_stage.FORMATTING
         if not app.models:
             app.refresh_models()
@@ -280,7 +299,7 @@ init 1001 python:
                                    fast_mode=persistent.dg_fast_mode)
         if isinstance(result,bytes):
             result=result.decode("utf-8")
-        if not isinstance(result,unicode) or len(result.strip())<100 or len(result)>12000:
+        if not isinstance(result,unicode) or len(dg_stage.readable(result).strip())<100 or len(result)>12000:
             raise ValueError("Narrator returned invalid scene text")
         dg_stage.validate_speakers(result, dg_stage.freeze(state, who)["present"])
         return result.strip()
@@ -377,26 +396,33 @@ init 1001 python:
             return dg_rpg_scene_context
         return dg_rpg_state
 
-    def dg_rpg_bg_native(place):
+    def dg_rpg_bg_native(place, visual=None):
         # Prefer the actual location AND matching time of day when available.
         # Only exact 12 canonical locations block manual BG generation.
+        visual = visual or dg_rpg_visual_state()
         if dg_rpg_state.get("source") == dg_bkrr.SOURCE:
             root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
-            backdrop = dg_bkrr.background(root, place, dg_rpg_visual_state()["slot"])
+            backdrop = dg_bkrr.background(root, place, visual["slot"])
             if backdrop:
                 return backdrop
         external = dg_resources.background(
             dg_runtime.app.catalog.get("source_assets", {}).get("7dl", {}),
-            place, dg_rpg_visual_state()["slot"])
+            place, visual["slot"])
         if place not in DG_RPG_EXACT_BG:
             return external
         base = DG_RPG_BG.get(place)
         if base is None and place.startswith("cabin_"):
             base = "bg ext_houses_day"
-        for name in dg_visual.background_names(base, dg_rpg_visual_state()["slot"]):
+        for name in dg_visual.background_names(base, visual["slot"]):
             if name in dg_runtime.original_images:
                 return name
         return external
+
+    def dg_rpg_visual_brief(state):
+        backdrop = dg_rpg_bg_native(state['place'], visual=state) or ''
+        filename = os.path.basename(backdrop).lower().replace('bg ', '')
+        setting = 'exterior' if filename.startswith('ext_') else 'interior' if filename.startswith('int_') else None
+        return {'setting':setting, 'rule':u'Сцена должна соответствовать показанному фону: exterior — снаружи, interior — внутри. Не меняй место без действия игрока.'}
 
     def dg_rpg_bg_status():
         place = dg_rpg_visual_state()["place"]
@@ -422,11 +448,16 @@ init 1001 python:
                 return dg_runtime.original_images[name]
         return Solid("#173039")
 
-    def dg_rpg_sprite(who, emotion="normal", distance="normal"):
+    def dg_rpg_sprite(who, emotion="normal", distance="normal", pose=None):
         # Original game registered sprites first; physical 7DL/vanilla layer
         # composition when the exact named pose is missing. No image generation.
         if who not in dg_rpg.NPC_NAMES:
             return None
+        if pose is not None:
+            for name in dg_visual.sprite_queries(who, emotion, distance):
+                sprite = dg_7dl_sprite_displayable(name, pose_hint=pose)
+                if sprite is not None:
+                    return sprite
         known = dg_visual.sprite_names(who,emotion,distance,
                                         dg_runtime.original_images.keys())
         exact=[name for name in known if
@@ -474,37 +505,61 @@ init 1001 python:
     def dg_rpg_stage_actors(turns, cast_ids, turn):
         # Update one actor's expression; narration does not make everybody cry/smile.
         if turn["who"] in dg_stage.NAMES:
-            store.dg_rpg_actor_moods[turn["who"]] = dg_visual.mood(turn["text"])
+            if turn['who'] not in turn.get('stage', {}):
+                inferred = dg_visual.mood(turn["text"])
+                if inferred != 'normal':
+                    store.dg_rpg_actor_moods[turn["who"]] = inferred
         visible = dg_stage.positions(cast_ids, turn["who"])
         visible_ids = [who for who, x in visible]
         for who in dg_stage.NAMES:
             if who not in visible_ids:
                 renpy.hide("dg_actor_" + who)
+        signature = []
         for who, x in visible:
-            sprite = dg_rpg_sprite(who, dg_rpg_actor_moods.get(who, "normal"), "normal")
+            direction = turn.get('stage', {}).get(who, {})
+            emotion = direction.get('emotion', dg_rpg_actor_moods.get(who, "normal"))
+            store.dg_rpg_actor_moods[who] = emotion
+            signature.append((who, emotion, direction.get('distance', 'normal'), direction.get('pose'), x))
+            sprite = dg_rpg_sprite(who, emotion, direction.get('distance', 'normal'), direction.get('pose'))
             if sprite is not None:
                 renpy.show("dg_actor_" + who, what=Transform(sprite, xpos=x, xanchor=.5, ypos=1.0, yanchor=1.0),
                            zorder=15 if who == turn["who"] else 10)
 
+        if store.dg_rpg_visual_cast != signature:
+            store.dg_rpg_visual_cast = signature
+            renpy.with_statement(Dissolve(.16))
+
     def dg_rpg_cg_builtin(plan):
-        index_path = os.path.join(renpy.config.gamedir,"mods","don_gen",
-                                  "images","gen_assets","cg_index.json")
-        if not os.path.isfile(index_path):
-            return None
-        try:
-            with open(index_path,"rb") as handle:
-                dictionary=json.loads(handle.read().decode("utf-8"))
-            target=dg_art.approve_cg_lookup(dg_rpg_root(),dictionary,plan["key"])
-            return target if target and renpy.loadable(target) else None
-        except (IOError,OSError,ValueError,TypeError):
-            return None
+        index_path = os.path.join(renpy.config.gamedir, "mods", "don_gen", "images", "gen_assets", "cg_index.json")
+        if os.path.isfile(index_path):
+            try:
+                with open(index_path, "rb") as handle:
+                    dictionary = json.loads(handle.read().decode("utf-8"))
+                target = dg_art.approve_cg_lookup(dg_rpg_root(), dictionary, plan["key"])
+                if target and renpy.loadable(target):
+                    return target
+            except (IOError, OSError, ValueError, TypeError):
+                pass
+        import dg_gallery
+        candidate = dg_gallery.match(dg_gallery.catalog(dg_gallery.roots(dg_rpg_workshop_root())), plan)
+        return candidate['path'] if candidate and renpy.loadable(candidate['path']) else None
 
     def dg_rpg_cg_for(source, title, description, who=None, action=u""):
         state=dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         explicit_adult=bool(dg_adult.classify_sensitive(action))
         # A mature AU CG is never inferred merely from the 18+ toggle.
-        return dg_art.scene_plan(state, source, title, description, who,
+        plan = dg_art.scene_plan(state, source, title, description, who,
                                  adult_requested=explicit_adult)
+        if plan:
+            context = dg_rpg_scene_context or dg_stage.freeze(state, who)
+            present = context.get('present', [])
+            cast_ids = dg_stage.cast(dg_stage.parse(description, present, who), present, who)
+            plan.update(scene_place=context['place'], scene_slot=context['slot'],
+                        cast=cast_ids, profile=state['source'], hero_pronouns=state['hero']['pronouns'],
+                        setting=dg_rpg_visual_brief(dict(state, place=context['place'], slot=context['slot']))['setting'])
+            if plan['kind'] == 'cg' and plan.get('who') is None and cast_ids:
+                plan['who'] = cast_ids[0]
+        return plan
 
     def dg_rpg_cg_status(plan):
         if plan is None:
@@ -516,11 +571,18 @@ init 1001 python:
                               plan["key"],dg_rpg_cg_builtin(plan),
                               getattr(persistent,"dg_prefer_generated",True))
 
+    def dg_rpg_fit_cg(path):
+        width, height = renpy.image_size(path)
+        horizontal, vertical = 1920.0 / width, 1080.0 / height
+        scale = horizontal if horizontal < vertical else vertical
+        return im.Scale(path, int(width * scale), int(height * scale))
+
     def dg_rpg_scene_generate(who, intent):
         # Called via dg_runtime.app.start(), never on the screen rendering thread.
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         context = dg_rpg.summary_for_ai(state, who, intent)
         context["narrative_direction"] = dg_narrative.context(state, "special", who, intent)
+        context['visual_scene_facts'] = dg_rpg_visual_brief(state)
         app = dg_runtime.app
         if state["source"].startswith("7dl:"):
             root = (app.catalog.get("source_roots") or {}).get("7dl")
@@ -610,6 +672,7 @@ default dg_rpg_focus = None
 default dg_rpg_scene_context = None
 default dg_rpg_stage_active = False
 default dg_rpg_actor_moods = {}
+default dg_rpg_visual_cast = None
 
 screen dg_rpg_picker:
     modal True
@@ -1444,10 +1507,8 @@ screen dg_rpg_cg_art(plan):
     modal True
     $ resource = dg_rpg_cg_status(plan)
     if resource["status"] in ("generated","builtin") and resource["path"]:
-        if resource["status"] == "builtin":
-            add Image(resource["path"])
-        else:
-            add im.Scale(resource["path"],1920,1080)
+        add Solid("#000000")
+        add dg_rpg_fit_cg(resource["path"]) align (.5,.5)
     else:
         add dg_rpg_bg()
         add Solid("#071725a0")
@@ -1877,6 +1938,7 @@ screen dg_rpg_journal:
         textbutton u"AI-сцены" style "dg_note_tab" selected view == "ai" action SetScreenVariable("view", "ai")
         textbutton u"Хроника мира" style "dg_note_tab" selected view == "world" action SetScreenVariable("view", "world")
         textbutton u"Люди и слухи" style "dg_note_tab" selected view == "social" action SetScreenVariable("view", "social")
+        textbutton u"Незавершённое" style "dg_note_tab" selected view == "threads" action SetScreenVariable("view", "threads")
     hbox:
         xpos 95 ypos 295 spacing 45
         frame:
@@ -1895,7 +1957,16 @@ screen dg_rpg_journal:
                 ysize 610
                 vbox:
                     spacing 16
-                    if view == "timeline":
+                    if view == "threads":
+                        text u"Дела, которые могут получить продолжение" style "dg_note_heading" size 30
+                        for thread in dg_rpg_state.get("story_memory", {}).get("threads", [])[::-1]:
+                            text (thread["title"] + u" · " + {"open":u"открыто", "resolved":u"завершено", "abandoned":u"упущено"}[thread["status"]]) style "dg_note_body"
+                            text dg_literal(thread["intention"]) style "dg_note_hint" xmaximum 855
+                        text u"Память прежних встреч" style "dg_note_heading" size 30
+                        for episode in dg_rpg_state.get("story_memory", {}).get("episodes", [])[-8:][::-1]:
+                            text (u"День %d · %s" % (episode["day"], dg_rpg.PLACE_NAMES[episode["place"]])) style "dg_note_hint"
+                            text dg_literal(episode["confirmed_result"]) style "dg_note_body" xmaximum 855
+                    elif view == "timeline":
                         for row in dg_rpg_state["journal"][::-1]:
                             text (u"День %d · %s" % (row["day"], dg_rpg.SLOTS[row["slot"]])) style "dg_note_hint" size 20
                             text dg_literal(row["text"]) style "dg_note_body" size 26 xmaximum 855
@@ -2095,6 +2166,7 @@ label dg_rpg_vn_text(scene_text, who=None):
     $ dg_rpg_stage_active = True
     scene expression dg_rpg_bg()
     $ dg_rpg_actor_moods = {}
+    $ dg_rpg_visual_cast = None
     $ dg_stage_present = list(dg_rpg_scene_context["present"])
     if who in dg_stage.NAMES and who not in dg_stage_present:
         $ dg_stage_present.append(who)
@@ -2515,7 +2587,7 @@ label dg_rpg_hybrid_review_label:
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, None))
         call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"])
         if _return == "cg":
-            $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc")
+            $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc") or dg_rpg_hybrid_plan["result"].get("target")
             $ dg_cg_plan = dg_rpg_cg_for("hybrid", u"Мой поступок", dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"], dg_cg_who, dg_rpg_hybrid_entry["action"])
             jump dg_rpg_cg_label
         jump dg_rpg_loop

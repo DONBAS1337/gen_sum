@@ -169,6 +169,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "recent_conversations":copy.deepcopy(state.get("dialogue_history",[])[-4:]),
         "world":copy.deepcopy(state.get("world",{}).get("preparations",{})),
         "social_bonds":copy.deepcopy(state.get("social",{}).get("bonds",{})),
+        "long_term_memory":__import__('dg_memory').recall(state, who),
         "weather":dg_world.weather(state)[1]
     }
 

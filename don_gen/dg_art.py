@@ -29,6 +29,16 @@ CG_QUALITY=(u"wide 16:9 cinematic illustration in classic visual novel anime sty
             u"no writing, no captions, no user interface, no watermarks")
 NEGATIVE=(u"worst quality, low quality, pixelation, watermark, subtitle, "
           u"UI, text, typography, extra limbs, deformed fingers, distorted faces")
+APPEARANCE = {
+    'mi':u'Miku: very long turquoise twin tails, turquoise eyes, red hair ties',
+    'dv':u'Alisa: orange hair in two short side tails, amber eyes',
+    'un':u'Lena: purple hair in two short ponytails, green eyes',
+    'sl':u'Slavya: blonde hair in one long braid, blue eyes',
+    'us':u'Ulyana: short red hair with small side tails, childlike energetic face',
+    'mt':u'Olga: adult camp counsellor, long brown hair, green eyes',
+    'cs':u'Viola: adult medical professional, long dark purple hair, white medical coat',
+    'mz':u'Zhenya: short dark hair, glasses', 'el':u'Elektronik: blond boy with glasses',
+    'sh':u'Shurik: brown-haired boy with glasses', 'uv':u'Yulya: lilac hair, cat ears'}
 
 def _digest(value):
     if isinstance(value,text_type):
@@ -96,9 +106,19 @@ def cg_prompt(state, plan):
                  u"all characters 18+, no childlike appearance. ")
     else:
         romance=u"General-audience scene, avoid nudity and sexualized imagery. "
-    scene=plan["description"][:2000]
+    import dg_stage
+    scene=dg_stage.readable(plan["description"])[:2000]
     person=u" Featuring %s. " % dg_rpg.NPC_NAMES[who] if who else u""
-    return CG_QUALITY + u". " + romance + person + u"Scene: " + scene
+    cast = list(plan.get('cast') or ([who] if who else []))
+    if plan['kind'] == 'cg18' and any(actor not in dg_adult.ADULT_AU_AGES for actor in cast):
+        raise ValueError('Adult CG cast contains a protected character')
+    identities = u'; '.join(APPEARANCE[actor] for actor in cast if actor in APPEARANCE)
+    place = plan.get('scene_place', plan['place'])
+    moment = plan.get('scene_slot', state['slot'])
+    return (CG_QUALITY + u". " + romance + person + u"Character identities: " + identities +
+            u". Keep the listed cast and consistent original pioneer uniforms. Location: " +
+            dg_rpg.PLACE_NAMES[place] + u". Setting: " + (plan.get('setting') or 'as described') +
+            u". Time: " + dg_rpg.SLOTS[moment] + u". Scene: " + scene)
 
 def asset_location(root, game_id, kind, key):
     import dg_rpg
@@ -186,3 +206,4 @@ def validate_scene_request(state, kind, payload):
     if marker(state, plan) is None:
         raise ValueError("CG disabled for this character or adult setting")
     return plan
+

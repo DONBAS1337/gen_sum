@@ -189,28 +189,29 @@ init 1000 python:
         poses.update(dg_sprite_layer_map(dg_runtime.original_sprite_layers, distance, who).keys())
         return sorted(poses, key=lambda value: int(value) if value.isdigit() else 999)
 
-    def dg_7dl_sprite_displayable(name):
-        cached = dg_runtime.source_images.get(name, "__missing__")
+    def dg_7dl_sprite_displayable(name, pose_hint=None):
+        cache_key = name + ("|pose:" + str(pose_hint) if pose_hint else "")
+        cached = dg_runtime.source_images.get(cache_key, "__missing__")
         if cached != "__missing__":
             return cached or None
 
         parts = name.split()
         if len(parts) < 3:
-            dg_runtime.source_images[name] = False
+            dg_runtime.source_images[cache_key] = False
             return None
 
         distance = "normal"
         if parts[-1] in ("far", "close"):
             distance = parts.pop()
         if len(parts) < 3 or len(parts) > 4:
-            dg_runtime.source_images[name] = False
+            dg_runtime.source_images[cache_key] = False
             return None
 
         tag, emotion, clothes = parts[0], parts[1], parts[2]
         accessory = parts[3] if len(parts) == 4 else None
         match = re.match(r"^([A-Za-z_]+?)([0-9]?)$", tag)
         if not match:
-            dg_runtime.source_images[name] = False
+            dg_runtime.source_images[cache_key] = False
             return None
         who = match.group(1)
         variant = match.group(2)
@@ -219,7 +220,10 @@ init 1000 python:
 
         # Do not probe arbitrary filenames or scale a normal sprite. Candidate
         # poses come from the exact union of physical 7DL + vanilla layer maps.
-        for pose in dg_7dl_sprite_poses(distance, who):
+        poses = dg_7dl_sprite_poses(distance, who)
+        if pose_hint is not None:
+            poses = [pose for pose in poses if str(pose) == str(pose_hint)]
+        for pose in poses:
             body = dg_7dl_sprite_layer(distance, who, pose, body_token)
             cloth = None if clothes == "body" else dg_7dl_sprite_layer(distance, who, pose, clothes)
             emotion_path = dg_7dl_sprite_layer(distance, who, pose, emotion)
@@ -243,10 +247,10 @@ init 1000 python:
             for layer in layers:
                 args.extend(((0, 0), layer))
             sprite = im.Composite(canvas, *args)
-            dg_runtime.source_images[name] = sprite
+            dg_runtime.source_images[cache_key] = sprite
             return sprite
 
-        dg_runtime.source_images[name] = False
+        dg_runtime.source_images[cache_key] = False
         return None
 
     def dg_setup():

@@ -146,6 +146,7 @@ def set_source(state, source):
 def validate(state):
     if not isinstance(state, dict) or state.get("version") != 1:
         raise ValueError("Unsupported save format")
+    __import__('dg_memory').validate(state)
     state.setdefault("mystery", {"yulia_discovered": False})
     dg_adult.ensure(state)
     if state["adult_mode"].get("enabled") and int(state["hero"]["age"]) < 18:
@@ -194,6 +195,8 @@ def where_is(state, who):
     if incident and who in incident["pair"]:
         return incident["place"]
     event = state.get("world", {}).get("event")
+    if event and event.get('thread_id') and event.get('npc') == who and event.get('day') == state['day']:
+        return event['place']
     if (state.get("source") == "bkrr:mi" and who == "mi" and event
             and event.get("arc") == "festival" and event.get("day") == state["day"]):
         return event["place"]

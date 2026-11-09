@@ -17,8 +17,14 @@ def finish(root, pending, scene_key, text):
     current = dg_rpg.load(root, candidate["id"])
     if dg_hybrid.fingerprint(current) != pending["before"]:
         raise ValueError("The saved game changed while generating this scene")
-    if not isinstance(text, type(u"")) or not 100 <= len(text.strip()) <= 12000:
+    import dg_stage
+    if not isinstance(text, type(u"")) or len(text) > 12000 or len(dg_stage.readable(text).strip()) < 100:
         raise ValueError("Narrator returned invalid scene text")
     dg_narrative.remember_scene(candidate, scene_key, text.strip())
+    import dg_memory
+    dg_memory.record(candidate, scene_key, pending.get('intention', u'Завершённый ход'),
+                     pending.get('result', candidate.get('event', u'')), text.strip(),
+                     pending.get('who'), origin=current,
+                     spawn_thread=bool(pending.get('intention')) and not (current.get('world', {}).get('event') or {}).get('thread_id'))
     dg_rpg.save(root, candidate)
     return candidate
