@@ -150,6 +150,7 @@ def validate(state):
     __import__('dg_memory').validate(state)
     __import__('dg_agents').validate(state)
     __import__('dg_housing').validate(state)
+    __import__('dg_visits').validate(state)
     state.setdefault("mystery", {"yulia_discovered": False})
     dg_adult.ensure(state)
     if state["adult_mode"].get("enabled") and int(state["hero"]["age"]) < 18:
@@ -203,6 +204,9 @@ def where_is(state, who):
     if (state.get("source") == "bkrr:mi" and who == "mi" and event
             and event.get("arc") == "festival" and event.get("day") == state["day"]):
         return event["place"]
+    visitor = __import__('dg_visits').location(state,who)
+    if visitor:
+        return visitor
     home = __import__('dg_housing').location(state,who)
     if home:
         return home
@@ -306,6 +310,7 @@ def route_event(state, who, approach):
 
 
 def _tick(state):
+    previous = dict((who,where_is(state,who)) for who in NPC_NAMES)
     if state["slot"] == 3:
         expired = dg_world.missed(state)
         if expired:
@@ -337,6 +342,7 @@ def _tick(state):
             _journal(state, u'Пока идёт время, лагерь живёт своими делами. ' + changes[-1]['text'])
         dg_world.refresh_open_event(state)
         dg_social.prepare_incident(state)
+    __import__("dg_visits").tick(state,previous)
 
 
 def move(state, place):
@@ -348,6 +354,7 @@ def move(state, place):
     state["place"] = place
     state["visits"][place] = state["visits"].get(place, 0) + 1
     _check_quests(state)
+    __import__("dg_visits").arrive(state)
     _journal(state, u"Вы пришли: %s. Здесь сейчас: %s." %
              (PLACE_NAMES[place], u", ".join(n[1] for n in at_place(state)) or u"никого"))
     return state

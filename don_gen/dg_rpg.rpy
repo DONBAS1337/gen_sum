@@ -21,6 +21,7 @@ init 1001 python:
     import dg_turn
     import dg_agents
     import dg_housing
+    import dg_visits
     import dg_intent
     import dg_cgvision
     import dg_bkrr
@@ -117,11 +118,11 @@ init 1001 python:
 
     def dg_rpg_apply(action, arg=None):
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
-        transactional = action in ("conversation", "world", "personal", "incident", "route")
+        transactional = action in ("conversation", "world", "personal", "incident", "route", "visit")
         pending = dg_turn.begin(state) if transactional else None
         if pending is not None:
             state = pending["state"]
-        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous"):
+        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous", "visit"):
             store.dg_rpg_scene_context = dg_stage.freeze(state)
         if action == "move":
             dg_rpg.move(state, arg)
@@ -144,6 +145,15 @@ init 1001 python:
                            result=store.dg_rpg_last_world['text'])
         elif action == "free":
             store.dg_rpg_last_action = dg_rpg.free_action(state, arg)
+        elif action == "visit_seen":
+            if dg_visits.current(state):
+                state['npc_visits']['active']['seen']=True
+        elif action == "visit":
+            store.dg_rpg_last_visit = dg_visits.respond(state,arg)
+            pending.update(who=store.dg_rpg_last_visit['who'], intention=u'Ответ на инициативу NPC: '+arg,
+                           result=store.dg_rpg_last_visit['text'])
+        elif action == "visit_reply":
+            dg_visits.respond(state,arg)
         elif action == "personal":
             store.dg_rpg_last_personal = dg_rpg.personal_choice(state, arg[0], arg[1])
             pending.update(who=arg[0], intention=store.dg_rpg_last_personal['title'] + u" — " + arg[1],
@@ -1300,6 +1310,8 @@ screen dg_rpg_hub:
             if inhabitants:
                 textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
                 textbutton u"Темы разговора" style "dg_camp_nav" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
+        if dg_visits.current(dg_rpg_state):
+            textbutton (dg_rpg.NPC_NAMES[dg_visits.current(dg_rpg_state)["who"]] + u" хочет поговорить") style "dg_camp_nav" xpos 950 ypos 750 action Return(("visit",None))
         text u"M — карта   ·   J — дневник   ·   H — скрыть интерфейс" style "dg_rpg_hint" size 18 xpos 1052 ypos 108 color "#f1e7c5"
     else:
         textbutton u"Показать интерфейс · H" style "dg_camp_nav" xpos 52 ypos 990 action SetScreenVariable("show_interface", True)
@@ -2083,6 +2095,9 @@ screen dg_rpg_journal(initial_view="timeline"):
                         for item in dg_rpg_state["social"]["rumours"][::-1]:
                             text (u"День %d" % item["day"]) style "dg_note_hint" size 22
                             text dg_literal(dg_stage.readable(item["text"])) style "dg_note_body" size 26 xmaximum 850
+                        for item in dg_rpg_state.get("npc_visits",{}).get("history",[])[-12:][::-1]:
+                            text (u"День %d · %s" % (item["day"],dg_rpg.NPC_NAMES[item["who"]])) style "dg_note_hint" size 22
+                            text ({"arrived":u"Сам подошёл поговорить", "expired":u"Встреча не состоялась", "accepted":u"Вы приняли приглашение", "declined":u"Вы вежливо отказались"}[item["status"]] + (u" · просьба о помощи" if item["kind"]=="help" else u" · провести время")) style "dg_note_body" size 25 xmaximum 850
                         text u"ЛИЧНЫЕ ИСТОРИИ" style "dg_note_hint" size 25 color "#e0ce93"
                         for who, name in dg_social.NAMES.items():
                             if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
@@ -2114,6 +2129,10 @@ screen dg_rpg_journal(initial_view="timeline"):
                 vbox:
                     spacing 13
                     if view == "social":
+                        if dg_rpg_state.get("npc_visits",{}).get("romance"):
+                            text u"РОМАНТИЧЕСКИЕ ОТНОШЕНИЯ" style "dg_note_hint" size 25
+                            for npc in dg_rpg_state["npc_visits"]["romance"]:
+                                text dg_rpg.NPC_NAMES[npc] style "dg_note_body" size 24
                         text u"СОБСТВЕННЫЕ ДЕЛА ПЕРСОНАЖЕЙ" style "dg_note_hint" size 25
                         for npc, person in sorted(dg_agents.report(dg_rpg_state)["people"].items()):
                             text (dg_rpg.NPC_NAMES[npc] + u": " + person["goal"]["title"]) style "dg_note_body" size 24 xmaximum 680
@@ -2422,6 +2441,9 @@ label dg_rpg_loop:
         $ dg_rpg_open(dg_rpg_state["id"])
     $ dg_rpg_stage_active = False
     $ dg_rpg_scene_context = dg_stage.freeze(dg_rpg_state)
+    $ dg_active_visit = dg_visits.current(dg_rpg_state)
+    if dg_active_visit and not dg_active_visit["seen"]:
+        jump dg_rpg_visit_label
     call screen dg_rpg_hub
     $ dg_rpg_cmd, dg_rpg_value = _return
     if dg_rpg_cmd == "controls":
@@ -2429,6 +2451,8 @@ label dg_rpg_loop:
         $ dg_rpg_cmd, dg_rpg_value = _return
     if dg_rpg_cmd == "exit":
         jump dg_rpg_picker_label
+    if dg_rpg_cmd == "visit":
+        jump dg_rpg_visit_label
     if dg_rpg_cmd == "profile":
         $ dg_rpg_apply("profile", dg_rpg_value)
         jump dg_rpg_loop
@@ -2792,3 +2816,26 @@ screen dg_rpg_housing_picker:
                 null
             textbutton u"Готово" style "dg_camp_action" action Return(None)
     key "K_ESCAPE" action Return(None)
+
+
+label dg_rpg_visit_label:
+    $ dg_active_visit = dg_visits.current(dg_rpg_state)
+    if not dg_active_visit:
+        jump dg_rpg_loop
+    $ dg_rpg_apply("visit_seen")
+    $ dg_visit_choices = dg_visits.choices(dg_rpg_state,dg_active_visit)
+    if dg_rpg_state["energy"] < 8:
+        $ dg_visit_choices = [row for row in dg_visit_choices if row[0] in ("later","decline")]
+    call dg_rpg_vn_choice(dg_visits.opening(dg_rpg_state,dg_active_visit),dg_visit_choices,dg_active_visit["who"],"visit_offer:"+dg_active_visit["id"])
+    if not _return:
+        jump dg_rpg_loop
+    $ dg_visit_reply = _return
+    if dg_visit_reply in ("later","decline"):
+        $ dg_rpg_apply("visit_reply",dg_visit_reply)
+        jump dg_rpg_loop
+    $ dg_rpg_apply("visit",dg_visit_reply)
+    call dg_rpg_vn_scene(dg_rpg_last_visit["text"],True,dg_active_visit["who"],"visit_result:"+dg_active_visit["id"]+":"+dg_visit_reply)
+    if _return == "cg":
+        $ dg_cg_plan = dg_rpg_cg_for("personal",dg_rpg_last_visit["title"],dg_rpg_last_narrated_text,dg_active_visit["who"])
+        jump dg_rpg_cg_label
+    jump dg_rpg_loop

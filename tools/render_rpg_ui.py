@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -208,6 +208,18 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") == "visit":
+            store.dg_rpg_state['source']='vanilla'
+            store.dg_rpg_state['social']['incident']['status']='resolved'
+            store.dg_rpg_state['world']['event']=None
+            store.dg_rpg_state['affinity']['mi']=75
+            store.dg_rpg_state['met']=['mi']
+            store.dg_rpg_state['place']='gate'
+            dg_agents.ensure(store.dg_rpg_state)['people']['mi']['goal']['progress']=2
+            dg_rpg.activity(store.dg_rpg_state,'rest')
+            if not dg_visits.current(store.dg_rpg_state):
+                raise ValueError('NPC visit did not arrive')
+            cases = [("visit","dg_rpg_hub",{})]
         if os.environ.get("DG_UI_SCREEN") == "housing":
             cases = [("housing","dg_rpg_housing_picker",{})]
         if os.environ.get("DG_UI_SCREEN") == "emotions":

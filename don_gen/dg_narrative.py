@@ -172,6 +172,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "long_term_memory":__import__('dg_memory').recall(state, who),
         "npc_agendas":__import__('dg_agents').report(state),
         "housing":__import__("dg_housing").report(state),
+        "npc_initiative":copy.deepcopy(state.get("npc_visits",{})),
         "weather":dg_world.weather(state)[1]
     }
 
