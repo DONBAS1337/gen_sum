@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -167,7 +167,7 @@ init 1100 python:
             raise ValueError("Incorrect native character names")
         for speaker in (None, "dv", "hero"):
             character = dg_rpg_say_character(speaker)
-            if character.what_args.get("color") != "#f3d887" or character.what_args.get("font") != "fonts/calibri.ttf":
+            if character.what_args.get("color") != "#F2E4BB" or character.what_args.get("font") != "fonts/calibri.ttf":
                 raise ValueError("Incorrect narration typography")
             if speaker is not None and not character.who_args.get("bold"):
                 raise ValueError("Character name must be bold")
@@ -215,11 +215,20 @@ init 1100 python:
             store.dg_rpg_state['affinity']['mi']=75
             store.dg_rpg_state['met']=['mi']
             store.dg_rpg_state['place']='gate'
-            dg_agents.ensure(store.dg_rpg_state)['people']['mi']['goal']['progress']=2
+            for person in dg_agents.ensure(store.dg_rpg_state)['people'].values():person['goal']['progress']=2
             dg_rpg.activity(store.dg_rpg_state,'rest')
             if not dg_visits.current(store.dg_rpg_state):
                 raise ValueError('NPC visit did not arrive')
             cases = [("visit","dg_rpg_hub",{})]
+        if os.environ.get("DG_UI_SCREEN") == "hidden":
+            cases=[("hidden","dg_rpg_hub",{"initial_show":False})]
+        if os.environ.get("DG_UI_SCREEN") == "projects":
+            cases=[("projects","dg_rpg_projects",{})]
+        if os.environ.get("DG_UI_SCREEN") == "relationship":
+            cases=[("relationship","dg_rpg_relationship",{"who":"mi"})]
+        if os.environ.get("DG_UI_SCREEN") == "history":
+            dg_presentation.record(store.dg_rpg_state,"example",u"[narrator] Ветер шуршал нотами на столе. [mi] Давай попробуем ещё раз — теперь вместе.")
+            cases=[("history","dg_rpg_dialogue_history",{})]
         if os.environ.get("DG_UI_SCREEN") == "housing":
             cases = [("housing","dg_rpg_housing_picker",{})]
         if os.environ.get("DG_UI_SCREEN") == "emotions":
@@ -307,6 +316,8 @@ init 1100 python:
             displayable.per_interact()
             displayable.visit_all(lambda d: d.per_interact())
             render = renpy.display.render.render(displayable, 1920, 1080, 0.0, 0.0)
+            renpy.display.render.invalidate(displayable)
+            render = renpy.display.render.render(displayable, 1920, 1080, .3, .3)
             surface = renpy.display.draw.render_to_texture(render, True)
             pygame.image.save(surface, os.path.join(config.basedir, filename + ".png"))
             def debug_viewport(d):

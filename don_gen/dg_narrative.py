@@ -172,6 +172,8 @@ def context(state, kind, who=None, identity=None, moment=None):
         "long_term_memory":__import__('dg_memory').recall(state, who),
         "npc_agendas":__import__('dg_agents').report(state),
         "housing":__import__("dg_housing").report(state),
+        "shared_projects":__import__("dg_projects").report(state),
+        "relationships":__import__("dg_relationships").report(state),
         "npc_initiative":copy.deepcopy(state.get("npc_visits",{})),
         "weather":dg_world.weather(state)[1]
     }
@@ -267,6 +269,7 @@ def remember_scene(state,key,text):
     import re
     if not re.match(r"^[0-9a-f]{64}$",key):
         raise ValueError("Invalid scene key")
+    __import__("dg_presentation").record(state,key,text)
     scenes=memo(state)
     scenes[key]={"text":text,"day":state["day"]}
     # Maintain a chronological LRU list; same-day entries must never be

@@ -25,9 +25,12 @@ def _number(state, who, cycle):
 def _new_goal(state, who, cycle):
     kind = PROFILES[who][_number(state,who,cycle) % len(PROFILES[who])]
     title, place, arc = TASKS[kind]
-    return {'id':'%s:%d' % (who,cycle), 'kind':kind, 'title':title,
+    project=__import__('dg_projects').offer_goal(state,who) if cycle>0 else None
+    goal={'id':'%s:%d' % (who,cycle), 'kind':kind, 'title':title,
             'place':place, 'arc':arc, 'progress':0, 'required':3,
             'status':'working', 'deadline':state['day']+5, 'blocked_turns':0}
+    if project:goal.update(project)
+    return goal
 
 
 def ensure(state):
@@ -50,6 +53,10 @@ def _log(state, who, text, status):
 def _complete(state, who, person):
     import dg_world
     goal = person['goal']
+    if not __import__('dg_projects').npc_complete(state,who,goal):
+        goal.update(status='blocked',progress=goal['required']-1,blocked_turns=min(3,goal['blocked_turns']+1))
+        _log(state,who,u'Ждёт участника или предмет для совместного дела.','blocked')
+        return
     goal['status'] = 'completed'
     world = dg_world.ensure(state)
     world['preparations'][goal['arc']] = dg_world.clamp(world['preparations'].get(goal['arc'],0)+2)
@@ -114,6 +121,7 @@ def tick(state):
             _log(state,who,u'Самостоятельно продвигает дело: ' + goal['title'], 'working')
             if goal['progress'] >= goal['required']:
                 _complete(state,who,person)
+    __import__('dg_projects').meetings(state)
     return copy.deepcopy(system['history'][-4:]) if system['history'][-1:] != previous else []
 
 
@@ -188,6 +196,10 @@ def validate(state):
                 or not isinstance(goal.get('title'),type(u'')) or len(goal['title']) > 200
                 or not isinstance(goal.get('id'),type(u'')) or len(goal['id']) > 100):
             raise ValueError('Invalid NPC goal')
+        if 'project' in goal:
+            projects=__import__('dg_projects')
+            if (not isinstance(goal.get('project'),type(u'')) or goal.get('project') not in projects.DEFINITIONS or goal.get('project_stage') not in (0,1,2,3) or goal.get('project_role') not in (None,'recipient') or goal['place']!=projects.DEFINITIONS[goal['project']]['steps'][goal['project_stage']][1]):
+                raise ValueError('Invalid project goal')
     for row in system['history']:
         if (not isinstance(row,dict) or row.get('who') not in PROFILES
                 or not integer(row.get('day'),1,50000) or not integer(row.get('slot'),0,3)

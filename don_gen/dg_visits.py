@@ -70,6 +70,8 @@ def tick(state,previous):
     candidates=[]
     for who in sorted(dg_rpg.NPC_NAMES):
         if who=='uv' or busy(state,who) or now-system['cooldowns'].get(who,-10)<4: continue
+        relation=state.get('relationships',{}).get('people',{}).get(who,{})
+        if not relation.get('invitations',True):continue
         start=previous.get(who) or dg_rpg.where_is(state,who)
         person=state.get('npc_agendas',{}).get('people',{}).get(who,{})
         goal=person.get('goal',{})
@@ -81,7 +83,7 @@ def tick(state,previous):
         import dg_world
         if dg_world.weather(state)[0]=='rain' and destination in ('forest','forest_path','beach','lake','stage','sports'): continue
         if destination.startswith('cabin_'):
-            if destination!=(state.get('housing') or {}).get('cabin') or affinity<70: continue
+            if destination!=(state.get('housing') or {}).get('cabin') or affinity<70 or not relation.get('home_visits',True): continue
         elif destination not in PUBLIC and destination not in dict(EDGES) and destination not in [b for a,b in EDGES]: continue
         path=route(start,destination)
         if not path: continue
@@ -106,7 +108,7 @@ def opening(state,event):
 
 def choices(state,event):
     rows=[('accept',u'Обсудить проблему вместе' if event['kind']=='help' else u'Провести время вместе')]
-    if event['kind']=='visit' and state['affinity'][event['who']]>=70 and event['who'] in ROMANTIC and event['who'] not in state['npc_visits']['romance']:
+    if event['kind']=='visit' and state['affinity'][event['who']]>=70 and event['who'] in ROMANTIC and event['who'] not in state['npc_visits']['romance'] and state.get('relationships',{}).get('people',{}).get(event['who'],{}).get('tension',0)<6:
         rows.append(('date',u'Начать романтические отношения и провести свидание'))
     return rows+[('later',u'Поговорить чуть позже'),('decline',u'Вежливо отказаться')]
 

@@ -74,7 +74,8 @@ class VisualRegressionTests(unittest.TestCase):
         self.assertIn('dg_rpg_hybrid_submission[0] != "submit"',SCRIPT)
         self.assertIn('Hybrid input submitted mode=',SCRIPT)
     def test_hub_has_compact_tabs_and_native_dialogues(self):
-        self.assertIn('default dg_hub_tab = "story"',SCRIPT)
+        self.assertIn('screen dg_rpg_controls(initial_tab="story")',SCRIPT)
+        self.assertIn('default dg_hub_tab = initial_tab',SCRIPT)
         for label in (u"События",u"Занятия",u"Настройки"):
             self.assertIn(label,SCRIPT)
         self.assertIn('action SetScreenVariable("dg_hub_tab","actions")',SCRIPT)

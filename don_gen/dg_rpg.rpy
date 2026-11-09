@@ -22,6 +22,10 @@ init 1001 python:
     import dg_agents
     import dg_housing
     import dg_visits
+    import dg_projects
+    import dg_relationships
+    import dg_presentation
+    import dg_consistency
     import dg_intent
     import dg_cgvision
     import dg_bkrr
@@ -39,19 +43,40 @@ init 1001 python:
             width, height = int(width), int(height)
             result = renpy.Render(width, height)
             canvas = result.canvas()
-            def rounded(color, x, y, w, h, radius):
-                canvas.rect(color, (x + radius, y, w - radius * 2, h))
-                canvas.rect(color, (x, y + radius, w, h - radius * 2))
-                for cx, cy in ((x + radius, y + radius), (x + w - radius - 1, y + radius),
-                               (x + radius, y + h - radius - 1), (x + w - radius - 1, y + h - radius - 1)):
-                    canvas.circle(color, (cx, cy), radius)
-            radius = 7 if width >= 18 and height >= 18 else 1
+            def rounded(color,x,y,w,h,radius):
+                import math
+                points=[]
+                for cx,cy,start in ((x+w-radius-1,y+radius,-90),(x+w-radius-1,y+h-radius-1,0),(x+radius,y+h-radius-1,90),(x+radius,y+radius,180)):
+                    for i in range(7):
+                        angle=math.radians(start+i*15)
+                        points.append((int(cx+radius*math.cos(angle)),int(cy+radius*math.sin(angle))))
+                canvas.polygon(color,points)
+            radius = 10 if width >= 18 and height >= 18 else 1
             rounded(self.edge, 0, 0, width, height, radius)
             rounded(self.fill, 1, 1, width - 2, height - 2, radius - 1)
             return result
 
     def dg_camp_button_surface(fill, edge):
         return DgCampButton(fill, edge)
+
+    class DgNavIcon(renpy.Displayable):
+        def __init__(self,kind,**kwargs):
+            super(DgNavIcon,self).__init__(**kwargs)
+            self.kind=kind
+        def render(self,width,height,st,at):
+            r=renpy.Render(24,24);c=r.canvas();color="#F2E4BB"
+            if self.kind=="map":
+                for points in ([(2,5),(8,3),(16,6),(22,4),(22,19),(16,21),(8,18),(2,20),(2,5)],[(8,3),(8,18)],[(16,6),(16,21)]):c.lines(color,False,points,2)
+            elif self.kind=="book":
+                c.lines(color,False,[(12,6),(4,3),(2,4),(2,19),(12,22),(22,19),(22,4),(20,3),(12,6),(12,22)],2)
+            elif self.kind=="events":
+                c.rect(color,(3,5,18,17),2);c.line(color,(3,10),(21,10),2)
+                for x in (7,16):c.line(color,(x,2),(x,7),2)
+                for x in (7,12,17):c.circle(color,(x,15),1)
+            else:
+                c.circle(color,(12,12),8,2);c.circle(color,(12,12),3,2)
+                for x,y in ((12,1),(12,23),(1,12),(23,12)):c.line(color,(12+(x-12)*.65,12+(y-12)*.65),(x,y),2)
+            return r
 
     def dg_rpg_vn_pages(text):
         # Narrative is shown in the game's regular Ren'Py say window.
@@ -118,11 +143,11 @@ init 1001 python:
 
     def dg_rpg_apply(action, arg=None):
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
-        transactional = action in ("conversation", "world", "personal", "incident", "route", "visit")
+        transactional = action in ("conversation", "world", "personal", "incident", "route", "visit", "project", "relation")
         pending = dg_turn.begin(state) if transactional else None
         if pending is not None:
             state = pending["state"]
-        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous", "visit"):
+        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous", "visit", "project", "relation"):
             store.dg_rpg_scene_context = dg_stage.freeze(state)
         if action == "move":
             dg_rpg.move(state, arg)
@@ -145,6 +170,14 @@ init 1001 python:
                            result=store.dg_rpg_last_world['text'])
         elif action == "free":
             store.dg_rpg_last_action = dg_rpg.free_action(state, arg)
+        elif action == "events_seen":
+            dg_presentation.seen(state)
+        elif action == "project":
+            store.dg_rpg_last_project=dg_projects.act(state,arg)
+            pending.update(who=store.dg_rpg_last_project['who'],intention=store.dg_rpg_last_project['title'],result=store.dg_rpg_last_project['text'])
+        elif action == "relation":
+            store.dg_rpg_last_relation=dg_relationships.act(state,arg[0],arg[1],arg[2])
+            pending.update(who=arg[0],intention=u'Личный разговор: '+arg[1],result=store.dg_rpg_last_relation)
         elif action == "visit_seen":
             if dg_visits.current(state):
                 state['npc_visits']['active']['seen']=True
@@ -275,7 +308,7 @@ init 1001 python:
             app.refresh_models()
         model = dg_backend.default_model(app.models, persistent.dg_model)
         app.set_status(u"Пишем сцену с зафиксированным игровым исходом…")
-        story = app.client.generate(instructions, prompt, model=model,
+        story = dg_consistency.generate(app.client,instructions, prompt,dg_stage.freeze(current,plan.get("who"))["present"], model=model,
                                     effort=dg_backend.DEFAULT_EFFORT,
                                     fast_mode=persistent.dg_fast_mode)
         if not isinstance(story, basestring) or len(dg_stage.readable(story).strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
@@ -316,20 +349,24 @@ init 1001 python:
             state,kind,who,identity,story,choices=choices,source_reference=ref)
         context = json.loads(prompt)
         context['visual_scene_facts'] = dg_rpg_visual_brief(state)
+        present=dg_stage.freeze(state,who)['present']
+        if kind in ('result','npc_result') and dg_rpg_scene_context is not None:
+            present=list(dg_rpg_scene_context['present'])
+            context['scene_identity']['present_people']=[(code,dg_rpg.NPC_NAMES[code]) for code in present]
         prompt = json.dumps(context, ensure_ascii=False, sort_keys=True)
         instructions+=u" "+dg_adult.scene_policy(state,who)+u" "+dg_stage.FORMATTING
         if not app.models:
             app.refresh_models()
         model=dg_backend.default_model(app.models,persistent.dg_model)
         app.set_status(u"Рассказываем уникальный эпизод лагеря…")
-        result=app.client.generate(instructions,prompt,model=model,
+        result=dg_consistency.generate(app.client,instructions,prompt,present,model=model,
                                    effort=dg_backend.DEFAULT_EFFORT,
                                    fast_mode=persistent.dg_fast_mode)
         if isinstance(result,bytes):
             result=result.decode("utf-8")
         if not isinstance(result,unicode) or len(dg_stage.readable(result).strip())<100 or len(result)>12000:
             raise ValueError("Narrator returned invalid scene text")
-        dg_stage.validate_speakers(result, dg_stage.freeze(state, who)["present"])
+        dg_stage.validate_speakers(result,present)
         return result.strip()
 
     # Classic resources stay in the private gen_assets pack, imported by install.ps1.
@@ -535,10 +572,10 @@ init 1001 python:
         # Never modify the global characters or other installed mods' styles.
         kind = native if isinstance(native, renpy.character.ADVCharacter) else None
         return Character(dg_literal(name) if name is not None else None, kind=kind,
-                         who_font="fonts/calibri.ttf", who_size=28, who_bold=True,
+                         who_font="fonts/calibri.ttf", who_size=24, who_bold=True,
                          who_color=dg_stage.COLORS.get(who, "#ffaa00"), who_outlines=[],
-                         what_font="fonts/calibri.ttf", what_size=28, what_bold=False,
-                         what_color="#f3d887", what_outlines=[])
+                         what_font="fonts/calibri.ttf", what_size=24, what_bold=False,
+                         what_color="#F2E4BB", what_outlines=[])
 
     def dg_rpg_stage_actors(turns, cast_ids, turn):
         # Named reactions in narration affect only the explicitly named actor.
@@ -684,7 +721,7 @@ init 1001 python:
             raise ValueError(violation)
         logging.getLogger("don_gen").info("AI scene request npc=%s day=%d", who, state["day"])
         app.set_status(u"Создаём особую сцену…")
-        story_text = app.client.generate(instructions, json.dumps(context, ensure_ascii=False),
+        story_text = dg_consistency.generate(app.client,instructions,json.dumps(context,ensure_ascii=False),dg_stage.freeze(state,who)["present"],
                                          model=model, effort=dg_backend.DEFAULT_EFFORT,
                                          fast_mode=persistent.dg_fast_mode)
         dg_rpg.append_ai_scene(state, who, story_text)
@@ -1182,24 +1219,24 @@ default dg_rpg_action_context = None
 # Camp navigation stays outside the dialogue area.
 init 1002:
     style dg_camp_nav is button:
-        background dg_camp_button_surface("#071c17c9", "#a7996470")
-        hover_background dg_camp_button_surface("#bfa769e8", "#efdc9ecc")
-        selected_background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
-        selected_hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
+        background dg_camp_button_surface("#101923cc", "#65D8D050")
+        hover_background dg_camp_button_surface("#304958ee", "#65D8D0a0")
+        selected_background dg_camp_button_surface("#304958ee", "#65D8D0b0")
+        selected_hover_background dg_camp_button_surface("#3d5d69ee", "#65D8D0")
         insensitive_background Solid("#071c1770")
-        padding (22, 14)
-        xminimum 142
-        ysize 58
+        padding (18, 10)
+        xminimum 122
+        ysize 50
     style dg_camp_nav_text is dg_rpg_button_text:
         font "fonts/calibri.ttf"
-        size 26
-        color "#e7d9ac"
-        hover_color "#172b22"
+        size 24
+        color "#F2E4BB"
+        hover_color "#65D8D0"
         insensitive_color "#869087"
         outlines []
     style dg_camp_action is dg_camp_nav:
-        background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
-        hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
+        background dg_camp_button_surface("#304958ee", "#65D8D0b0")
+        hover_background dg_camp_button_surface("#3d5d69ee", "#65D8D0")
         xminimum 238
     style dg_camp_action_text is dg_camp_nav_text:
         color "#fff0bc"
@@ -1233,8 +1270,8 @@ init 1002:
         hover_color "#172b22"
         insensitive_color "#869087"
     style dg_note_main is dg_note_button:
-        background dg_camp_button_surface("#a18d4ccc", "#e2cd8da0")
-        hover_background dg_camp_button_surface("#dbc080f0", "#fff1bd")
+        background dg_camp_button_surface("#304958ee", "#65D8D0b0")
+        hover_background dg_camp_button_surface("#3d5d69ee", "#65D8D0")
     style dg_note_main_text is dg_note_button_text:
         color "#fff0bc"
         hover_color "#172b22"
@@ -1255,74 +1292,105 @@ init 1002:
         outlines []
     style dg_camp_narration is dg_rpg_body:
         font "fonts/calibri.ttf"
-        size 28
-        color "#f3d887"
+        size 24
+        color "#F2E4BB"
         outlines []
 
-screen dg_rpg_hub:
+transform dg_panel_appear:
+    alpha 0.0
+    linear .16 alpha 1.0
+
+screen dg_rpg_hub(initial_show=True):
     modal True
     default selected_person = 0
-    default show_interface = True
+    default show_interface = initial_show
+    default dialogue_open = True
+    default hide_hint = False
+    default nav_tip = u""
     $ inhabitants = dg_rpg.at_place(dg_rpg_state)
     if dg_rpg_state.get("source") == "bkrr:mi":
-        $ inhabitants = sorted(inhabitants, key=lambda item: item[0] != "mi")
+        $ inhabitants = sorted(inhabitants,key=lambda item:item[0]!="mi")
     $ shift_open = not dg_rpg_state["finished"]
     $ selected_who = inhabitants[selected_person % len(inhabitants)][0] if inhabitants else None
     $ visible_cast = dg_stage.cast([], [item[0] for item in inhabitants], selected_who)
     add dg_rpg_bg()
-    for actor, actor_x in dg_stage.positions(visible_cast, selected_who):
-        $ actor_image = dg_rpg_sprite(actor, "normal", "normal")
+    for actor, actor_x in dg_stage.positions(visible_cast,selected_who):
+        $ actor_image = dg_rpg_sprite(actor,"normal","normal")
         if actor_image is not None:
             add actor_image xpos actor_x xanchor .5 ypos 1.0 yanchor 1.0
     if show_interface:
         frame:
-            background Solid("#071914b0")
-            xpos 52 ypos 36 xsize 650 padding (20, 12)
+            background dg_camp_button_surface("#101923cc","#31445190")
+            xpos 60 ypos 30 xsize 430 padding (18,12)
             vbox:
-                spacing 3
-                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_rpg_heading" size 30 color "#e7d9ac"
-                text (dg_rpg.camp_time(dg_rpg_state) + u"   ·   Силы: %d" % dg_rpg_state["energy"]) style "dg_note_hint" size 23
+                spacing 4
+                text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_camp_narration" size 24 bold True
+                text (dg_rpg.camp_time(dg_rpg_state)+u" · силы %d" % dg_rpg_state["energy"]) style "dg_rpg_hint" size 20 color "#A9B9C6"
         hbox:
-            xpos 1052 ypos 36 spacing 8
-            textbutton u"Карта" style "dg_camp_nav" action Return(("map", None))
-            textbutton u"Дневник" style "dg_camp_nav" action Return(("journal", None))
-            textbutton u"События" style "dg_camp_nav" action Return(("controls", None))
-            textbutton u"Меню" style "dg_camp_nav" action Return(("exit", None))
-        if renpy.loadable("images/gui/dialogue_box/day/dialogue_box.png"):
-            add "images/gui/dialogue_box/day/dialogue_box.png" xpos 174 ypos 916
-        else:
-            add Solid("#061a19d9") xpos 174 ypos 916 xsize 1572 ysize 164
+            xpos 1596 ypos 30 spacing 10
+            for icon, caption, command in (("map",u"Карта · M","map"),("book",u"Дневник · J","journal"),("events",u"События","controls"),("settings",u"Настройки","settings")):
+                button:
+                    style "dg_camp_nav" xsize 52 xminimum 52 ysize 50 padding (14,13)
+                    hovered SetScreenVariable("nav_tip",caption)
+                    unhovered SetScreenVariable("nav_tip",u"")
+                    action Return((command,None))
+                    add DgNavIcon(icon)
+        if dg_presentation.unread(dg_rpg_state):
+            add Solid("#65D8D0") xpos 1762 ypos 31 xsize 7 ysize 7
+        if nav_tip:
+            text nav_tip xpos 1585 ypos 89 size 20 color "#A9B9C6"
         if inhabitants:
-            text dg_rpg.NPC_NAMES[selected_who] style "dg_camp_name" color dg_stage.COLORS[selected_who] xpos 204 ypos 924
-            if len(inhabitants) > 1:
-                hbox:
-                    xpos 174 ypos 824 spacing 8
-                    textbutton u"‹" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person - 1)
-                    textbutton u"›" style "dg_camp_arrow" action SetScreenVariable("selected_person", selected_person + 1)
-                    text (u"Собеседник %d / %d" % (selected_person % len(inhabitants) + 1, len(inhabitants))) style "dg_rpg_hint" yalign .5
-            text u"Что ты хочешь сказать?" style "dg_camp_narration" xpos 204 ypos 962 xmaximum 1490
-        else:
-            text u"Рядом никого" style "dg_camp_name" xpos 204 ypos 924 color "#ffaa00"
-            text u"Можно осмотреться или открыть карту." style "dg_camp_narration" xpos 204 ypos 962 xmaximum 1490
+            hbox:
+                xpos 90 ypos 738 spacing 10
+                for index, pair in enumerate(inhabitants):
+                    button:
+                        style "dg_camp_nav" xsize 58 xminimum 58 ysize 62 padding (3,3)
+                        selected selected_who==pair[0]
+                        action SetScreenVariable("selected_person",index)
+                        $ portrait = dg_rpg_sprite(pair[0],"normal","normal")
+                        if portrait is not None:
+                            add portrait xysize (50,58) fit "cover" crop (250,120,400,450)
+                        else:
+                            text dg_rpg.NPC_NAMES[pair[0]][:1] size 24
+            text dg_presentation.status(dg_rpg_state,selected_who) xpos 90 ypos 808 size 20 color "#A9B9C6"
         hbox:
-            xpos 950 ypos 824 spacing 12
-            textbutton u"Своё действие" style "dg_camp_action" xminimum 200 action Return(("hybrid", None)) sensitive (shift_open and dg_rpg_state["energy"] >= 4)
-            if inhabitants:
-                textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
-                textbutton u"Темы разговора" style "dg_camp_nav" action Return(("talk", selected_who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
+            xalign .5 ypos 838 spacing 14
+            if inhabitants and shift_open:
+                if dg_rpg_state["energy"]>=8:
+                    textbutton u"Темы" style "dg_camp_nav" action Return(("talk",selected_who))
+                if dg_rpg_state["energy"]>=6:
+                    textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc",selected_who))
+            if shift_open and dg_rpg_state["energy"]>=4:
+                textbutton u"Действие" style "dg_camp_action" action Return(("hybrid",None))
+            if shift_open and any(row["ready"] for row in dg_projects.available(dg_rpg_state)):
+                textbutton u"Общие дела" style "dg_camp_nav" action Return(("projects",None))
+            if selected_who in dg_relationships.LIKES and shift_open and selected_who in dg_rpg_state["met"]:
+                textbutton u"Личное" style "dg_camp_nav" action Return(("relationship",selected_who))
         if dg_visits.current(dg_rpg_state):
-            textbutton (dg_rpg.NPC_NAMES[dg_visits.current(dg_rpg_state)["who"]] + u" хочет поговорить") style "dg_camp_nav" xpos 950 ypos 750 action Return(("visit",None))
-        text u"M — карта   ·   J — дневник   ·   H — скрыть интерфейс" style "dg_rpg_hint" size 18 xpos 1052 ypos 108 color "#f1e7c5"
-    else:
-        textbutton u"Показать интерфейс · H" style "dg_camp_nav" xpos 52 ypos 990 action SetScreenVariable("show_interface", True)
-    key "h" action ToggleScreenVariable("show_interface")
-    key "m" action Return(("map", None))
-    key "j" action Return(("journal", None))
-    key "K_ESCAPE" action Return(("controls", None))
+            textbutton (dg_rpg.NPC_NAMES[dg_visits.current(dg_rpg_state)["who"]]+u" хочет поговорить") style "dg_camp_nav" xalign .5 ypos 768 action Return(("visit",None))
+        if dialogue_open:
+            frame:
+                at dg_panel_appear
+                background dg_camp_button_surface("#101923d0","#65D8D060")
+                xpos 90 ypos 905 xsize 1740 ysize 140 padding (24,18)
+                fixed:
+                    text (dg_rpg.NPC_NAMES[selected_who] if selected_who else u"Совёнок") style "dg_camp_name" color "#65D8D0" xpos 0 ypos 0
+                    text (u"Что ты хочешь сказать?" if inhabitants else u"Можно осмотреться, продолжить своё дело или открыть карту.") style "dg_camp_narration" xpos 0 ypos 45 xmaximum 1490
+                    textbutton u"История" style "dg_camp_nav" xminimum 112 xsize 112 xpos 1450 ypos -8 action Return(("history",None))
+                    textbutton u"−" style "dg_camp_nav" xminimum 48 xsize 48 xpos 1574 ypos -8 action SetScreenVariable("dialogue_open",False)
+        else:
+            textbutton u"Показать разговор" style "dg_camp_nav" xpos 1550 ypos 982 action SetScreenVariable("dialogue_open",True)
+    elif hide_hint:
+        text u"H — вернуть интерфейс" xpos 70 ypos 1000 size 20 color "#A9B9C6"
+        timer 2.5 action SetScreenVariable("hide_hint",False)
+    key "h" action [ToggleScreenVariable("show_interface"),SetScreenVariable("hide_hint",not getattr(persistent,"dg_hide_hint_seen",False)),SetField(persistent,"dg_hide_hint_seen",True)]
+    key "m" action Return(("map",None))
+    key "j" action Return(("journal",None))
+    key "K_ESCAPE" action Return(("controls",None))
 
-screen dg_rpg_controls:
+screen dg_rpg_controls(initial_tab="story"):
     modal True
-    default dg_hub_tab = "story"
+    default dg_hub_tab = initial_tab
     default dg_expanded_npc = None
     add dg_rpg_bg()
     add Solid("#071914b0")
@@ -1342,6 +1410,7 @@ screen dg_rpg_controls:
         textbutton u"События" style "dg_note_tab" selected dg_hub_tab == "story" action SetScreenVariable("dg_hub_tab","story")
         textbutton u"Занятия" style "dg_note_tab" selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
         textbutton u"Настройки" style "dg_note_tab" selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
+        textbutton u"Общие дела" style "dg_note_tab" action Return(("projects",None))
     frame:
         background Solid("#102b33ed")
         xpos 48 ypos 258 xsize 1100 ysize 656 padding (28, 24)
@@ -1408,6 +1477,7 @@ screen dg_rpg_controls:
                         textbutton u"Создать фон этого места" style "dg_note_button" action Return(("background", dg_rpg_state["place"]))
                     textbutton u"Галерея CG" style "dg_note_button" action Return(("cg_gallery", None))
                     textbutton u"Диагностика" style "dg_note_button" action Return(("diag", None))
+                    textbutton u"К выбору смены" style "dg_note_button" action Return(("exit",None))
                     text (u"Навык %d · Доброта %d · Любознательность %d" % (dg_rpg_state["stats"]["skill"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["curiosity"])) style "dg_note_hint"
     frame:
         background Solid("#102b33ed")
@@ -2446,9 +2516,32 @@ label dg_rpg_loop:
         jump dg_rpg_visit_label
     call screen dg_rpg_hub
     $ dg_rpg_cmd, dg_rpg_value = _return
-    if dg_rpg_cmd == "controls":
-        call screen dg_rpg_controls
+    if dg_rpg_cmd in ("controls","settings"):
+        $ dg_initial_tab="settings" if dg_rpg_cmd=="settings" else "story"
+        $ dg_rpg_apply("events_seen")
+        call screen dg_rpg_controls(dg_initial_tab)
         $ dg_rpg_cmd, dg_rpg_value = _return
+    if dg_rpg_cmd == "history":
+        call screen dg_rpg_dialogue_history
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "projects":
+        call screen dg_rpg_projects
+        if _return:
+            if _return[0]=="travel":
+                $ dg_rpg_apply("move",_return[1])
+                jump dg_rpg_loop
+            $ dg_rpg_project_key=_return[1]
+            $ dg_rpg_apply("project",dg_rpg_project_key)
+            call dg_rpg_vn_scene(dg_rpg_last_project["text"],True,dg_rpg_last_project["who"],"project:"+dg_rpg_project_key+":"+str(dg_rpg_state["day"])+":"+str(dg_rpg_state["slot"]))
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "relationship":
+        $ dg_relation_who=dg_rpg_value
+        call screen dg_rpg_relationship(dg_relation_who)
+        if _return:
+            $ dg_relation_action,dg_relation_key=_return
+            $ dg_rpg_apply("relation",(dg_relation_who,dg_relation_action,dg_relation_key))
+            call dg_rpg_vn_scene(dg_rpg_last_relation,False,dg_relation_who,"relation:"+dg_hybrid.fingerprint(dg_rpg_state))
+        jump dg_rpg_loop
     if dg_rpg_cmd == "exit":
         jump dg_rpg_picker_label
     if dg_rpg_cmd == "visit":
@@ -2839,3 +2932,102 @@ label dg_rpg_visit_label:
         $ dg_cg_plan = dg_rpg_cg_for("personal",dg_rpg_last_visit["title"],dg_rpg_last_narrated_text,dg_active_visit["who"])
         jump dg_rpg_cg_label
     jump dg_rpg_loop
+
+
+screen dg_rpg_projects:
+    modal True
+    add Solid("#101923f5")
+    frame:
+        background dg_camp_button_surface("#101923ee","#65D8D060")
+        xpos 90 ypos 70 xsize 1740 ysize 930 padding (30,24)
+        vbox:
+            spacing 22
+            text u"Общие дела и предметы" size 34 color "#65D8D0"
+            text u"Каждый этап — отдельный поступок. Участники лагеря также могут вносить собственный вклад." size 24 color "#A9B9C6" xmaximum 1600
+            for row in dg_projects.available(dg_rpg_state):
+                frame:
+                    background Solid("#243441c0") xsize 1640 padding (22,18)
+                    vbox:
+                        spacing 10
+                        text (dg_projects.DEFINITIONS[row["project"]]["title"]+u" · этап %d/4" % (row["stage"]+1)) size 28 color "#F2E4BB"
+                        text row["caption"] size 24 color "#F2E4BB"
+                        text (dg_rpg.PLACE_NAMES[row["place"]]+u" · вкладов %d/%d" % (row["progress"],row["required"])) size 22 color "#A9B9C6"
+                        if row["ready"] and dg_rpg_state["energy"]>=8:
+                            textbutton u"Выполнить · 8 сил, один период" style "dg_camp_action" action Return(("act",row["project"]))
+                        elif dg_rpg_state["place"]!=row["place"]:
+                            textbutton u"Перейти к месту дела" style "dg_camp_nav" action Return(("travel",row["place"]))
+                        else:
+                            text u"Нужны предмет, участник, силы или вклад другого человека." size 22 color "#A9B9C6"
+            text u"ПРИ СЕБЕ" size 24 color "#65D8D0"
+            $ bag=dg_rpg_state.get("projects",{}).get("inventory",{})
+            text (u", ".join(dg_projects.ITEMS[item]+u" ×%d" % count for item,count in sorted(bag.items()) if count) or u"Предметов для общих проектов пока нет.") size 23 color "#F2E4BB"
+            for npc, bag in sorted(dg_rpg_state.get("projects",{}).get("npc_inventory",{}).items()):
+                if any(bag.values()):
+                    text (u"У "+dg_rpg.NPC_NAMES[npc]+u": "+u", ".join(dg_projects.ITEMS[item] for item,count in bag.items() if count)) size 22 color "#A9B9C6"
+            if all(row["stage"]==4 for row in dg_rpg_state.get("projects",{}).get("records",{}).values()) and dg_rpg_state.get("projects"):
+                text u"Все текущие проекты завершены. Их вклад сохранён в истории лагеря." size 24 color "#65D8D0"
+            textbutton u"Назад" style "dg_camp_nav" action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+screen dg_rpg_relationship(who):
+    modal True
+    add Solid("#101923f5")
+    $ relation=dg_rpg_state.get("relationships",{}).get("people",{}).get(who,{})
+    frame:
+        background dg_camp_button_surface("#101923ee","#65D8D060")
+        xpos 180 ypos 75 xsize 1560 ysize 930 padding (34,26)
+        fixed:
+            text (dg_rpg.NPC_NAMES[who]+u" · личное") size 34 color "#65D8D0"
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
+                xpos 0 ypos 65 xsize 1492 ysize 715 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 17
+                    text (u"Близкая тема: "+dg_projects.DEFINITIONS[dg_relationships.LIKES[who]]["title"]) size 24 color "#F2E4BB"
+                    text (u"Доверие: %d · напряжение: %d" % (relation.get("trust",0),relation.get("tension",0))) size 22 color "#A9B9C6"
+                    textbutton (u"Приглашения: "+(u"разрешены" if relation.get("invitations",True) else u"пауза")) style "dg_camp_nav" action Return(("invitations",None))
+                    textbutton (u"Визиты в мой домик: "+(u"разрешены" if relation.get("home_visits",True) else u"только по отдельному приглашению")) style "dg_camp_nav" action Return(("home_visits",None))
+                    for row in dg_rpg_state.get("relationships",{}).get("promises",[]):
+                        if row["who"]==who:
+                            text (dg_projects.DEFINITIONS[row["project"]]["title"]+u" · до дня %d · "%row["deadline"]+{"open":u"обещано","fulfilled":u"выполнено","broken":u"срок нарушен"}[row["status"]]) size 22 color "#A9B9C6" xmaximum 1430
+                    for key in sorted(dg_projects.DEFINITIONS):
+                        if dg_projects.step(dg_rpg_state,key)[1] and not any(row["who"]==who and row["project"]==key and row["status"]=="open" for row in dg_rpg_state.get("relationships",{}).get("promises",[])):
+                            textbutton (u"Обещать личный вклад: "+dg_projects.DEFINITIONS[key]["title"]) style "dg_camp_nav" action Return(("promise",key))
+                    if relation.get("tension",0)>0 and relation.get("last_apology")!=dg_rpg_state["day"] and dg_rpg_state["energy"]>=6:
+                        textbutton u"Извиниться и выслушать · 6 сил, один период" style "dg_camp_action" action Return(("apologize",None))
+                    if who in dg_rpg_state.get("npc_visits",{}).get("romance",[]):
+                        textbutton u"Завершить романтические отношения" style "dg_camp_nav" action Return(("end_romance",None))
+            textbutton u"Назад" style "dg_camp_nav" xpos 0 ypos 812 action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+screen dg_rpg_dialogue_history:
+    modal True
+    add Solid("#101923f5")
+    frame:
+        background dg_camp_button_surface("#101923ee","#65D8D060")
+        xpos 90 ypos 55 xsize 1740 ysize 960 padding (30,24)
+        vbox:
+            spacing 20
+            text u"История диалога" size 34 color "#65D8D0"
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
+                xsize 1660 ysize 760 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 14
+                    for row in dg_presentation.history(dg_rpg_state)[::-1]:
+                        text (u"День %d · "%row["day"]+dg_rpg.SLOTS[row["slot"]]+u" · "+(dg_rpg.NPC_NAMES.get(row["who"],dg_rpg_state["hero"]["name"] if row["who"]=="hero" else u"Повествование"))) size 21 color "#65D8D0"
+                        text dg_literal(row["text"]) size 24 color "#F2E4BB" xmaximum 1580
+                    if not dg_presentation.history(dg_rpg_state):
+                        text u"Здесь появятся прочитанные сцены и свободные разговоры." size 24 color "#A9B9C6"
+            textbutton u"Назад" style "dg_camp_nav" action Return(None)
+    key "K_ESCAPE" action Return(None)

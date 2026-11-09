@@ -22,7 +22,7 @@ class Visits(unittest.TestCase):
 
     def test_actual_tick_causes_invitation_and_reads_never_reroll(self):
         state=self.state()
-        state['npc_agendas']['people']['mi']['goal']['progress']=2
+        for person in state['npc_agendas']['people'].values():person['goal']['progress']=2
         dg_rpg.activity(state,'rest')
         self.assertIsNotNone(dg_visits.current(state))
         self.assertEqual(dg_rpg.where_is(state,'mi'),state['place'])

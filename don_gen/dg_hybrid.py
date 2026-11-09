@@ -136,7 +136,12 @@ def _simulate(state, action, mode, who, interpretation=None):
             return shadow, {'status':'unknown','text':proposal['question']}
         if mode == 'npc' and proposal['target'] not in (None,who):
             return shadow, {'status':'unknown','text':u'Уточни собеседника: выбран другой персонаж.'}
-        if proposal['intent'] == 'talk':
+        if proposal['intent']=='promise':
+            relation=__import__('dg_relationships')
+            row=relation.parse_promise(shadow,proposal['canonical'])
+            message=relation.promise(shadow,proposal['target'],row['project'])
+            result={'status':'done','kind':'promise','text':message,'who':proposal['target']}
+        elif proposal['intent'] == 'talk':
             result = _neutral_talk(shadow, proposal['canonical'], proposal['target'])
         elif proposal['intent'] == 'observe':
             result = _neutral_free_action(shadow, proposal['canonical'], mode)
@@ -168,7 +173,7 @@ def _simulate(state, action, mode, who, interpretation=None):
     result=dg_rpg.free_action(shadow,action)
     # If the local parser doesn't understand the verb, let the player speak,
     # gesture, observe or roleplay safely with no artificial state benefits.
-    if result["status"] != "done" and dg_social.parse(action) is None:
+    if result["status"] != "done" and dg_social.parse(action) is None and __import__("dg_projects").parse(shadow,action) is None:
         result=_neutral_free_action(shadow,action,"free")
     return shadow,result
 
@@ -207,6 +212,21 @@ def _effects(before, after):
             changes.append(u"Поручение %s: этап %d" % (ident,record["step"]))
         if ident in old_quests and record.get("status")!=old_quests[ident].get("status"):
             changes.append(u"Поручение %s: %s" % (ident,record["status"]))
+    for row in __import__('dg_projects').available(after):
+        old=before.get('projects',{}).get('records',{}).get(row['project'],{}).get('stage',0)
+        new=after.get('projects',{}).get('records',{}).get(row['project'],{}).get('stage',0)
+        if new!=old:changes.append(u'Общий проект '+row['project']+u': этап %d/4'%new)
+    old_promises=before.get("relationships",{}).get("promises",[])
+    for row in after.get("relationships",{}).get("promises",[]):
+        if row not in old_promises:changes.append({"open":u"Дано обещание: ","fulfilled":u"Выполнено обещание: ","broken":u"Нарушено обещание: "}[row["status"]]+__import__("dg_projects").DEFINITIONS[row["project"]]["title"]+u" · до дня %d"%row["deadline"])
+    for actor,person in after.get('relationships',{}).get('people',{}).items():
+        old=before.get('relationships',{}).get('people',{}).get(actor,{})
+        for field,title in (('trust',u'Доверие'),('tension',u'Напряжение')):
+            diff=person.get(field,0)-old.get(field,0)
+            if diff:changes.append(title+u' · '+__import__('dg_rpg').NPC_NAMES[actor]+u': %+d'%diff)
+    old_bag=before.get('projects',{}).get('inventory',{})
+    for item,count in after.get('projects',{}).get('inventory',{}).items():
+        if count!=old_bag.get(item,0):changes.append(__import__('dg_projects').ITEMS[item]+u': %+d'%(count-old_bag.get(item,0)))
     if after["day"] != before["day"] or after["slot"] != before["slot"]:
         changes.append(u"Время: день %d, %s" % (after["day"],
                        (u"утро",u"день",u"вечер",u"ночь")[after["slot"]]))
@@ -255,6 +275,7 @@ def locked_context(state, plan):
     if fingerprint(copy_state)!=plan["before"]:
         raise ValueError("Game state changed before generation")
     focus=plan.get("who") or plan["result"].get("who") or plan["result"].get("npc") or plan["result"].get("target")
+    confirmed_after,unused_outcome=_simulate(copy_state,plan["action"],plan["mode"],plan.get("who"),plan.get("interpretation"))
     selected_topic = None
     if plan.get("mode") == "npc" and plan.get("topic") is not None:
         import dg_dialogue
@@ -281,6 +302,8 @@ def locked_context(state, plan):
         "long_term_memory":__import__('dg_memory').recall(copy_state, focus),
         "npc_agendas":__import__('dg_agents').report(copy_state),
         "housing":__import__("dg_housing").report(copy_state),
+        "shared_projects":__import__("dg_projects").report(copy_state),
+        "relationships":__import__("dg_relationships").report(copy_state),
         "npc_initiative":copy.deepcopy(copy_state.get("npc_visits",{})),
         "recent_hybrid_scenes":[{"day":item["day"],"action":item["action"],
                                 "scene":item["scene"][-1500:],
@@ -292,6 +315,7 @@ def locked_context(state, plan):
         "player_action_untrusted_text":plan["action"],
         "interpreted_action":plan.get('interpretation'),
         "binding_game_result":plan["result"]["text"],
+        "confirmed_after_state":{"shared_projects":__import__("dg_projects").report(confirmed_after),"relationships":__import__("dg_relationships").report(confirmed_after)},
         "scene_anchor":{"day":copy_state["day"],
                         "time":dg_rpg.SLOTS[copy_state["slot"]],
                         "place":dg_rpg.PLACE_NAMES[copy_state["place"]]},
@@ -357,6 +381,10 @@ def commit(state, plan, scene_text=None):
            "effects":plan["effects"],"scene":scene_text or u"",
            "narrated_by_ai":bool(scene_text)}
     entry['deferred'] = outcome.get('deferred', [])
+    __import__("dg_presentation").record(after,plan["before"],scene_text or outcome["text"])
+    for line in after["presentation"]["lines"]:
+        if line["scene"]==plan["before"]:
+            for field in ("day","slot","place"):line[field]=original[field]
     after.setdefault("hybrid_history",[]).append(entry)
     after["hybrid_history"]=after["hybrid_history"][-45:]
     import dg_memory

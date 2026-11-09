@@ -151,6 +151,9 @@ def validate(state):
     __import__('dg_agents').validate(state)
     __import__('dg_housing').validate(state)
     __import__('dg_visits').validate(state)
+    __import__('dg_projects').validate(state)
+    __import__('dg_relationships').validate(state)
+    __import__('dg_presentation').validate(state)
     state.setdefault("mystery", {"yulia_discovered": False})
     dg_adult.ensure(state)
     if state["adult_mode"].get("enabled") and int(state["hero"]["age"]) < 18:
@@ -342,6 +345,7 @@ def _tick(state):
             _journal(state, u'Пока идёт время, лагерь живёт своими делами. ' + changes[-1]['text'])
         dg_world.refresh_open_event(state)
         dg_social.prepare_incident(state)
+    __import__("dg_relationships").tick(state)
     __import__("dg_visits").tick(state,previous)
 
 
@@ -506,6 +510,10 @@ def free_action(state, requested):
     violation=dg_adult.validate_action(state, requested)
     if violation:
         return {"status":"unknown","text":violation}
+    project=__import__("dg_projects").parse(state,requested)
+    if project:
+        try:return __import__("dg_projects").act(state,project["project"])
+        except ValueError as exc:return {"status":"unknown","text":text_type(exc)}
     result=dg_social.action(state, requested, nearby)
     if result["status"] != "done":
         return result
@@ -565,6 +573,7 @@ def append_ai_scene(state, who, text):
     if not isinstance(text, text_type) or not text.strip():
         raise ValueError("Empty scene")
     text = text.strip()[:9000]
+    __import__("dg_presentation").record(state,"special:"+__import__("hashlib").sha256(text.encode("utf-8")).hexdigest(),text)
     state["ai_scenes"].append({"day": state["day"], "who": who, "text": text})
     state["ai_scenes"] = state["ai_scenes"][-60:]
     _journal(state, u"Новая сюжетная сцена с %s добавлена в дневник." % NPC_NAMES[who])

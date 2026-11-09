@@ -97,7 +97,8 @@ class ComplexIntent(unittest.TestCase):
 
     def test_false_condition_and_absent_target_do_nothing(self):
         original=copy.deepcopy(self.state)
-        self.proposal['when']={'weather':'rain','not':False}
+        actual=__import__('dg_world').weather(self.state)[0]
+        self.proposal['when']={'weather':('rain' if actual!='rain' else 'sun'),'not':False}
         with self.assertRaises(ValueError): dg_intent.validate(self.state,self.proposal)
         self.proposal['when']=None
         self.proposal['target']='uv'

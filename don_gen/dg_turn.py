@@ -21,6 +21,9 @@ def finish(root, pending, scene_key, text):
     if not isinstance(text, type(u"")) or len(text) > 12000 or len(dg_stage.readable(text).strip()) < 100:
         raise ValueError("Narrator returned invalid scene text")
     dg_narrative.remember_scene(candidate, scene_key, text.strip())
+    for line in candidate.get("presentation",{}).get("lines",[]):
+        if line["scene"]==scene_key:
+            for field in ("day","slot","place"):line[field]=current[field]
     import dg_memory
     dg_memory.record(candidate, scene_key, pending.get('intention', u'Завершённый ход'),
                      pending.get('result', candidate.get('event', u'')), text.strip(),
