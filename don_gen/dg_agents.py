@@ -198,7 +198,7 @@ def validate(state):
             raise ValueError('Invalid NPC goal')
         if 'project' in goal:
             projects=__import__('dg_projects')
-            if (not isinstance(goal.get('project'),type(u'')) or goal.get('project') not in projects.DEFINITIONS or goal.get('project_stage') not in (0,1,2,3) or goal.get('project_role') not in (None,'recipient') or goal['place']!=projects.DEFINITIONS[goal['project']]['steps'][goal['project_stage']][1]):
+            if (not isinstance(goal.get('project'),type(u'')) or goal.get('project') not in projects.definitions(state) or goal.get('project_stage') not in (0,1,2,3) or goal.get('project_role') not in (None,'recipient') or goal['place']!=projects.definitions(state)[goal['project']]['steps'][goal['project_stage']][1]):
                 raise ValueError('Invalid project goal')
     for row in system['history']:
         if (not isinstance(row,dict) or row.get('who') not in PROFILES

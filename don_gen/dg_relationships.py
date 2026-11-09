@@ -4,15 +4,28 @@ from __future__ import unicode_literals
 import copy
 LIKES={'mi':'concert','dv':'concert','us':'concert','sl':'concert','un':'concert','mz':'radio','el':'radio','sh':'radio','mt':'concert','cs':'radio'}
 
+PREFERENCES={
+ 'mi':{'activities':('music','help'),'items':('notes','tea')},
+ 'dv':{'activities':('music','repair'),'items':('poster','toolkit')},
+ 'un':{'activities':('read','explore'),'items':('book','pencil')},
+ 'sl':{'activities':('organize','help'),'items':('poster','cloth')},
+ 'mz':{'activities':('read','organize'),'items':('book','pencil')},
+ 'el':{'activities':('repair','explore'),'items':('toolkit','parts')},
+ 'sh':{'activities':('repair','explore'),'items':('toolkit','parts')},
+ 'mt':{'activities':('organize','help'),'items':('tea','poster')},
+ 'cs':{'activities':('help','organize'),'items':('tea','cloth')},
+ 'us':{'activities':('music','explore'),'items':('poster','bun')}}
+ACTIVITY_NAMES={'music':u'музыка','repair':u'техника','read':u'чтение','explore':u'исследования','organize':u'организация','help':u'помощь другим'}
+
 def ensure(state): return state.setdefault('relationships',{'people':{},'promises':[]})
 def person(state,who): return ensure(state)['people'].setdefault(who,{'trust':0,'tension':0,'home_visits':True,'invitations':True,'last_apology':None})
 def report(state):
-    result=copy.deepcopy(state.get('relationships',{}));result['preferences']=copy.deepcopy(LIKES)
+    result=copy.deepcopy(state.get('relationships',{}));result['preferences']=copy.deepcopy(PREFERENCES)
     return result
 
 def promise(state,who,key):
     import dg_projects,dg_rpg
-    if who not in LIKES or key not in dg_projects.DEFINITIONS or dg_rpg.where_is(state,who)!=state['place']: raise ValueError(u'Обещание требует присутствующего собеседника и известного проекта.')
+    if who not in LIKES or key not in dg_projects.definitions(state) or dg_rpg.where_is(state,who)!=state['place']: raise ValueError(u'Обещание требует присутствующего собеседника и известного проекта.')
     index,spec=dg_projects.step(state,key)
     rows=ensure(state)['promises']
     if not spec or any(r['who']==who and r['project']==key and r['status']=='open' for r in rows): raise ValueError(u'Такое обещание уже дано или проект завершён.')
@@ -28,7 +41,7 @@ def contributed(state,key,index):
             row['status']='fulfilled';p=person(state,row['who']);p['trust']=min(20,p['trust']+3);p['tension']=max(0,p['tension']-2)
     # A deed matching someone's interests improves trust only once per project stage.
     for who,p in system['people'].items():
-        if LIKES.get(who)==key: p['tension']=max(0,p['tension']-1)
+        if __import__('dg_projects').definitions(state)[key]['steps'][2][0] in PREFERENCES[who]['activities']:p['tension']=max(0,p['tension']-1)
 
 def tick(state):
     system=state.get('relationships',{})
@@ -67,8 +80,9 @@ def validate(state):
     if not isinstance(system,dict) or not isinstance(system.get('people'),dict) or len(system['people'])>10 or not isinstance(system.get('promises'),list) or len(system['promises'])>48: raise ValueError('Invalid relationship state')
     for who,p in system['people'].items():
         if who not in LIKES or not isinstance(p,dict) or not isinstance(p.get('trust'),int) or isinstance(p['trust'],bool) or not -20<=p['trust']<=20 or not isinstance(p.get('tension'),int) or isinstance(p['tension'],bool) or not 0<=p['tension']<=20 or not isinstance(p.get('home_visits'),bool) or not isinstance(p.get('invitations'),bool) or (p.get('last_apology') is not None and not isinstance(p['last_apology'],int)):raise ValueError('Invalid relationship record')
+        if p.get('last_gift') is not None and (not isinstance(p['last_gift'],int) or isinstance(p['last_gift'],bool) or not 1<=p['last_gift']<=50000):raise ValueError('Invalid gift cooldown')
     for row in system['promises']:
-        if not isinstance(row,dict) or row.get('who') not in LIKES or row.get('project') not in ('concert','radio') or row.get('stage') not in (0,1,2,3) or row.get('status') not in ('open','fulfilled','broken') or not isinstance(row.get('deadline'),int) or not 1<=row['deadline']<=50000:raise ValueError('Invalid promise')
+        if not isinstance(row,dict) or row.get('who') not in LIKES or row.get('project') not in tuple(__import__('dg_projects').definitions(state)) or row.get('stage') not in (0,1,2,3) or row.get('status') not in ('open','fulfilled','broken','cancelled') or not isinstance(row.get('deadline'),int) or not 1<=row['deadline']<=50000:raise ValueError('Invalid promise')
 
 
 def available_promises(state):
@@ -76,12 +90,20 @@ def available_promises(state):
     result=[]
     for who,name in dg_rpg.at_place(state):
         if who not in LIKES:continue
-        for key in sorted(dg_projects.DEFINITIONS):
+        for key in sorted(dg_projects.definitions(state)):
             index,spec=dg_projects.step(state,key)
             if spec and not any(row['who']==who and row['project']==key and row['status']=='open' for row in state.get('relationships',{}).get('promises',[])):
-                result.append({'target':who,'project':key,'caption':u'Дать обещание: '+name+u' · '+dg_projects.DEFINITIONS[key]['title']})
+                result.append({'target':who,'project':key,'caption':u'Дать обещание: '+name+u' · '+dg_projects.definitions(state)[key]['title']})
     return result
 
 def parse_promise(state,text):
     folded=text.strip().rstrip('.!').lower()
     return next((row for row in available_promises(state) if row['caption'].lower()==folded),None)
+
+
+def received(state,who,item):
+    if who not in PREFERENCES or item not in PREFERENCES[who]['items']:return False
+    p=person(state,who)
+    if p.get('last_gift')==state['day']:return False
+    p['last_gift']=state['day'];p['trust']=min(20,p['trust']+1)
+    return True

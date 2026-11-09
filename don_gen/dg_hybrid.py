@@ -136,7 +136,10 @@ def _simulate(state, action, mode, who, interpretation=None):
             return shadow, {'status':'unknown','text':proposal['question']}
         if mode == 'npc' and proposal['target'] not in (None,who):
             return shadow, {'status':'unknown','text':u'Уточни собеседника: выбран другой персонаж.'}
-        if proposal['intent']=='promise':
+        if proposal['intent']=='inventory':
+            inventory=__import__('dg_inventory');row=inventory.parse(shadow,proposal['canonical'])
+            result=inventory.act(shadow,*row[:3])
+        elif proposal['intent']=='promise':
             relation=__import__('dg_relationships')
             row=relation.parse_promise(shadow,proposal['canonical'])
             message=relation.promise(shadow,proposal['target'],row['project'])
@@ -218,7 +221,7 @@ def _effects(before, after):
         if new!=old:changes.append(u'Общий проект '+row['project']+u': этап %d/4'%new)
     old_promises=before.get("relationships",{}).get("promises",[])
     for row in after.get("relationships",{}).get("promises",[]):
-        if row not in old_promises:changes.append({"open":u"Дано обещание: ","fulfilled":u"Выполнено обещание: ","broken":u"Нарушено обещание: "}[row["status"]]+__import__("dg_projects").DEFINITIONS[row["project"]]["title"]+u" · до дня %d"%row["deadline"])
+        if row not in old_promises:changes.append({"open":u"Дано обещание: ","fulfilled":u"Выполнено обещание: ","broken":u"Нарушено обещание: ","cancelled":u"Отменено обещание: "}[row["status"]]+__import__("dg_projects").definitions(after)[row["project"]]["title"]+u" · до дня %d"%row["deadline"])
     for actor,person in after.get('relationships',{}).get('people',{}).items():
         old=before.get('relationships',{}).get('people',{}).get(actor,{})
         for field,title in (('trust',u'Доверие'),('tension',u'Напряжение')):
@@ -303,6 +306,7 @@ def locked_context(state, plan):
         "npc_agendas":__import__('dg_agents').report(copy_state),
         "housing":__import__("dg_housing").report(copy_state),
         "shared_projects":__import__("dg_projects").report(copy_state),
+        "inventory":__import__("dg_inventory").report(copy_state),
         "relationships":__import__("dg_relationships").report(copy_state),
         "npc_initiative":copy.deepcopy(copy_state.get("npc_visits",{})),
         "recent_hybrid_scenes":[{"day":item["day"],"action":item["action"],
@@ -315,7 +319,7 @@ def locked_context(state, plan):
         "player_action_untrusted_text":plan["action"],
         "interpreted_action":plan.get('interpretation'),
         "binding_game_result":plan["result"]["text"],
-        "confirmed_after_state":{"shared_projects":__import__("dg_projects").report(confirmed_after),"relationships":__import__("dg_relationships").report(confirmed_after)},
+        "confirmed_after_state":{"inventory":__import__("dg_inventory").report(confirmed_after),"shared_projects":__import__("dg_projects").report(confirmed_after),"relationships":__import__("dg_relationships").report(confirmed_after)},
         "scene_anchor":{"day":copy_state["day"],
                         "time":dg_rpg.SLOTS[copy_state["slot"]],
                         "place":dg_rpg.PLACE_NAMES[copy_state["place"]]},

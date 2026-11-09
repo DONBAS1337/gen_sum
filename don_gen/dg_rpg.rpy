@@ -23,6 +23,7 @@ init 1001 python:
     import dg_housing
     import dg_visits
     import dg_projects
+    import dg_inventory
     import dg_relationships
     import dg_presentation
     import dg_consistency
@@ -143,11 +144,11 @@ init 1001 python:
 
     def dg_rpg_apply(action, arg=None):
         state = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
-        transactional = action in ("conversation", "world", "personal", "incident", "route", "visit", "project", "relation")
+        transactional = action in ("conversation", "world", "personal", "incident", "route", "visit", "project", "relation", "inventory")
         pending = dg_turn.begin(state) if transactional else None
         if pending is not None:
             state = pending["state"]
-        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous", "visit", "project", "relation"):
+        if action in ("talk", "route", "conversation", "world", "free", "personal", "incident", "hybrid", "spontaneous", "visit", "project", "relation", "inventory"):
             store.dg_rpg_scene_context = dg_stage.freeze(state)
         if action == "move":
             dg_rpg.move(state, arg)
@@ -172,6 +173,13 @@ init 1001 python:
             store.dg_rpg_last_action = dg_rpg.free_action(state, arg)
         elif action == "events_seen":
             dg_presentation.seen(state)
+        elif action == "project_register":
+            store.dg_rpg_new_project=dg_projects.register(state,arg)
+        elif action == "project_cancel":
+            dg_rpg._journal(state,dg_projects.cancel(state,arg))
+        elif action == "inventory":
+            store.dg_rpg_last_inventory=dg_inventory.act(state,arg[0],arg[1],arg[2])
+            pending.update(who=store.dg_rpg_last_inventory['who'],intention=store.dg_rpg_last_inventory['title'],result=store.dg_rpg_last_inventory['text'])
         elif action == "project":
             store.dg_rpg_last_project=dg_projects.act(state,arg)
             pending.update(who=store.dg_rpg_last_project['who'],intention=store.dg_rpg_last_project['title'],result=store.dg_rpg_last_project['text'])
@@ -246,6 +254,40 @@ init 1001 python:
             store.dg_rpg_scene_context = dg_stage.freeze(state)
         logging.getLogger("don_gen").info("RPG action=%s day=%d slot=%d place=%s", action, state["day"], state["slot"], state["place"])
         renpy.block_rollback()
+
+    def dg_rpg_propose_project(text):
+        import copy,re
+        state=dg_rpg.load(dg_rpg_root(),dg_rpg_state['id'])
+        system=state.get('projects',{})
+        if len(system.get('blueprints',{}))>=12 or len([row for key,row in system.get('records',{}).items() if key.startswith('custom_') and row['stage']<4 and not row.get('cancelled')])>=4:raise ValueError(u'Сначала заверши или отмени активные общие дела.')
+        choices=[]
+        for item,spec in sorted(dg_inventory.CATALOG.items()):
+            if spec['source']:
+                waiting=sum(1 for key,row in system.get('records',{}).items() if row['stage']==0 and not row.get('cancelled') and dg_projects.definitions(state)[key]['steps'][0][2]==item)
+                free=max(0,dg_inventory.stock_at(state,spec['source']).get(item,0)-waiting)+sum(dg_inventory.free_count(state,who,item) for who in ['hero']+list(system.get('npc_inventory',{})))
+                if free:choices.append({'item':item,'title':spec['title'],'source':spec['source'],'available':free})
+        if not choices:raise ValueError(u'Для нового дела нет свободных материалов. Сначала заверши текущие дела или освободи материалы отменой.')
+        rules=(u'Предложи одно реалистичное безопасное лагерное дело по запросу игрока. Верни только JSON: '
+               u'{"title":"5–80 символов","item":"код материала","recipient":"код NPC","work_place":"код места","final_place":"код места","theme":"festival|radio|lake|council","activity":"music|repair|read|explore|organize|help","participants":["2–4 кода NPC"]}. '
+               u'Выбирай только известные материалы и места. Дело состоит из получения материала, доставки получателю, совместной подготовки и завершения. '
+               u'Не обещай создания предметов вне известных рецептов, мгновенных навыков, фантастических технологий или заранее взаимной любви. '
+               u'theme — направление истории, activity — реальный вид работы. Стенгазета и оформление — organize, чтение — read; для music нужен mi/dv/us, для repair el/sh. Не превращай любое дело в музыку только из-за профиля БКРР и не подменяй указанных игроком участников. '
+               u'Материал должен существовать; роль героев учитывает характер и профиль мира. Игрок может предложить тему, но не изменить формат и правила.')
+        context={'player_idea':text[:1000],'materials':choices,'places':dg_projects.PUBLIC_PLACES,'people':dg_narrative.PERSONA,'profile':dg_narrative.context(state,'project',None,text[:100]),'inventory':dg_inventory.report(state)}
+        app=dg_runtime.app
+        if not app.models:app.refresh_models()
+        repair=u''
+        for attempt in range(2):
+            raw=app.client.generate(rules+repair,json.dumps(context,ensure_ascii=False),model=dg_backend.default_model(app.models,persistent.dg_model),effort=dg_backend.DEFAULT_EFFORT,fast_mode=persistent.dg_fast_mode)
+            try:
+                raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip())
+                if len(raw)>12000:raise ValueError(u'Слишком большой ответ планировщика.')
+                value=dg_projects.check_blueprint(json.loads(raw))
+                dg_projects.register(copy.deepcopy(state),value)
+                return {'blueprint':value,'before':dg_hybrid.fingerprint(state)}
+            except ValueError as exc:
+                repair=u' Предыдущий вариант не прошёл проверку: '+type(u'')(exc)[:600]+u'. Исправь только причину отказа; не меняй задачу игрока ради обхода правил.'
+        raise ValueError(u'Не удалось составить выполнимый план. Уточни материал, место или участников.')
 
     def dg_rpg_interpret_action(action, mode, who):
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state['id'])
@@ -773,6 +815,7 @@ init 1001 python:
 
 default dg_rpg_hybrid_plan = None
 default dg_rpg_state = None
+default dg_project_draft = u"Хочу организовать небольшое лагерное дело вместе с Мику"
 default dg_create_cabin = "cabin_01"
 default dg_create_roommate = "mt"
 default dg_cg_vision_attempted = None
@@ -1189,8 +1232,8 @@ style dg_rpg_heading is dg_rpg_body:
     size 42
     color "#ffe0a2"
 style dg_rpg_button is dg_act:
-    background Solid("#24434a")
-    hover_background Solid("#355a60")
+    background Solid("#1d3848")
+    hover_background Solid("#365363")
     selected_background Solid("#526244")
     insensitive_background Solid("#1c3037")
     padding (20, 14)
@@ -1219,10 +1262,10 @@ default dg_rpg_action_context = None
 # Camp navigation stays outside the dialogue area.
 init 1002:
     style dg_camp_nav is button:
-        background dg_camp_button_surface("#101923cc", "#65D8D050")
-        hover_background dg_camp_button_surface("#304958ee", "#65D8D0a0")
-        selected_background dg_camp_button_surface("#304958ee", "#65D8D0b0")
-        selected_hover_background dg_camp_button_surface("#3d5d69ee", "#65D8D0")
+        background dg_camp_button_surface("#152b3af5", "#88b9cacc")
+        hover_background dg_camp_button_surface("#365363", "#9cf8ef")
+        selected_background dg_camp_button_surface("#396474", "#9cf8ef")
+        selected_hover_background dg_camp_button_surface("#477b88", "#c0fff8")
         insensitive_background Solid("#071c1770")
         padding (18, 10)
         xminimum 122
@@ -1235,12 +1278,12 @@ init 1002:
         insensitive_color "#869087"
         outlines []
     style dg_camp_action is dg_camp_nav:
-        background dg_camp_button_surface("#304958ee", "#65D8D0b0")
-        hover_background dg_camp_button_surface("#3d5d69ee", "#65D8D0")
+        background dg_camp_button_surface("#285e70", "#8af2e7")
+        hover_background dg_camp_button_surface("#397d8d", "#c0fff8")
         xminimum 238
     style dg_camp_action_text is dg_camp_nav_text:
         color "#fff0bc"
-        hover_color "#172b22"
+        hover_color "#ffffff"
     style dg_camp_arrow is dg_camp_nav:
         xminimum 44
         xsize 44
@@ -1261,20 +1304,20 @@ init 1002:
         color "#ffe0a2"
         outlines []
     style dg_note_button is dg_rpg_button:
-        background dg_camp_button_surface("#17352edb", "#8c865a80")
-        hover_background dg_camp_button_surface("#3b5846ee", "#b6ac77")
-        selected_background dg_camp_button_surface("#506344ee", "#d8c786")
+        background dg_camp_button_surface("#203c4c", "#88b9cacc")
+        hover_background dg_camp_button_surface("#365363", "#9cf8ef")
+        selected_background dg_camp_button_surface("#396474", "#9cf8ef")
         insensitive_background Solid("#1c3037")
     style dg_note_button_text is dg_note_body:
         size 27
-        hover_color "#172b22"
+        hover_color "#ffffff"
         insensitive_color "#869087"
     style dg_note_main is dg_note_button:
-        background dg_camp_button_surface("#304958ee", "#65D8D0b0")
-        hover_background dg_camp_button_surface("#3d5d69ee", "#65D8D0")
+        background dg_camp_button_surface("#285e70", "#8af2e7")
+        hover_background dg_camp_button_surface("#397d8d", "#c0fff8")
     style dg_note_main_text is dg_note_button_text:
         color "#fff0bc"
-        hover_color "#172b22"
+        hover_color "#ffffff"
     style dg_note_tab is dg_note_button:
         xfill False
         xsize 252
@@ -1411,6 +1454,7 @@ screen dg_rpg_controls(initial_tab="story"):
         textbutton u"Занятия" style "dg_note_tab" selected dg_hub_tab == "actions" action SetScreenVariable("dg_hub_tab","actions")
         textbutton u"Настройки" style "dg_note_tab" selected dg_hub_tab == "settings" action SetScreenVariable("dg_hub_tab","settings")
         textbutton u"Общие дела" style "dg_note_tab" action Return(("projects",None))
+        textbutton u"Предметы" style "dg_note_tab" action Return(("inventory",None))
     frame:
         background Solid("#102b33ed")
         xpos 48 ypos 258 xsize 1100 ysize 656 padding (28, 24)
@@ -2525,14 +2569,13 @@ label dg_rpg_loop:
         call screen dg_rpg_dialogue_history
         jump dg_rpg_loop
     if dg_rpg_cmd == "projects":
-        call screen dg_rpg_projects
+        jump dg_rpg_projects_label
+    if dg_rpg_cmd == "inventory":
+        call screen dg_rpg_inventory
         if _return:
-            if _return[0]=="travel":
-                $ dg_rpg_apply("move",_return[1])
-                jump dg_rpg_loop
-            $ dg_rpg_project_key=_return[1]
-            $ dg_rpg_apply("project",dg_rpg_project_key)
-            call dg_rpg_vn_scene(dg_rpg_last_project["text"],True,dg_rpg_last_project["who"],"project:"+dg_rpg_project_key+":"+str(dg_rpg_state["day"])+":"+str(dg_rpg_state["slot"]))
+            $ dg_item_action=_return
+            $ dg_rpg_apply("inventory",dg_item_action)
+            call dg_rpg_vn_scene(dg_rpg_last_inventory["text"],True,dg_rpg_last_inventory["who"],"inventory:"+dg_hybrid.fingerprint(dg_rpg_state))
         jump dg_rpg_loop
     if dg_rpg_cmd == "relationship":
         $ dg_relation_who=dg_rpg_value
@@ -2939,35 +2982,46 @@ screen dg_rpg_projects:
     add Solid("#101923f5")
     frame:
         background dg_camp_button_surface("#101923ee","#65D8D060")
-        xpos 90 ypos 70 xsize 1740 ysize 930 padding (30,24)
-        vbox:
-            spacing 22
-            text u"Общие дела и предметы" size 34 color "#65D8D0"
-            text u"Каждый этап — отдельный поступок. Участники лагеря также могут вносить собственный вклад." size 24 color "#A9B9C6" xmaximum 1600
-            for row in dg_projects.available(dg_rpg_state):
-                frame:
-                    background Solid("#243441c0") xsize 1640 padding (22,18)
-                    vbox:
-                        spacing 10
-                        text (dg_projects.DEFINITIONS[row["project"]]["title"]+u" · этап %d/4" % (row["stage"]+1)) size 28 color "#F2E4BB"
-                        text row["caption"] size 24 color "#F2E4BB"
-                        text (dg_rpg.PLACE_NAMES[row["place"]]+u" · вкладов %d/%d" % (row["progress"],row["required"])) size 22 color "#A9B9C6"
-                        if row["ready"] and dg_rpg_state["energy"]>=8:
-                            textbutton u"Выполнить · 8 сил, один период" style "dg_camp_action" action Return(("act",row["project"]))
-                        elif dg_rpg_state["place"]!=row["place"]:
-                            textbutton u"Перейти к месту дела" style "dg_camp_nav" action Return(("travel",row["place"]))
-                        else:
-                            text u"Нужны предмет, участник, силы или вклад другого человека." size 22 color "#A9B9C6"
-            text u"ПРИ СЕБЕ" size 24 color "#65D8D0"
-            $ bag=dg_rpg_state.get("projects",{}).get("inventory",{})
-            text (u", ".join(dg_projects.ITEMS[item]+u" ×%d" % count for item,count in sorted(bag.items()) if count) or u"Предметов для общих проектов пока нет.") size 23 color "#F2E4BB"
-            for npc, bag in sorted(dg_rpg_state.get("projects",{}).get("npc_inventory",{}).items()):
-                if any(bag.values()):
-                    text (u"У "+dg_rpg.NPC_NAMES[npc]+u": "+u", ".join(dg_projects.ITEMS[item] for item,count in bag.items() if count)) size 22 color "#A9B9C6"
-            if all(row["stage"]==4 for row in dg_rpg_state.get("projects",{}).get("records",{}).values()) and dg_rpg_state.get("projects"):
-                text u"Все текущие проекты завершены. Их вклад сохранён в истории лагеря." size 24 color "#65D8D0"
-            textbutton u"Назад" style "dg_camp_nav" action Return(None)
-    key "K_ESCAPE" action Return(None)
+        xpos 90 ypos 55 xsize 1740 ysize 960 padding (30,24)
+        fixed:
+            text u"Общие дела" size 34 color "#65D8D0"
+            hbox:
+                xpos 850 ypos 0 spacing 16
+                textbutton u"Предложить новое дело" style "dg_camp_action" action Return(("propose",None))
+                textbutton u"Предметы" style "dg_camp_nav" action Return(("inventory",None))
+                textbutton u"Назад" style "dg_camp_nav" action Return(None)
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
+                xpos 0 ypos 82 xsize 1660 ysize 820 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 18
+                    text u"Материал должен существовать. Каждый этап выполняется отдельно; NPC тоже вносят свой вклад." size 24 color "#A9B9C6" xmaximum 1600
+                    for row in dg_projects.available(dg_rpg_state):
+                        frame:
+                            background Solid("#243441ee") xsize 1600 padding (22,18)
+                            vbox:
+                                spacing 12
+                                text (dg_projects.definitions(dg_rpg_state)[row["project"]]["title"]+u" · этап %d/4" % (row["stage"]+1)) size 28 color "#F2E4BB"
+                                text row["caption"] size 24 color "#F2E4BB" xmaximum 1520
+                                text (dg_rpg.PLACE_NAMES[row["place"]]+u" · вкладов %d/%d" % (row["progress"],row["required"])) size 22 color "#A9B9C6"
+                                hbox:
+                                    spacing 18
+                                    if row["ready"] and dg_rpg_state["energy"]>=8:
+                                        textbutton u"Выполнить · 8 сил, один период" style "dg_camp_action" action Return(("act",row["project"]))
+                                    elif dg_rpg_state["place"]!=row["place"]:
+                                        textbutton u"К месту дела" style "dg_camp_nav" action Return(("travel",row["place"]))
+                                    else:
+                                        text u"Нужны материалы, участник, силы или чужой вклад." size 22 color "#A9B9C6" xmaximum 1040
+                                    textbutton u"Отменить дело" style "dg_camp_nav" action Return(("cancel",row["project"]))
+                    text u"Закрытые дела" size 24 color "#65D8D0"
+                    for key, record in sorted(dg_rpg_state.get("projects",{}).get("records",{}).items()):
+                        if record["stage"]==4 or record.get("cancelled"):
+                            text (dg_projects.definitions(dg_rpg_state)[key]["title"]+(u" · отменено" if record.get("cancelled") else u" · завершено")) size 23 color "#A9B9C6"
 
 screen dg_rpg_relationship(who):
     modal True
@@ -2988,16 +3042,16 @@ screen dg_rpg_relationship(who):
                 xpos 0 ypos 65 xsize 1492 ysize 715 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 17
-                    text (u"Близкая тема: "+dg_projects.DEFINITIONS[dg_relationships.LIKES[who]]["title"]) size 24 color "#F2E4BB"
+                    text (u"Близкие занятия: "+u", ".join(dg_relationships.ACTIVITY_NAMES[kind] for kind in dg_relationships.PREFERENCES[who]["activities"])) size 24 color "#F2E4BB"
                     text (u"Доверие: %d · напряжение: %d" % (relation.get("trust",0),relation.get("tension",0))) size 22 color "#A9B9C6"
                     textbutton (u"Приглашения: "+(u"разрешены" if relation.get("invitations",True) else u"пауза")) style "dg_camp_nav" action Return(("invitations",None))
                     textbutton (u"Визиты в мой домик: "+(u"разрешены" if relation.get("home_visits",True) else u"только по отдельному приглашению")) style "dg_camp_nav" action Return(("home_visits",None))
                     for row in dg_rpg_state.get("relationships",{}).get("promises",[]):
                         if row["who"]==who:
-                            text (dg_projects.DEFINITIONS[row["project"]]["title"]+u" · до дня %d · "%row["deadline"]+{"open":u"обещано","fulfilled":u"выполнено","broken":u"срок нарушен"}[row["status"]]) size 22 color "#A9B9C6" xmaximum 1430
-                    for key in sorted(dg_projects.DEFINITIONS):
+                            text (dg_projects.definitions(dg_rpg_state)[row["project"]]["title"]+u" · до дня %d · "%row["deadline"]+{"open":u"обещано","fulfilled":u"выполнено","broken":u"срок нарушен","cancelled":u"отменено"}[row["status"]]) size 22 color "#A9B9C6" xmaximum 1430
+                    for key in sorted(dg_projects.definitions(dg_rpg_state)):
                         if dg_projects.step(dg_rpg_state,key)[1] and not any(row["who"]==who and row["project"]==key and row["status"]=="open" for row in dg_rpg_state.get("relationships",{}).get("promises",[])):
-                            textbutton (u"Обещать личный вклад: "+dg_projects.DEFINITIONS[key]["title"]) style "dg_camp_nav" action Return(("promise",key))
+                            textbutton (u"Обещать личный вклад: "+dg_projects.definitions(dg_rpg_state)[key]["title"]) style "dg_camp_nav" action Return(("promise",key))
                     if relation.get("tension",0)>0 and relation.get("last_apology")!=dg_rpg_state["day"] and dg_rpg_state["energy"]>=6:
                         textbutton u"Извиниться и выслушать · 6 сил, один период" style "dg_camp_action" action Return(("apologize",None))
                     if who in dg_rpg_state.get("npc_visits",{}).get("romance",[]):
@@ -3031,3 +3085,132 @@ screen dg_rpg_dialogue_history:
                         text u"Здесь появятся прочитанные сцены и свободные разговоры." size 24 color "#A9B9C6"
             textbutton u"Назад" style "dg_camp_nav" action Return(None)
     key "K_ESCAPE" action Return(None)
+
+
+screen dg_rpg_inventory:
+    modal True
+    add Solid("#101923f5")
+    frame:
+        background dg_camp_button_surface("#101923ee","#65D8D060")
+        xpos 90 ypos 55 xsize 1740 ysize 960 padding (30,24)
+        vbox:
+            spacing 18
+            text (u"Предметы · "+dg_rpg.PLACE_NAMES[dg_rpg_state["place"]]) size 34 color "#65D8D0"
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
+                xsize 1660 ysize 760 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 14
+                    text u"При себе" size 26 color "#65D8D0"
+                    $ player_bag=dg_rpg_state.get("projects",{}).get("inventory",{})
+                    text (u", ".join(dg_inventory.CATALOG[item]["title"]+u" ×%d"%n for item,n in sorted(player_bag.items()) if n) or u"Пока пусто.") size 24 color "#F2E4BB" xmaximum 1600
+                    text u"Запас в этом месте" size 26 color "#65D8D0"
+                    text (u", ".join(dg_inventory.CATALOG[item]["title"]+u" ×%d"%n for item,n in sorted(dg_inventory.stock_at(dg_rpg_state,dg_rpg_state["place"]).items()) if n) or u"Нет доступного запаса.") size 24 color "#F2E4BB" xmaximum 1600
+                    text u"Материалы для плаката: бумага и краски; нужен карандаш. Для заплаты: ткань и изолента; нужен набор инструментов. Работа — в клубах." size 22 color "#A9B9C6" xmaximum 1600
+                    for loan in dg_rpg_state.get("inventory_world",{}).get("loans",[]):
+                        if loan["status"]=="open":
+                            text (dg_rpg.NPC_NAMES[loan["holder"]]+u" держит "+dg_inventory.CATALOG[loan["item"]]["title"]+u" · срок до дня %d"%loan["deadline"]) size 23 color "#A9B9C6"
+                    text u"Доступные действия" size 26 color "#65D8D0"
+                    for operation,item,who,caption in dg_inventory.actions(dg_rpg_state):
+                        textbutton caption style "dg_camp_nav" action Return((operation,item,who))
+            textbutton u"Назад" style "dg_camp_nav" action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+screen dg_rpg_project_request:
+    modal True
+    default idea=dg_project_draft
+    add Solid("#101923f5")
+    frame:
+        background dg_camp_button_surface("#101923ee","#65D8D060")
+        xpos 180 ypos 190 xsize 1560 ysize 690 padding (34,30)
+        vbox:
+            spacing 28
+            text u"Какое дело ты хочешь организовать?" size 34 color "#65D8D0"
+            text u"ИИ предложит тему и участников. Материалы, места и этапы проверит движок; проект появится только после твоего выбора." size 24 color "#A9B9C6" xmaximum 1460
+            frame:
+                background Solid("#243441") padding (20,18) xsize 1460 ysize 180
+                input value ScreenVariableInputValue("idea") length 500 color "#F2E4BB" size 24 xmaximum 1390
+            hbox:
+                spacing 20
+                textbutton u"Предложить вариант" style "dg_camp_action" sensitive bool(idea.strip()) action Return(idea.strip())
+                textbutton u"Назад" style "dg_camp_nav" action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+screen dg_rpg_project_review(proposal):
+    modal True
+    $ value=proposal["blueprint"]
+    $ material=dg_inventory.CATALOG[value["item"]]
+    add Solid("#101923f5")
+    frame:
+        background dg_camp_button_surface("#101923ee","#65D8D060")
+        xpos 180 ypos 150 xsize 1560 ysize 780 padding (34,30)
+        vbox:
+            spacing 25
+            text value["title"] size 34 color "#65D8D0" xmaximum 1460
+            text (u"Материал: "+material["title"]+u" · источник: "+dg_rpg.PLACE_NAMES[material["source"]]) size 26 color "#F2E4BB"
+            text (u"Участники: "+u", ".join(dg_rpg.NPC_NAMES[who] for who in value["participants"])) size 24 color "#F2E4BB" xmaximum 1460
+            text (u"Получить материал → доставить "+dg_rpg.NPC_NAMES[value["recipient"]]+u" → общая подготовка → завершение") size 24 color "#A9B9C6" xmaximum 1460
+            text (dg_rpg.PLACE_NAMES[value["work_place"]]+u" → "+dg_rpg.PLACE_NAMES[value["final_place"]]) size 24 color "#A9B9C6"
+            text u"Это план, а не уже выполненные действия. Предметы и результаты не выдаются одним предложением." size 24 color "#A9B9C6" xmaximum 1460
+            hbox:
+                spacing 20
+                textbutton u"Начать общее дело" style "dg_camp_action" action Return("start")
+                textbutton u"Изменить идею" style "dg_camp_nav" action Return("retry")
+                textbutton u"Отмена" style "dg_camp_nav" action Return(None)
+    key "K_ESCAPE" action Return(None)
+
+label dg_rpg_projects_label:
+    call screen dg_rpg_projects
+    if not _return:
+        jump dg_rpg_loop
+    $ dg_project_command,dg_project_key=_return
+    if dg_project_command=="inventory":
+        $ dg_rpg_cmd="inventory"
+        call screen dg_rpg_inventory
+        if _return:
+            $ dg_rpg_apply("inventory",_return)
+            call dg_rpg_vn_scene(dg_rpg_last_inventory["text"],True,dg_rpg_last_inventory["who"],"inventory:"+dg_hybrid.fingerprint(dg_rpg_state))
+        jump dg_rpg_loop
+    if dg_project_command=="propose":
+        jump dg_rpg_project_propose_label
+    if dg_project_command=="travel":
+        $ dg_rpg_apply("move",dg_project_key)
+        jump dg_rpg_loop
+    if dg_project_command=="cancel":
+        menu:
+            "Отменить это общее дело и связанные обещания?":
+                $ dg_rpg_apply("project_cancel",dg_project_key)
+            "Продолжить дело":
+                pass
+        jump dg_rpg_projects_label
+    $ dg_rpg_apply("project",dg_project_key)
+    call dg_rpg_vn_scene(dg_rpg_last_project["text"],True,dg_rpg_last_project["who"],"project:"+dg_project_key+":"+dg_hybrid.fingerprint(dg_rpg_state))
+    jump dg_rpg_loop
+
+label dg_rpg_project_propose_label:
+    call screen dg_rpg_project_request
+    if not _return:
+        jump dg_rpg_projects_label
+    $ dg_project_draft=_return
+    if not dg_runtime.app.client.authenticated():
+        call dg_connect
+        if not dg_runtime.app.client.authenticated():
+            jump dg_rpg_projects_label
+    $ dg_run("chapter",dg_rpg_propose_project,dg_project_draft)
+    if dg_runtime.app.error:
+        call screen dg_error
+        jump dg_rpg_project_propose_label
+    $ dg_project_proposal=dg_runtime.app.result
+    call screen dg_rpg_project_review(dg_project_proposal)
+    if _return=="retry":
+        jump dg_rpg_project_propose_label
+    if _return=="start":
+        if dg_hybrid.fingerprint(dg_rpg.load(dg_rpg_root(),dg_rpg_state["id"]))!=dg_project_proposal["before"]:
+            jump dg_rpg_project_propose_label
+        $ dg_rpg_apply("project_register",dg_project_proposal["blueprint"])
+    jump dg_rpg_projects_label

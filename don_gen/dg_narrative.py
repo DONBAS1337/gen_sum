@@ -173,6 +173,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "npc_agendas":__import__('dg_agents').report(state),
         "housing":__import__("dg_housing").report(state),
         "shared_projects":__import__("dg_projects").report(state),
+        "inventory":__import__("dg_inventory").report(state),
         "relationships":__import__("dg_relationships").report(state),
         "npc_initiative":copy.deepcopy(state.get("npc_visits",{})),
         "weather":dg_world.weather(state)[1]

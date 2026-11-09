@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -222,6 +222,12 @@ init 1100 python:
             cases = [("visit","dg_rpg_hub",{})]
         if os.environ.get("DG_UI_SCREEN") == "hidden":
             cases=[("hidden","dg_rpg_hub",{"initial_show":False})]
+        if os.environ.get("DG_UI_SCREEN") == "inventory":
+            store.dg_rpg_state["place"]="library"
+            cases=[("inventory","dg_rpg_inventory",{})]
+        if os.environ.get("DG_UI_SCREEN") == "project-review":
+            value={'title':u'Лагерная стенгазета','item':'paper','recipient':'sl','work_place':'clubs','final_place':'square','theme':'council','participants':['sl','un']}
+            cases=[("project-review","dg_rpg_project_review",{"proposal":{"blueprint":value}})]
         if os.environ.get("DG_UI_SCREEN") == "projects":
             cases=[("projects","dg_rpg_projects",{})]
         if os.environ.get("DG_UI_SCREEN") == "relationship":

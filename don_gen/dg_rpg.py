@@ -152,6 +152,7 @@ def validate(state):
     __import__('dg_housing').validate(state)
     __import__('dg_visits').validate(state)
     __import__('dg_projects').validate(state)
+    __import__('dg_inventory').validate(state)
     __import__('dg_relationships').validate(state)
     __import__('dg_presentation').validate(state)
     state.setdefault("mystery", {"yulia_discovered": False})
@@ -345,6 +346,7 @@ def _tick(state):
             _journal(state, u'Пока идёт время, лагерь живёт своими делами. ' + changes[-1]['text'])
         dg_world.refresh_open_event(state)
         dg_social.prepare_incident(state)
+    __import__("dg_inventory").daily(state)
     __import__("dg_relationships").tick(state)
     __import__("dg_visits").tick(state,previous)
 
