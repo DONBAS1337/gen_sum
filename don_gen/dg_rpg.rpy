@@ -84,6 +84,36 @@ init 1001 python:
         path=dg_audio.resolve(choices,keys,renpy.loadable)
         if path: renpy.music.play(path,channel="sound")
 
+    def dg_rpg_choice_height(items):
+        height=0
+        for item in items:
+            lines=(len(item.caption)+72)//73
+            row=lines*30+20
+            if row<50: row=50
+            height+=row+12
+        if height<130: return 130
+        return 470 if height>470 else height
+
+    def dg_rpg_poll(mode):
+        if not dg_runtime.app.busy:
+            renpy.end_interaction(True)
+            return
+        screen = renpy.get_screen("dg_rpg_wait")
+        state=(dg_runtime.app.status,dg_elapsed())
+        if screen is not None and screen.scope.get("wait_state")!=state:
+            screen.scope["wait_state"]=state
+            renpy.restart_interaction()
+
+    def dg_rpg_run(mode,task,*args):
+        import time
+        dg_runtime.app.start(task,*args)
+        renpy.suspend_rollback(True)
+        try:
+            store.dg_wait_started=time.time()
+            return renpy.call_screen("dg_rpg_wait",mode=mode)
+        finally:
+            renpy.suspend_rollback(False)
+
     def dg_rpg_notice_board():
         root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
         return dg_bkrr.board(root)
@@ -96,6 +126,8 @@ init 1001 python:
         def render(self, width, height, st, at):
             width, height = int(width), int(height)
             result = renpy.Render(width, height)
+            if width < 1 or height < 1:
+                return result
             canvas = result.canvas()
             def rounded(color,x,y,w,h,radius):
                 import math
@@ -684,12 +716,17 @@ init 1001 python:
         return None
 
     def dg_rpg_say_character(who):
-        native = getattr(store, who or "narrator", None) if who != "hero" else None
         name = None if who is None else ((dg_rpg_scene_context or {}).get("hero_name", dg_rpg_state["hero"]["name"]) if who == "hero" else dg_stage.NAMES[who])
-        # Keep the host's say screen, but give this mod explicit typography.
-        # Never modify the global characters or other installed mods' styles.
-        kind = native if isinstance(native, renpy.character.ADVCharacter) else None
-        return Character(dg_literal(name) if name is not None else None, kind=kind,
+        # Host characters can be DynamicCharacter instances and use foreign
+        # screens/callbacks. A literal Cyrillic name must never be evaluated.
+        return Character(dg_literal(name) if name is not None else None,
+                         dynamic=False, screen="dg_rpg_say", mode="say",
+                         window_style="dg_rpg_say_window", who_style="dg_rpg_say_name", what_style="dg_rpg_say_text",
+                         show_function=renpy.character.show_display_say,
+                         predict_function=renpy.character.predict_show_display_say,
+                         callback=None, condition=None, image=None, show_image=False,
+                         show_side_image=None, show_two_window=False,
+                         who_prefix=u"", who_suffix=u"", what_prefix=u"", what_suffix=u"",
                          who_font="fonts/calibri.ttf", who_size=24, who_bold=True,
                          who_color=dg_stage.COLORS.get(who, "#ffaa00"), who_outlines=[],
                          what_font="fonts/calibri.ttf", what_size=24, what_bold=False,
@@ -1433,6 +1470,77 @@ init 1002:
 transform dg_panel_appear:
     alpha 0.0
     linear .16 alpha 1.0
+
+style dg_rpg_say_window is default:
+    xanchor 0.0
+    yanchor 0.0
+
+style dg_rpg_say_name is default:
+    font "fonts/calibri.ttf"
+    size 24
+    bold True
+    color "#ffaa00"
+    outlines []
+
+style dg_rpg_say_text is default:
+    font "fonts/calibri.ttf"
+    size 24
+    color "#F2E4BB"
+    outlines []
+
+screen dg_rpg_say(who, what):
+    window:
+        id "window"
+        style "dg_rpg_say_window"
+        xanchor 0.0 yanchor 0.0
+        background dg_camp_button_surface("#101923ed","#65D8D080")
+        xpos 90 ypos 905 xsize 1740 ysize 140 padding (24,18)
+        fixed:
+            if who:
+                text who id "who" style "dg_rpg_say_name" font "fonts/calibri.ttf" size 24 bold True xpos 0 ypos 0 outlines []
+            text what id "what" style "dg_rpg_say_text" font "fonts/calibri.ttf" size 24 color "#F2E4BB" outlines [] xpos 0 ypos (38 if who else 8) xmaximum 1440
+            textbutton u"История" style "dg_camp_nav" xminimum 112 xsize 112 xpos 1450 ypos -8 action Show("dg_rpg_dialogue_history",overlay=True)
+            textbutton u"−" style "dg_camp_nav" xminimum 48 xsize 48 xpos 1574 ypos -8 action HideInterface()
+
+screen dg_rpg_choice(items):
+    modal True
+    add Solid("#10192365")
+    frame:
+        background dg_camp_button_surface("#101923ed","#65D8D080")
+        xalign .5 ypos (865-dg_rpg_choice_height(items)-48) xsize 1120 padding (24,24)
+        viewport:
+            viewport_xfill True
+            vscrollbar_xsize 14
+            vscrollbar_unscrollable "hide"
+            vscrollbar_base_bar Solid("#243441")
+            vscrollbar_thumb Solid("#65D8D0a0")
+            xsize 1070 ysize (dg_rpg_choice_height(items)) mousewheel True scrollbars "vertical"
+            vbox:
+                spacing 12 xsize 1036
+                for item in items:
+                    if item.action:
+                        textbutton item.caption style "dg_camp_nav" xsize 1036 xminimum 0 xfill True ysize None yminimum 50 text_size 24 text_xmaximum 978 text_layout "subtitle" action item.action
+                    else:
+                        text item.caption size 24 color "#F2E4BB" xmaximum 1000
+    key "rollback" action NullAction()
+
+screen dg_rpg_wait(mode="chapter"):
+    modal True
+    default wait_state = None
+    add dg_rpg_bg()
+    add Solid("#101923b8")
+    frame:
+        background dg_camp_button_surface("#101923f5","#65D8D080")
+        align (.5,.5) xsize 1160 ysize 320 padding (36,32)
+        vbox:
+            spacing 22 xsize 1080
+            text u"Готовим сцену…" size 38 bold True color "#F2E4BB" outlines []
+            text dg_literal(dg_runtime.app.status or u"Пишем продолжение истории") size 26 color "#F2E4BB" xmaximum 1080 outlines []
+            text dg_elapsed() size 22 color "#A9B9C6" outlines []
+            text u"Когда сцена будет готова, история продолжится." size 22 color "#A9B9C6" xmaximum 1080
+    timer .2 repeat True action Function(dg_rpg_poll,mode,_update_screens=False)
+    key "game_menu" action NullAction()
+    key "rollback" action NullAction()
 
 screen dg_rpg_error:
     modal True
@@ -2552,7 +2660,7 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None, scene_identity=Non
     $ store.dg_rpg_last_narrated_text = scene_text
     call dg_rpg_vn_text(scene_text, who)
     if cg_possible:
-        menu:
+        menu (screen="dg_rpg_choice"):
             "Продолжить историю":
                 return None
             "Посмотреть или создать CG":
@@ -2573,12 +2681,12 @@ label dg_rpg_narrate(kind, who, identity, source_text, choices=None):
             call dg_connect
             if not dg_runtime.app.client.authenticated():
                 return None
-        $ dg_run("chapter",dg_rpg_auto_generate,kind,who,identity,source_text,choices)
+        $ dg_rpg_run("chapter",dg_rpg_auto_generate,kind,who,identity,source_text,choices)
         if not dg_runtime.app.error:
             $ dg_rpg_apply("remember_narrative",(dg_narrative_key,dg_runtime.app.result))
             return dg_runtime.app.result
         call screen dg_rpg_error
-        menu:
+        menu (screen="dg_rpg_choice"):
             "Повторить генерацию сцены":
                 pass
             "Вернуться в лагерь":
@@ -2591,7 +2699,7 @@ label dg_rpg_vn_choice(story_text, choice_pairs, who=None, scene_identity=None):
         if story_text is None:
             return None
     call dg_rpg_vn_text(story_text, who)
-    $ dg_rpg_vn_selected = renpy.display_menu([(dg_literal(caption), key) for key, caption in choice_pairs])
+    $ dg_rpg_vn_selected = renpy.display_menu([(dg_literal(caption), key) for key, caption in choice_pairs],screen="dg_rpg_choice")
     if dg_rpg_vn_selected == "__cancel__":
         return None
     return dg_rpg_vn_selected
@@ -2615,7 +2723,7 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
     $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
     $ dg_rpg_vn_options.append((u"Написать свою реплику · AI", "custom"))
     $ dg_rpg_vn_options.append((u"Завершить разговор", "__cancel__"))
-    $ dg_rpg_vn_selected = renpy.display_menu(dg_rpg_vn_options)
+    $ dg_rpg_vn_selected = renpy.display_menu(dg_rpg_vn_options,screen="dg_rpg_choice")
     if dg_rpg_vn_selected == "__cancel__":
         return None
     return dg_rpg_vn_selected
@@ -2785,7 +2893,7 @@ label dg_rpg_loop:
         $ dg_rpg_focus = dg_rpg_value
         $ dg_rpg_spontaneous = dg_narrative.spontaneous(dg_rpg_state,dg_rpg_focus)
         call dg_rpg_vn_scene(dg_rpg_spontaneous["text"],False,dg_rpg_focus,dg_rpg_spontaneous["id"])
-        menu:
+        menu (screen="dg_rpg_choice"):
             "Ответить своим действием / репликой":
                 $ dg_rpg_hybrid_mode = "npc" if dg_rpg_focus is not None else "free"
                 $ dg_rpg_hybrid_who = dg_rpg_focus
@@ -2900,7 +3008,7 @@ label dg_rpg_loop:
         if not _return:
             jump dg_rpg_loop
         $ dg_rpg_intent = _return
-        $ dg_run("chapter", dg_rpg_scene_generate, dg_rpg_focus, dg_rpg_intent)
+        $ dg_rpg_run("chapter", dg_rpg_scene_generate, dg_rpg_focus, dg_rpg_intent)
         if dg_runtime.app.error:
             call screen dg_rpg_error
         else:
@@ -2920,7 +3028,7 @@ label dg_rpg_loop:
                 call dg_connect
                 if not dg_runtime.app.client.authenticated():
                     jump dg_rpg_loop
-        $ dg_run("chapter", dg_rpg_art_generate, "background", dg_rpg_value)
+        $ dg_rpg_run("chapter", dg_rpg_art_generate, "background", dg_rpg_value)
         if dg_runtime.app.error:
             call screen dg_rpg_error
         jump dg_rpg_loop
@@ -2972,7 +3080,7 @@ label dg_rpg_hybrid_entry:
             call dg_connect
             if not dg_runtime.app.client.authenticated():
                 jump dg_rpg_hybrid_entry
-        $ dg_run("chapter", dg_rpg_interpret_action, dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode, dg_rpg_hybrid_who)
+        $ dg_rpg_run("chapter", dg_rpg_interpret_action, dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode, dg_rpg_hybrid_who)
         if dg_runtime.app.error:
             call screen dg_rpg_error
             jump dg_rpg_hybrid_entry
@@ -3002,7 +3110,7 @@ label dg_rpg_hybrid_review_label:
             call dg_connect
             if not dg_runtime.app.client.authenticated():
                 jump dg_rpg_hybrid_review_label
-        $ dg_run("chapter", dg_rpg_hybrid_generate, dg_rpg_hybrid_plan)
+        $ dg_rpg_run("chapter", dg_rpg_hybrid_generate, dg_rpg_hybrid_plan)
         if dg_runtime.app.error:
             call screen dg_rpg_error
             jump dg_rpg_hybrid_review_label
@@ -3027,7 +3135,7 @@ label dg_rpg_cg_label:
         $ dg_cg_vision_attempted = dg_cg_plan["key"]
         $ dg_cg_vision_note = u""
         if dg_cg_plan["kind"] == "cg" and dg_rpg_cg_status(dg_cg_plan)["status"] == "missing" and dg_rpg_cg_candidates(dg_cg_plan) and dg_runtime.app.client.authenticated():
-            $ dg_run("chapter", dg_rpg_verify_cg, dg_art.freeze_scene_request(dg_cg_plan))
+            $ dg_rpg_run("chapter", dg_rpg_verify_cg, dg_art.freeze_scene_request(dg_cg_plan))
             $ dg_cg_vision_note = (u"Не удалось проверить картинки: " + dg_runtime.app.error) if dg_runtime.app.error else (u"" if dg_rpg_cg_builtin(dg_cg_plan) else dg_runtime.app.result)
     if dg_rpg_cg_status(dg_cg_plan)["status"] in ("generated","builtin"):
         $ dg_rpg_apply("cg_record",dg_cg_plan)
@@ -3036,7 +3144,7 @@ label dg_rpg_cg_label:
         if not dg_runtime.app.client.authenticated():
             call dg_connect
         if dg_runtime.app.client.authenticated():
-            $ dg_run("chapter", dg_rpg_verify_cg, dg_art.freeze_scene_request(dg_cg_plan))
+            $ dg_rpg_run("chapter", dg_rpg_verify_cg, dg_art.freeze_scene_request(dg_cg_plan))
             $ dg_cg_vision_note = (u"Не удалось проверить картинки: " + dg_runtime.app.error) if dg_runtime.app.error else (u"" if dg_rpg_cg_builtin(dg_cg_plan) else dg_runtime.app.result)
         jump dg_rpg_cg_label
     if _return == "generate":
@@ -3051,7 +3159,7 @@ label dg_rpg_cg_label:
                 if not dg_runtime.app.client.authenticated():
                     jump dg_rpg_cg_label
         $ dg_cg_payload = dg_art.freeze_scene_request(dg_cg_plan)
-        $ dg_run("chapter", dg_rpg_art_generate, dg_cg_plan["kind"], dg_cg_payload)
+        $ dg_rpg_run("chapter", dg_rpg_art_generate, dg_cg_plan["kind"], dg_cg_payload)
         if dg_runtime.app.error:
             $ dg_cg_failed_text = dg_runtime.app.error
             $ logging.getLogger("don_gen").error("CG generation failure: %s",dg_cg_failed_text)
@@ -3194,7 +3302,7 @@ screen dg_rpg_relationship(who):
             textbutton u"Назад" style "dg_camp_nav" xpos 0 ypos 812 action Return(False)
     key "K_ESCAPE" action Return(False)
 
-screen dg_rpg_dialogue_history:
+screen dg_rpg_dialogue_history(overlay=False):
     modal True
     add Solid("#101923f5")
     frame:
@@ -3218,8 +3326,8 @@ screen dg_rpg_dialogue_history:
                         text dg_literal(row["text"]) size 24 color "#F2E4BB" xmaximum 1580
                     if not dg_presentation.history(dg_rpg_state):
                         text u"Здесь появятся прочитанные сцены и свободные разговоры." size 24 color "#A9B9C6"
-            textbutton u"Назад" style "dg_camp_nav" action Return(False)
-    key "K_ESCAPE" action Return(False)
+            textbutton u"Назад" style "dg_camp_nav" action (Hide("dg_rpg_dialogue_history") if overlay else Return(False))
+    key "K_ESCAPE" action (Hide("dg_rpg_dialogue_history") if overlay else Return(False))
 
 
 screen dg_rpg_inventory:
@@ -3320,7 +3428,7 @@ label dg_rpg_projects_label:
         $ dg_rpg_apply("move",dg_project_key)
         jump dg_rpg_loop
     if dg_project_command=="cancel":
-        menu:
+        menu (screen="dg_rpg_choice"):
             "Отменить это общее дело и связанные обещания?":
                 $ dg_rpg_apply("project_cancel",dg_project_key)
             "Продолжить дело":
@@ -3339,7 +3447,7 @@ label dg_rpg_project_propose_label:
         call dg_connect
         if not dg_runtime.app.client.authenticated():
             jump dg_rpg_projects_label
-    $ dg_run("chapter",dg_rpg_propose_project,dg_project_draft)
+    $ dg_rpg_run("chapter",dg_rpg_propose_project,dg_project_draft)
     if dg_runtime.app.error:
         call screen dg_rpg_error
         jump dg_rpg_project_propose_label

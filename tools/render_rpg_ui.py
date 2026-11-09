@@ -16,11 +16,12 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", type=Path, required=True)
+    parser.add_argument("--engine-root", type=Path, help="Use the installed game RenPy runtime for compatibility checks")
     parser.add_argument("--out", type=Path, default=Path("work/ui-smoke"))
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -79,7 +80,20 @@ def main():
     env["DG_UI_SLOT"] = str(args.slot)
     env["DG_UI_SOURCE"] = args.source
     env["DG_UI_FOCUS"] = args.focus or ""
-    subprocess.run([str(runner), str(sdk / "renpy.py"), str(output), "ui-render"], check=True, env=env)
+    launcher = sdk / "renpy.py"
+    if args.engine_root:
+        engine = args.engine_root.resolve()
+        runner = engine / "lib/windows-x86_64/python.exe"
+        if not runner.is_file() or not (engine / "renpy/bootstrap.py").is_file():
+            parser.error("Expected an installed Windows RenPy game runtime")
+        launcher = output / "native-launcher.py"
+        shim = ("from __future__ import print_function\nimport sys,types\nsys.dont_write_bytecode=True\n"
+                "root=%r\nsys.path.insert(0,root)\nmodule=types.ModuleType('native_test_launcher')\n"
+                "module.__file__=%r\nsys.modules[module.__name__]=module\n"
+                "exec(compile(open(module.__file__,'rb').read(),module.__file__,'exec'),module.__dict__)\n"
+                "module.path_to_renpy_base=lambda:root\nsys.modules['__main__']=module\nmodule.main()\n") % (str(engine),str(sdk / "renpy.py"))
+        launcher.write_bytes(shim.encode('utf-8'))
+    subprocess.run([str(runner), str(launcher), str(output), "ui-render"], check=True, env=env)
     print("Rendered UI screenshots:", output)
 
 
@@ -96,8 +110,9 @@ init -1000 python:
     config.default_fullscreen = False
     config.gl_resize = False
     config.gl2 = False
-    config.physical_width = 1280
-    config.physical_height = 720
+    if hasattr(config,"physical_width"):
+        config.physical_width = 1280
+        config.physical_height = 720
     vanilla_root = os.environ.get("DG_UI_VANILLA")
     if vanilla_root and os.path.isfile(os.path.join(vanilla_root, "archive.rpa")):
         config.archives.append(os.path.join(vanilla_root, "archive").replace("\\", "/"))
@@ -110,6 +125,8 @@ init 1100 python:
     class TestApp(object):
         client = TestClient()
         catalog = {"source_roots": {}, "source_assets": {}}
+        status = u"Пишем диалог и проверяем согласованность сцены…"
+        busy = True
     class TestRuntime(object):
         app = TestApp()
         original_images = {}
@@ -137,6 +154,8 @@ init 1100 python:
         dg_runtime.app.catalog["source_assets"]["7dl"] = dg_resources.absolute_assets(
             workshop_root, dg_source_7dl.asset_manifest(workshop_root))
     DG_PAPER = Solid("#f3e6cf")
+    def dg_elapsed():
+        return u"Прошло 00:12"
     def dg_literal(value):
         return value.replace("{", "{{").replace("[", "[[")
     def dg_rpg_root():
@@ -165,12 +184,37 @@ init 1100 python:
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
         if dg_rpg_say_character("dv").name != u"Алиса" or dg_rpg_say_character("hero").name != u"Тестовый герой":
             raise ValueError("Incorrect native character names")
-        for speaker in (None, "dv", "hero"):
+        # Reproduce the reported inherited DynamicCharacter failure using the
+        # real Character call path, while only capturing the final display.
+        old_native=getattr(store,'mi',None)
+        store.mi=DynamicCharacter(u"Мику. (не Python!)",screen="foreign_say")
+        checked=dg_rpg_say_character('mi')
+        if checked.dynamic or checked.screen!='dg_rpg_say':
+            raise ValueError("Inherited a foreign dynamic character or screen")
+        # This measurement occurs during automatic layout; never draw polygons
+        # onto a zero-height native canvas.
+        dg_camp_button_surface("#101923","#65D8D0").render(100,0,0,0)
+        received=[]
+        checked.do_display=lambda who,what,**kwargs:received.append(who)
+        checked.do_done=lambda *args,**kwargs:None
+        checked(u"Проверка буквального имени.",interact=False)
+        store.mi=old_native
+        if received!=[u'Мику']:
+            raise ValueError("Literal character name failed in actual say call")
+        print("Checked actual Character call with poisoned DynamicCharacter: literal name and private screen")
+        for speaker in [None,"hero"]+sorted(dg_stage.NAMES):
             character = dg_rpg_say_character(speaker)
             if character.what_args.get("color") != "#F2E4BB" or character.what_args.get("font") != "fonts/calibri.ttf":
                 raise ValueError("Incorrect narration typography")
             if speaker is not None and not character.who_args.get("bold"):
                 raise ValueError("Character name must be bold")
+            captured=[]
+            character.do_display=lambda who,what,**kwargs:captured.append(who)
+            character.do_done=lambda *args,**kwargs:None
+            character(u"Проверка отображения реплики.",interact=False)
+            if captured!=[character.name] or character.dynamic or character.screen!='dg_rpg_say':
+                raise ValueError("Name evaluated or foreign screen used: "+repr(speaker))
+        print("Checked actual say calls for all 11 NPCs, narrator and hero")
         dg_rpg.move(store.dg_rpg_state, os.environ.get("DG_UI_PLACE", "cabins"))
         store.dg_rpg_state["slot"] = int(os.environ.get("DG_UI_SLOT", "0"))
         store.dg_rpg_scene_context = dg_stage.freeze(store.dg_rpg_state)
@@ -209,6 +253,20 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") in ('dialogue','dialogue-choice','waiting'):
+            state=store.dg_rpg_state
+            state['place']='music'
+            state['social']['incident'].update(pair=['mi','dv'],place='music',status='open',day=state['day'])
+            store.dg_rpg_scene_context=dg_stage.freeze(state)
+            if os.environ.get("DG_UI_SCREEN")=='dialogue':
+                cases=[('dialogue','dg_ui_consistent_dialogue',{})]
+            elif os.environ.get("DG_UI_SCREEN")=='dialogue-choice':
+                class Entry(object):
+                    def __init__(self,caption,value): self.caption=caption;self.action=Return(value)
+                rows=[Entry(u'Давай я послушаю твою репетицию. Можешь ошибаться сколько угодно.','support'),Entry(u'А что именно тебя привлекло в этой мелодии?','curious'),Entry(u'Написать свою реплику','custom'),Entry(u'Завершить разговор','cancel')]
+                cases=[('dialogue-choice','dg_ui_consistent_choice',{'items':rows})]
+            else:
+                cases=[('waiting','dg_rpg_wait',{})]
         if os.environ.get("DG_UI_SCREEN") == "error":
             store.dg_rpg_state['place']='music'
             store.dg_rpg_scene_context=dg_stage.freeze(store.dg_rpg_state)
@@ -446,6 +504,16 @@ screen dg_chrome(place_name, back=None):
     text place_name xpos 100 ypos 50 color "#ffffff" size 24
     if back is not None:
         textbutton u"Назад" xpos 1650 ypos 50 action back
+
+screen dg_ui_consistent_choice(items):
+    use dg_ui_consistent_dialogue
+    use dg_rpg_choice(items)
+
+screen dg_ui_consistent_dialogue:
+    add dg_rpg_bg()
+    add dg_rpg_sprite("mi","smile","normal") xpos .28 xanchor .5 ypos 1.0 yanchor 1.0
+    add dg_rpg_sprite("dv","normal","normal") xpos .72 xanchor .5 ypos 1.0 yanchor 1.0
+    use dg_rpg_say(u"Алиса",u"Правда. Особенно если знакомство начинается с футляра и загадочного следа.")
 
 screen dg_ui_native_scene:
     add "images/bg/int_dining_hall_people_day.jpg"
