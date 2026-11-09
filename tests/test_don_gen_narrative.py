@@ -50,7 +50,7 @@ class NarrativeDirector(unittest.TestCase):
         altered=dg_narrative.decorate_dialogue(st,"mi","topics",d,0,None)
         self.assertEqual(d,original)
         self.assertEqual(altered["options"],original["options"])
-        self.assertTrue(len(altered["text"])>len(original["text"]))
+        self.assertEqual(altered["text"],original["text"])
     def test_cache_reuses_scene_per_save_and_isolated_by_identity(self):
         st=self.state()
         key=dg_narrative.context(st,"npc_topics","mi","1")["scene_id"]
@@ -149,3 +149,4 @@ class NarrativeDirector(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

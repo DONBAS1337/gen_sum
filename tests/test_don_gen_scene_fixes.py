@@ -72,10 +72,10 @@ class SceneFixes(unittest.TestCase):
     def test_audio_follows_location_time_and_explicit_romance(self):
         state=self.state();state['place']='gate';before=copy.deepcopy(state)
         day=dg_audio.plan(state,'mi');self.assertEqual(state,before)
-        self.assertEqual(day['ambience'][0],'ambience_camp_entrance_day')
+        self.assertIn('ambience_camp_entrance_day',day['ambience'])
         state['slot']=3;night=dg_audio.plan(state,'mi')
         self.assertNotEqual(day['music'],night['music'])
-        self.assertEqual(night['ambience'][0],'ambience_camp_entrance_night')
+        self.assertIn('ambience_camp_entrance_night',night['ambience'])
         state['npc_visits']={'romance':['mi']}
         self.assertEqual(dg_audio.plan(state,'mi')['music'][0],'what_do_you_think_of_me')
 

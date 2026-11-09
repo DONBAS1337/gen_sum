@@ -43,17 +43,21 @@ init 1001 python:
         if context:
             for field in ("place","slot","day"):
                 audio_state[field] = context[field]
-        direction = dg_audio.plan(audio_state,who)
+        visual = dg_rpg_visual_brief(audio_state)
+        direction = dg_audio.plan(audio_state,who,visual.get("setting"))
         # Separate DG channels obey the host music/SFX mixers and do not restart.
         for channel, group, volume, enabled in (("dg_theme","music",.35,persistent.dg_rpg_music),("dg_nature","ambience",.5,persistent.dg_rpg_ambience)):
             choices = dict(dg_runtime.app.catalog.get(group,{}) or {})
             for key in direction[group]:
-                if key not in choices:
-                    folder="music" if group=="music" else "ambiences"
-                    basename=key if group=="music" else key[len("ambience_"):]
-                    path="sound/"+folder+"/"+basename+".ogg"
-                    if renpy.loadable(path): choices[key]=path
+                folder="music" if group=="music" else "ambiences"
+                basename=key if group=="music" else key[len("ambience_"):]
+                path="sound/"+folder+"/"+basename+".ogg"
+                if renpy.loadable(path): choices[key]=path
             path = dg_audio.resolve(choices,direction[group],renpy.loadable) if enabled else None
+            signature=(audio_state["place"],audio_state["slot"],visual.get("setting"),path)
+            if store.dg_rpg_audio_last.get(channel)!=signature:
+                logging.getLogger("don_gen").info("RPG audio channel=%s place=%s slot=%s setting=%s path=%s",channel,audio_state["place"],audio_state["slot"],visual.get("setting"),path)
+                store.dg_rpg_audio_last[channel]=signature
             if path:
                 renpy.music.play(path,channel=channel,loop=True,fadein=1.5,fadeout=1.2,if_changed=True,relative_volume=volume)
             else:
@@ -69,7 +73,9 @@ init 1001 python:
 
     def dg_rpg_move_sound(before,after):
         if not persistent.dg_rpg_effects: return
-        keys = dg_audio.movement(before,after)
+        before_state=dict(dg_rpg_state);before_state['place']=before
+        after_state=dict(dg_rpg_state);after_state['place']=after
+        keys = dg_audio.movement(before,after,dg_rpg_visual_brief(before_state).get('setting'),dg_rpg_visual_brief(after_state).get('setting'))
         choices = dict(dg_runtime.app.catalog.get("sounds",{}) or {})
         for key in keys:
             if key not in choices:
@@ -896,6 +902,7 @@ default dg_rpg_focus = None
 default dg_rpg_scene_context = None
 default dg_rpg_stage_active = False
 default dg_rpg_actor_moods = {}
+default dg_rpg_audio_last = {}
 default dg_rpg_audio_pauses = None
 default persistent.dg_rpg_music = True
 default persistent.dg_rpg_ambience = True
@@ -1426,6 +1433,29 @@ init 1002:
 transform dg_panel_appear:
     alpha 0.0
     linear .16 alpha 1.0
+
+screen dg_rpg_error:
+    modal True
+    add dg_rpg_bg()
+    add Solid("#101923b8")
+    frame:
+        background dg_camp_button_surface("#101923f5","#65D8D080")
+        align (.5,.5) xsize 1320 padding (36,30)
+        vbox:
+            spacing 24
+            text u"Не удалось подготовить сцену" size 34 color "#65D8D0"
+            text u"Подтверждённая история сохранена. Ниже — причина остановки запроса." size 24 color "#F2E4BB" xmaximum 1240
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_unscrollable "hide"
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                xsize 1240 ysize 280 mousewheel True scrollbars "vertical"
+                text dg_literal(dg_runtime.app.error or u"Неизвестная ошибка") size 23 color "#A9B9C6" xmaximum 1190
+            textbutton u"Продолжить" style "dg_camp_action" action Return(False)
+    key "K_ESCAPE" action Return(False)
+    key "rollback" action NullAction()
 
 screen dg_rpg_hub(initial_show=True):
     modal True
@@ -2547,7 +2577,7 @@ label dg_rpg_narrate(kind, who, identity, source_text, choices=None):
         if not dg_runtime.app.error:
             $ dg_rpg_apply("remember_narrative",(dg_narrative_key,dg_runtime.app.result))
             return dg_runtime.app.result
-        call screen dg_error
+        call screen dg_rpg_error
         menu:
             "Повторить генерацию сцены":
                 pass
@@ -2872,7 +2902,7 @@ label dg_rpg_loop:
         $ dg_rpg_intent = _return
         $ dg_run("chapter", dg_rpg_scene_generate, dg_rpg_focus, dg_rpg_intent)
         if dg_runtime.app.error:
-            call screen dg_error
+            call screen dg_rpg_error
         else:
             $ dg_rpg_open(dg_rpg_state["id"])
             call dg_rpg_vn_scene(dg_runtime.app.result, True, dg_rpg_focus)
@@ -2892,7 +2922,7 @@ label dg_rpg_loop:
                     jump dg_rpg_loop
         $ dg_run("chapter", dg_rpg_art_generate, "background", dg_rpg_value)
         if dg_runtime.app.error:
-            call screen dg_error
+            call screen dg_rpg_error
         jump dg_rpg_loop
     jump dg_rpg_loop
 
@@ -2944,7 +2974,7 @@ label dg_rpg_hybrid_entry:
                 jump dg_rpg_hybrid_entry
         $ dg_run("chapter", dg_rpg_interpret_action, dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode, dg_rpg_hybrid_who)
         if dg_runtime.app.error:
-            call screen dg_error
+            call screen dg_rpg_error
             jump dg_rpg_hybrid_entry
         $ dg_rpg_interpretation = dg_runtime.app.result
     $ dg_rpg_hybrid_preview(dg_rpg_hybrid_mode, dg_rpg_hybrid_action_text, dg_rpg_hybrid_who, dg_rpg_hybrid_topic, dg_rpg_interpretation)
@@ -2974,7 +3004,7 @@ label dg_rpg_hybrid_review_label:
                 jump dg_rpg_hybrid_review_label
         $ dg_run("chapter", dg_rpg_hybrid_generate, dg_rpg_hybrid_plan)
         if dg_runtime.app.error:
-            call screen dg_error
+            call screen dg_rpg_error
             jump dg_rpg_hybrid_review_label
         $ dg_rpg_hybrid_scene = dg_runtime.app.result
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, dg_rpg_hybrid_scene))
@@ -3311,7 +3341,7 @@ label dg_rpg_project_propose_label:
             jump dg_rpg_projects_label
     $ dg_run("chapter",dg_rpg_propose_project,dg_project_draft)
     if dg_runtime.app.error:
-        call screen dg_error
+        call screen dg_rpg_error
         jump dg_rpg_project_propose_label
     $ dg_project_proposal=dg_runtime.app.result
     call screen dg_rpg_project_review(dg_project_proposal)

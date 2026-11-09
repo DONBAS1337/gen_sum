@@ -214,12 +214,8 @@ def decorate_dialogue(state,who,phase,scene,topic_index=0,stance=None):
               state["slot"]+state.get("dialogue_counts",{}).get(
                   "%d:%s" % (state["day"],who),0)*4)
     updated=copy.deepcopy(scene)
-    intro=(u"В разговор вмешивается маленькая деталь: %s. %s "
-           u"Сегодня собеседник пытается разобраться с тем, что %s. "
-           u"Неожиданный поворот: %s.") % (
-           c["physical_detail"],PERSONA[who][0],c["character_hook"],
-           c["unexpected_twist"])
-    updated["text"]=intro+u"\n\n"+updated["text"]
+    # Creative suggestions belong in the brief, never in the factual anchor.
+    # A random "delayed promise" is not a promise the player actually made.
     updated["narrative"]=c
     return updated
 
@@ -297,8 +293,17 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
        "source_reference":_u(source_reference or "")[:5800],
        "world_facts_are_locked":True
     }
+    dialogue = kind.startswith('npc_')
+    opening = kind in ('npc_topics','npc_choice')
+    if opening:
+        brief['scene_seed_untrusted'] = brief['anchor_scene']
+        brief['anchor_scene'] = (u'Беседа с %s здесь и сейчас. Игрок ещё не выбрал показанный вариант. '
+                                  u'Не выполняй варианты ответа за игрока.') % who
+    brief['creative_suggestions_are_not_facts'] = ['motivation','physical_detail','unexpected_twist','character_hook','scene_seed_untrusted']
+    brief['dialogue_phase'] = kind if dialogue else None
+    length = u'90–160' if kind=='npc_topics' else u'120–220' if kind=='npc_choice' else u'160–280' if dialogue else u'300–650'
     rules=(u"Ты пишешь ОРИГИНАЛЬНУЮ сцену визуальной новеллы «Бесконечное лето» "
-           u"на русском, 300–650 слов, с живыми репликами, действиями, паузами "
+           u"на русском, %s слов, с живыми репликами, действиями, паузами "
            u"и собственными голосами участников. В каждой сцене используй "
            u"отличающийся конфликт и несколько значимых деталей из scene_identity. "
            u"Избегай штампов вроде «собеседник внимательно посмотрел» и "
@@ -314,6 +319,11 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
            u"новые квесты, награды, дополнительные варианты меню и не переписывай "
            u"известный игровой мир. Остановись непосредственно перед выбором "
            u"или после зафиксированного исхода. Не перемещай героев в новое место "
-           u"без разрешения. Верни только повествовательный текст без Markdown.")
+           u"без разрешения. Верни только повествовательный текст без Markdown.") % length
+    rules += (u' Художественные подсказки creative_suggestions_are_not_facts можно пропустить; они не подтверждают прошлые события, обещания, предметы или нехватку времени. '
+              u'permitted_existing_options — ещё НЕ выбранные ответы, не поступки и не обещания героя. '
+              u'Игровые вещи из item_codes не выдавай и не передавай без подтверждённого механического исхода. Обычный реквизит не является полученным игровым предметом. '
+              u'Если dialogue_phase — npc_topics или npc_choice, разговор не двигает время и не меняет инвентарь, отношения, обязательства и местоположение; остановись перед ответом игрока. '
+              u'Не растягивай вступление случайной драмой, давним долгом или придуманным общим прошлым.')
     return rules,json.dumps(brief,ensure_ascii=False,sort_keys=True)
 

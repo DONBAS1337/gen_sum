@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -209,6 +209,11 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") == "error":
+            store.dg_rpg_state['place']='music'
+            store.dg_rpg_scene_context=dg_stage.freeze(store.dg_rpg_state)
+            dg_runtime.app.error=u"Не удалось согласовать сцену с игрой (предметы). Ход не сохранён; можно повторить генерацию."
+            cases=[("error","dg_rpg_error",{})]
         if os.environ.get("DG_UI_SCREEN") == "party":
             state=store.dg_rpg_state
             state['source']='bkrr:mi'
@@ -236,6 +241,9 @@ init 1100 python:
                 dg_rpg_audio_sync('mi')
                 if len(calls)!=2 or not all(audio_api.loadable(path) for path,kw in calls):
                     raise ValueError("Production audio could not resolve music and atmosphere")
+                nature=[path for path,kw in calls if kw.get('channel')=='dg_nature']
+                if len(nature)!=1 or 'camp_center_day' not in nature[0]:
+                    raise ValueError("Music club veranda must use outdoor ambience: "+repr(nature))
                 if not all(kw.get('if_changed') and kw.get('loop') for path,kw in calls):
                     raise ValueError("Audio would restart on each dialogue")
                 dg_rpg_audio_stop()

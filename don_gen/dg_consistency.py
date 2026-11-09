@@ -14,6 +14,9 @@ def audit_request(context,scene):
            u'owns означает собственность, а holds — явное физическое наличие в личном инвентаре. Займ даёт holds, но не owns. Не считай владением временный жест с рабочими материалами на столе или книгой на библиотечной полке. Для вещей и этапов извлекай итоговые утверждения к концу сцены; промежуточное использование или передача не означают, что предмет остался в инвентаре после действия. '
            u'В claims извлеки явные утверждения о текущем физическом присутствии, месте, времени, владении вещью и этапе проекта из самой сцены. Не извлекай воспоминания, упоминания, отрицания и будущие намерения. Форматы: {"kind":"presence","actor":"mi"}; {"kind":"place","value":"music"}; {"kind":"slot","value":1}; {"kind":"day","value":1}; {"kind":"owns","actor":"hero","item":"paper","count":1}; {"kind":"holds","actor":"hero","item":"paper","count":1}; {"kind":"project_stage","project":"concert","value":4}. Используй известные коды из engine_facts, но не копируй их как якобы найденные в тексте. '
            u'Не требуй новых наград или изменения механики. Если явных противоречий нет, valid=true и issues=[]. Не оценивай литературный вкус.')
+    rules += (u' creative_suggestions_are_not_facts перечисляет художественные идеи, которые не являются закреплёнными фактами. scene_seed_untrusted — предложенная ситуация, а не подтверждённое прошлое. '
+              u'Не сравнивай сцену с этими подсказками как с обязательными событиями. permitted_existing_options — будущие варианты, а не данные обещания. '
+              u'Не приравнивай обычный листок или упоминание нот к полученному коллекционному предмету paper/notes: owns/holds требуют явного утверждения о собственности или нахождении именно игрового предмета в личном инвентаре.')
     return rules,json.dumps({'locked_context':context,'engine_facts':facts,'scene_untrusted':scene},ensure_ascii=False,sort_keys=True)
 
 def verdict(raw,facts=None):
@@ -33,10 +36,11 @@ def generate(client,instructions,prompt,present,model=None,effort=None,fast_mode
     import dg_stage
     context=json.loads(prompt)
     repair=u''
+    working_prompt=prompt
     for attempt in range(2):
         kwargs={'model':model,'fast_mode':fast_mode}
         if effort is not None:kwargs['effort']=effort
-        text=client.generate(instructions+repair,prompt,**kwargs)
+        text=client.generate(instructions+repair,working_prompt,**kwargs)
         errors=[]
         try:
             if not isinstance(text,(str,type(u''))) or len(text)>12000 or not 100<=len(dg_stage.readable(text))<=12000:raise ValueError('Invalid scene length')
@@ -47,6 +51,10 @@ def generate(client,instructions,prompt,present,model=None,effort=None,fast_mode
             checked=verdict(client.generate(rules,check,**kwargs),__import__('dg_facts').contract(context))
             if checked['valid']:return text.strip()
             errors=checked['issues']
-        __import__('logging').getLogger('don_gen').warning('Scene audit rejected attempt=%d codes=%s',attempt+1,','.join(item['code'] for item in errors))
-        repair=(u' Предыдущая попытка отклонена. Напиши сцену заново, устранив только эти противоречия: '+json.dumps(errors,ensure_ascii=False)+u'. Не упоминай проверку в рассказе.')
-    raise ValueError(u'Сцена дважды противоречила состоянию игры. Ход не сохранён; можно повторить генерацию.')
+        __import__('logging').getLogger('don_gen').warning('Scene audit rejected attempt=%d codes=%s details=%s',attempt+1,','.join(item['code'] for item in errors),json.dumps(errors,ensure_ascii=True))
+        repair=(u' Исправь предыдущий черновик scene_to_repair_untrusted: устрани перечисленные противоречия, сохрани согласованные части, не добавляй новых событий или предметов. '+json.dumps(errors,ensure_ascii=False)+u'. Верни полную исправленную сцену без упоминания проверки.')
+        working=dict(context,scene_to_repair_untrusted=text,repair_issues=errors)
+        working_prompt=json.dumps(working,ensure_ascii=False,sort_keys=True)
+    labels={'people':u'участники','place':u'место','time':u'время','items':u'предметы','effects':u'последствия','continuity':u'прошлые события','promises':u'обещания','format':u'формат'}
+    reasons=u', '.join(sorted(set(labels[row['code']] for row in errors)))
+    raise ValueError(u'Не удалось согласовать сцену с игрой (%s). Ход не сохранён; можно повторить генерацию.' % reasons)
