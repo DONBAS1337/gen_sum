@@ -651,6 +651,7 @@ def _path(root, game_id):
 
 def save(root, state):
     validate(state)
+    if __import__('dg_sessions').removed(root,state['id']):raise ValueError('This shift was removed; restore it from trash first')
     folder = os.path.join(root, "_rpg")
     if not os.path.isdir(folder):
         try:

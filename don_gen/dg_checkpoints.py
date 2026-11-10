@@ -5,6 +5,7 @@ import copy,io,json,os,re
 
 def restore(root,state,pending=None):
     import dg_rpg,dg_hybrid
+    if __import__('dg_sessions').removed(root,state['id']):raise ValueError('This shift was removed; restore it from trash first')
     candidate=copy.deepcopy(pending['origin'] if pending is not None and 'origin' in pending else state)
     if pending is not None and (candidate.get('id')!=state.get('id') or dg_hybrid.fingerprint(candidate)!=pending.get('before')):raise ValueError('Pending origin fingerprint mismatch')
     candidate["native_resume"]=2

@@ -102,6 +102,12 @@ init 1001 python:
         except (KeyError,AttributeError,TypeError):
             own_script=False
         if not (getattr(store,'dg_rpg_active',False) or own_script): return
+        if __import__('dg_sessions').removed(dg_rpg_root(),state['id']):
+            store.dg_rpg_state=None
+            store.dg_rpg_pending_turn=None
+            renpy.notify(u'Эта смена удалена. Открыт список смен.')
+            renpy.jump('dg_rpg_picker_label')
+            return
         if state.get('native_resume')==2 or (state.get('version')==1 and getattr(store,'dg_rpg_pending_turn',None) is None):
             try:
                 import dg_checkpoints
@@ -260,6 +266,26 @@ init 1001 python:
 
     def dg_rpg_root():
         return dg_runtime.app.library.root
+
+    def dg_rpg_manage_shift(action,value):
+        import dg_sessions
+        if dg_runtime.app.busy:
+            renpy.notify(u'Дождись завершения текущей операции.')
+            return False
+        try:
+            if hasattr(dg_runtime.app,'invalidate'):dg_runtime.app.invalidate()
+            if action=='trash':dg_sessions.trash(dg_rpg_root(),value)
+            elif action=='restore':dg_sessions.restore(dg_rpg_root(),value)
+            elif action=='purge':dg_sessions.purge(dg_rpg_root(),value)
+            else:return False
+            if action=='trash' and getattr(store,'dg_rpg_state',None) and store.dg_rpg_state.get('id')==value:
+                store.dg_rpg_state=None;store.dg_rpg_pending_turn=None;store.dg_rpg_stage_active=False
+            renpy.notify({'trash':u'Смена перемещена в корзину.','restore':u'Смена восстановлена.','purge':u'Смена удалена окончательно.'}[action])
+            return True
+        except (IOError,OSError,ValueError,KeyError,TypeError) as exc:
+            logging.getLogger('don_gen').warning('Shift management failed action=%s error=%s',action,type(exc).__name__)
+            renpy.notify(u'Операция не завершилась. Проверь доступ к папке сохранений и повтори её.')
+            return False
 
     def dg_rpg_start(name, age, days, history, source, pronouns, adult=False, cabin="cabin_01", roommate="mt"):
         state = dg_rpg.new_game(name, age, days, history, source, pronouns, cabin, roommate, camp_life=True)
@@ -1038,6 +1064,7 @@ screen dg_rpg_picker:
             text u"Создай героя, выбери предысторию и начни знакомство с лагерем." style "dg_note_body"
             textbutton u"Создать персонажа" style "dg_note_main" action Return(("new", None))
             text u"Игра сохраняет поступки автоматически. Смены хранятся отдельно от обычных сохранений «Бесконечного лета»." style "dg_note_hint"
+            textbutton u"Корзина смен" style "dg_note_button" action Return(("trash",None))
     frame:
         background Solid("#102b33e8") xpos 816 ypos 192 xsize 1040 ysize 716 padding (32, 28)
         vbox:
@@ -1064,8 +1091,63 @@ screen dg_rpg_picker:
                                 text dg_literal(game["name"]) style "dg_note_heading" size 34 xmaximum 880
                                 text (u"День %d / %d · %s" % (game["day"], game["duration"], u"Завершена" if game["finished"] else u"В лагере")) style "dg_note_hint"
                                 textbutton u"Открыть смену" style "dg_note_button" action Return(("load", game["id"]))
+                                textbutton u"Удалить смену…" style "dg_note_button" action Return(("delete_shift",game["id"]))
     textbutton u"Назад в меню" style "dg_note_tab" xpos 64 ypos 944 action Return(("back", None))
     key "K_ESCAPE" action Return(("back", None))
+
+screen dg_rpg_shift_confirm(name,permanent=False):
+    modal True
+    add Solid("#0b2029f5")
+    frame:
+        background dg_camp_button_surface("#101923f5","#65D8D080")
+        align (.5,.5) xsize 1160 padding (34,30)
+        vbox:
+            spacing 22 xsize 1090
+            text (u"Удалить смену навсегда?" if permanent else u"Переместить смену в корзину?") style "dg_note_heading" size 36
+            text dg_literal(name) style "dg_note_body" size 30 xmaximum 1060
+            text (u"Будут окончательно удалены данные этой смены, её изображения и архивные ветки. Отменить это действие нельзя." if permanent else u"Смена исчезнет из списка продолжения. Её данные, изображения и архивные ветки сохранятся в корзине; их можно восстановить.") style "dg_note_body" size 26 xmaximum 1060
+            text (u"Обычные слоты Ren’Py и другие смены не удаляются. Старый слот не возобновит окончательно удалённую смену." if permanent else u"Обычные слоты Ren’Py и другие смены не удаляются. Старый слот не возобновит удалённую смену, пока она не восстановлена из корзины.") style "dg_note_hint" xmaximum 1060
+            hbox:
+                spacing 20
+                textbutton u"Отмена" style "dg_note_button" xfill False xsize 280 action Return(False)
+                textbutton (u"Удалить навсегда" if permanent else u"В корзину") style "dg_note_button" xfill False xsize 340 action Return(True)
+    key "K_ESCAPE" action Return(False)
+
+screen dg_rpg_shift_trash:
+    modal True
+    add Solid("#0b2029")
+    frame:
+        background Solid("#102b33e8")
+        align (.5,.5) xsize 1560 ysize 920 padding (30,26)
+        vbox:
+            spacing 18
+            text u"Корзина смен" style "dg_note_heading" size 36
+            text u"Восстанови удалённую смену или удали её данные окончательно. Другие истории и обычные слоты остаются на месте." style "dg_note_hint" xmaximum 1470
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                xsize 1490 ysize 650 mousewheel True scrollbars "vertical"
+                vbox:
+                    xsize 1440 spacing 16
+                    $ trash_games=__import__('dg_sessions').deleted(dg_rpg_root())
+                    if not trash_games:
+                        text u"Корзина пуста." style "dg_note_body"
+                    for game in trash_games:
+                        frame:
+                            background Solid("#17352edb") padding (22,18) xsize 1430
+                            vbox:
+                                spacing 14
+                                text dg_literal(game['name']) style "dg_note_heading" size 32 xmaximum 1380
+                                text (u"День %d / %d · %s"%(game['day'],game['duration'],u'Завершена' if game['finished'] else u'В лагере')) style "dg_note_hint"
+                                hbox:
+                                    spacing 20
+                                    textbutton u"Восстановить" style "dg_note_button" xfill False xsize 280 action Return(('restore',game['key']))
+                                    textbutton u"Удалить навсегда…" style "dg_note_button" xfill False xsize 340 action Return(('purge',game['key']))
+            textbutton u"Назад" style "dg_note_button" xfill False xsize 240 action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 # Contrast-focused modal editor; avoids the tiny global Ren'Py input overlay.
 style dg_rpg_edit_input is dg_ink_input:
@@ -2858,6 +2940,24 @@ label dg_rpg_picker_label:
     $ dg_rpg_audio_stop()
     call screen dg_rpg_picker
     $ dg_rpg_cmd, dg_rpg_value = _return
+    if dg_rpg_cmd == "delete_shift":
+        $ dg_shift_delete_info=dg_rpg.load(dg_rpg_root(),dg_rpg_value)
+        call screen dg_rpg_shift_confirm(dg_shift_delete_info['hero']['name'],False)
+        if _return:
+            $ dg_rpg_manage_shift('trash',dg_rpg_value)
+        jump dg_rpg_picker_label
+    if dg_rpg_cmd == "trash":
+        call screen dg_rpg_shift_trash
+        if _return:
+            $ dg_shift_trash_action,dg_shift_trash_key=_return
+            if dg_shift_trash_action == "restore":
+                $ dg_rpg_manage_shift('restore',dg_shift_trash_key)
+            elif dg_shift_trash_action == "purge":
+                $ dg_shift_purge_info=next(r for r in __import__('dg_sessions').deleted(dg_rpg_root()) if r['key']==dg_shift_trash_key)
+                call screen dg_rpg_shift_confirm(dg_shift_purge_info['name'],True)
+                if _return:
+                    $ dg_rpg_manage_shift('purge',dg_shift_trash_key)
+        jump dg_rpg_picker_label
     if dg_rpg_cmd == "back":
         $ dg_rpg_active = False
         jump dg_menu

@@ -12,7 +12,10 @@ class NativeResume(unittest.TestCase):
         store=SimpleNamespace(dg_rpg_state={'id':'saved'},dg_rpg_active=False,dg_rpg_pending_turn={'stale':True})
         api=SimpleNamespace(game=SimpleNamespace(context=lambda:SimpleNamespace(current='old'),script=SimpleNamespace(lookup=lambda value:SimpleNamespace(filename='game/mods/don_gen/dg_rpg.rpy' if own else 'game/foreign.rpy'))),jump=Mock())
         opened=Mock(side_effect=lambda ident:setattr(store,'dg_rpg_state',{'id':ident,'confirmed':True}))
-        ns=dict(dg_rpg=SimpleNamespace(DICT_TYPE=dict),store=store,renpy=api,dg_rpg_open=opened,dg_stage=SimpleNamespace(freeze=lambda state:dict(state)))
+        session_api=SimpleNamespace(removed=lambda root,ident:False)
+        builtin_import=__import__
+        imports=lambda name,*args,**kwargs:session_api if name=='dg_sessions' else builtin_import(name,*args,**kwargs)
+        ns=dict(__import__=imports,dg_rpg_root=lambda:'isolated-test-root',dg_rpg=SimpleNamespace(DICT_TYPE=dict),store=store,renpy=api,dg_rpg_open=opened,dg_stage=SimpleNamespace(freeze=lambda state:dict(state)))
         exec(compile(ast.Module(body=[node],type_ignores=[]),'actual_resume','exec'),ns)
         return ns['dg_rpg_after_load'],store,api,opened
 

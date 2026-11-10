@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
     # Additional production screens are accepted below by extending the existing action.
-    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing')
+    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing','shift-trash','shift-confirm','shift-purge','shift-flow')
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -332,6 +332,50 @@ init 1100 python:
             cases=[('stock-catalog','dg_rpg_stock_catalog',{})]
         if os.environ.get("DG_UI_SCREEN")=='pacing':
             cases=[('pacing','dg_rpg_controls',{'initial_tab':'settings'})]
+        if os.environ.get("DG_UI_SCREEN") in ('shift-trash','shift-confirm','shift-purge','shift-flow'):
+            import dg_sessions
+            state=dg_rpg.new_game(u'Архивная смена Игоря',24,60,camp_life=True)
+            dg_rpg.save(dg_rpg_root(),state)
+            if os.environ['DG_UI_SCREEN']=='shift-flow':
+                api=dg_rpg_say_character.func_globals['renpy'];original_call=api.call_screen;original_notify=api.notify
+                original_stop=store.dg_rpg_audio_stop;store.dg_rpg_audio_stop=lambda:None
+                dg_runtime.app.busy=False;notify=[];api.notify=lambda text:notify.append(text)
+                other=dg_rpg.new_game(u'Другая смена',24,14);dg_rpg.save(dg_rpg_root(),other)
+                screens=[];pickers=[0];confirms=[0];trashes=[0]
+                def shift_call(name,*args,**kwargs):
+                    screens.append(name)
+                    if name=='dg_rpg_picker':
+                        pickers[0]+=1;n=pickers[0]
+                        if n==1:return ('delete_shift',state['id'])
+                        if n==2:
+                            if dg_rpg.load(dg_rpg_root(),state['id'])!=state:raise ValueError('Cancel deleted shift')
+                            return ('delete_shift',state['id'])
+                        if n in (3,5):
+                            if any(r['id']==state['id'] for r in dg_rpg.list_games(dg_rpg_root())):raise ValueError('Trashed shift still visible')
+                            return ('trash',None)
+                        if n==4:
+                            if dg_rpg.load(dg_rpg_root(),state['id'])!=state:raise ValueError('Restore changed shift')
+                            return ('delete_shift',state['id'])
+                        if n==6:
+                            if dg_sessions.deleted(dg_rpg_root()) or not dg_sessions.removed(dg_rpg_root(),state['id']):raise ValueError('Purge incomplete')
+                            if dg_rpg.load(dg_rpg_root(),other['id'])!=other:raise ValueError('Other shift changed')
+                            api.jump('dg_ui_flow_done')
+                        raise ValueError('Shift picker loop did not terminate')
+                    if name=='dg_rpg_shift_confirm':
+                        confirms[0]+=1;return confirms[0]!=1
+                    if name=='dg_rpg_shift_trash':
+                        trashes[0]+=1;row=dg_sessions.deleted(dg_rpg_root())[0]
+                        return ('restore' if trashes[0]==1 else 'purge',row['key'])
+                    raise ValueError('Unexpected shift screen '+name)
+                try:
+                    api.call_screen=shift_call;api.call_in_new_context('dg_rpg_picker_label')
+                    if len(notify)!=4:raise ValueError('Shift operation was not completed: '+repr(notify))
+                    print('SCRIPT_SHIFT_MANAGEMENT_OK cancel=True trash=True restore=True purge=True other_shift_untouched=True')
+                finally:api.call_screen=original_call;api.notify=original_notify;store.dg_rpg_audio_stop=original_stop
+                return False
+            dg_sessions.trash(dg_rpg_root(),state['id'])
+            if os.environ['DG_UI_SCREEN']=='shift-trash':cases=[('shift-trash','dg_rpg_shift_trash',{})]
+            else:cases=[(os.environ['DG_UI_SCREEN'],'dg_rpg_shift_confirm',{'name':state['hero']['name'],'permanent':os.environ['DG_UI_SCREEN']=='shift-purge'})]
         if os.environ.get("DG_UI_SCREEN")=='branches':
             import dg_checkpoints,copy
             state=dg_rpg.new_game(u'Тестовый герой',23,30,camp_life=True)
