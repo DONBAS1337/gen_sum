@@ -96,10 +96,11 @@ class CampLife(unittest.TestCase):
         dg_rpg.move(s,'stage');dg_camp.act(s,'job:2');self.assertEqual(job['status'],'done')
 
     def test_disco_has_days_and_time_window(self):
-        s=self.familiar();s['slot']=2;s['camp_life']['minute']=1200
-        self.assertTrue(any(r['key']=='disco' for r in dg_camp.cards(s)))
-        dg_rpg.move(s,'square');dg_camp.act(s,'disco')
-        self.assertFalse(any(r['key']=='disco' for r in dg_camp.cards(s)))
+        s=self.familiar();s['day']=6;s['slot']=2;s['camp_life']['minute']=1200
+        s['id']=next(('%032x'%i) for i in range(100) if dg_world.weather(dict(s,id='%032x'%i))[0]!='rain')
+        self.assertTrue(any(r['key']=='event:weekly_disco' for r in dg_camp.cards(s)))
+        dg_rpg.move(s,'square');dg_camp.act(s,'event:weekly_disco')
+        self.assertFalse(any(r['key']=='event:weekly_disco' for r in dg_camp.cards(s)))
 
     def test_early_dialogue_is_introduction_not_joint_project(self):
         s=self.state();opening=dg_dialogue.opening(s,'mi')
@@ -180,7 +181,8 @@ class CampLife(unittest.TestCase):
 
     def test_disco_music_and_dance_are_contextual_and_do_not_start_romance(self):
         import dg_audio
-        s=self.familiar();s['slot']=2;s['camp_life']['minute']=1200;s['place']='square'
+        s=self.familiar();s['day']=6;s['slot']=2;s['camp_life']['minute']=1200
+        s['id']=next(('%032x'%i) for i in range(100) if dg_world.weather(dict(s,id='%032x'%i))[0]!='rain');s['place']='square'
         self.assertEqual(dg_rpg.where_is(s,'mi'),'square')
         self.assertEqual(dg_audio.plan(s,'mi','exterior')['music'][0],'lightness_radio')
         self.assertIn(('dance',dg_affection.LABELS['dance']),dg_affection.options(s,'mi'))

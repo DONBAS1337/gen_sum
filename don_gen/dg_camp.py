@@ -90,7 +90,8 @@ def location(state,who):
         if who==actor:return state['housing']['cabin'] if place=='home' else place
     if 510<=minute<540 and who not in ('uv','cs'):return 'square'
     if (540<=minute<570 or 780<=minute<840 or 1140<=minute<1200) and who not in ('uv','cs'):return 'canteen'
-    if state['day']%3==0 and 1200<=minute<1290 and who not in ('uv','mt','cs'):return 'square'
+    scheduled=__import__('dg_schedule').location(state,who)
+    if scheduled:return scheduled
     companion=c.get('companion')
     if companion and companion['who']==who and __import__('dg_clock').absolute(state)<companion['until']:return state['place']
     if state['day']>=2 and not c['tour_issued'] and who=='mt':return state['housing']['cabin']
@@ -125,8 +126,12 @@ def cards(state):
         add('job_issue',u'Взять поручение: '+proposed,__import__('dg_rpg').where_is(state,'mt'),'mt',5,u'Вожатая предлагает конкретное лагерное дежурство. Игрок может взять поручение или пока не подходить.')
     for key,row in sorted(c['jobs'].items()):
         if row['status']=='active':add('job:'+key,row['title'],row['place'],None,row['minutes'],u'Выполнить принятое поручение лично в нужном месте. Оборудование — лагерное; оно не становится вещью героя.')
-    if c['arrival']==4 and state['day']%3==0 and 1200<=minute<1290 and not _done(state,'disco'):
-        add('disco',u'Прийти на дискотеку','square',None,45,u'Лагерная дискотека. Можно слушать музыку и знакомиться; приглашение на танец не означает роман или согласие на прикосновение.')
+    rows.extend(__import__('dg_schedule').cards(state))
+    rows.extend(__import__('dg_risk').cards(state))
+    if __import__('dg_risk').injured(state) and not state['health']['treated']:
+        add('treatment',u'Повторный осмотр после травмы','infirmary','cs',20,u'Повторный осмотр ушиба в медпункте; выздоровление требует времени.')
+    if __import__('dg_risk').injured(state):
+        rows=[r for r in rows if not r['key'].startswith('job:') and r['key'] not in ('job_issue','event:outing','event:weekly_disco')]
     add('wait',u'Подождать 10 минут',state['place'],None,10,u'Герой ждёт, пока лагерный день идёт своим чередом.')
     if minute>=1260:add('sleep',u'Вернуться в домик и лечь спать',state['housing']['cabin'],None,1440-minute,u'Вечерние дела закончены. Герой ложится спать до утреннего подъёма.')
     return rows
@@ -153,11 +158,16 @@ def intro_here(state,who):
 
 def act(state,key):
     import dg_rpg,dg_clock
+    if key.startswith('risk:'):return __import__('dg_risk').resolve(state,key)
     matches=[row for row in cards(state) if row['key']==key and row['ready']]
     if not matches:raise ValueError(u'Сейчас это лагерное действие недоступно в этом месте.')
     row=matches[0];c=state['camp_life'];who=row['who']
     if key.startswith('job:') and state['energy']<8:raise ValueError(u'Для работы нужно не меньше 8 сил.')
-    if key=='arrival':
+    if key.startswith('event:'):
+        row=__import__('dg_schedule').resolve(state,row);_mark(state,key)
+    elif key=='treatment':
+        row=dict(row,story=__import__('dg_risk').treatment(state))
+    elif key=='arrival':
         if c['arrival']==2:_mark(state,'assembly')
         c['arrival']+=1
     elif key=='tour_issue':c['tour_issued']=True
@@ -167,13 +177,14 @@ def act(state,key):
         row=dict(row,story=u'Игрок выбрал направление и вступил: '+CLUBS[c['club']]+u'. Отметки обхода сохранены. Это не близость с участниками и не согласие на общий проект.')
     elif key=='job_issue':
         ident=('%d'%state['day']);kind=('canteen','equipment','grounds')[(state['day']-1)%3];title,place,actor,cost=JOBS[kind]
-        c['jobs'][ident]={'title':title,'place':place,'who':actor,'minutes':20 if kind=='equipment' else cost,'deadline':state['day']+1,'status':'active','kind':kind,'step':0}
+        if kind=='equipment' and __import__('dg_hero').has(state,'technical'):cost-=5
+        c['jobs'][ident]={'title':title,'place':place,'who':actor,'minutes':15 if kind=='equipment' and __import__('dg_hero').has(state,'technical') else 20 if kind=='equipment' else cost,'deadline':state['day']+1,'status':'active','kind':kind,'step':0}
         _mark(state,key);row=dict(row,story=u'Получено поручение: '+title+u'. Срок — до конца следующего дня. Работа ещё не выполнена.')
     elif key.startswith('job:'):
         job=c['jobs'][key.split(':',1)[1]]
         if job.get('kind')=='equipment' and job.get('step',0)==0:
             job.update(step=1,place='stage',minutes=25,title=u'Доставить подготовленное оборудование на сцену')
-            row=dict(row,minutes=20,story=u'Оборудование подготовлено к переноске на хозяйственном дворе. Теперь его нужно доставить на сцену; поручение ещё не закончено.')
+            row=dict(row,minutes=row["minutes"],story=u'Оборудование подготовлено к переноске на хозяйственном дворе. Теперь его нужно доставить на сцену; поручение ещё не закончено.')
         else:
             job['status']='done';credit=job['who']
             row=dict(row,story=(u'Оборудование лично доставлено на сцену. Поручение выполнено.' if job.get('kind')=='equipment' else u'Принятое лагерное дежурство выполнено лично в нужном месте. Новых предметов герой не получил.'))
@@ -189,7 +200,7 @@ def act(state,key):
 
 def report(state):
     if not enabled(state):return None
-    return {'clock':__import__('dg_clock').text(state),'arrival_step':state['camp_life']['arrival'],
+    return {'calendar':__import__('dg_schedule').report(state),'health':__import__('dg_risk').report(state),'hero_profile':__import__('dg_hero').profile(state),'clock':__import__('dg_clock').text(state),'arrival_step':state['camp_life']['arrival'],
             'tour_issued':state['camp_life']['tour_issued'],'tour_stamps':list(state['camp_life']['stamps']),
             'club':state['camp_life']['club'],'relationship_stages':dict((who,stage(state,who)) for who in state['met']),
             'next_activities':copy.deepcopy(cards(state)),
@@ -209,4 +220,5 @@ def validate(state):
         if who not in dg_rpg.NPC_NAMES or not isinstance(p,dict) or not isinstance(p.get('days'),list) or len(p['days'])>120 or any(type(day) is not int or not 1<=day<=121 for day in p['days']) or type(p.get('count')) is not int or not 0<=p['count']<=100000:raise ValueError('Invalid camp contact')
     for row in c['jobs'].values():
         if not isinstance(row,dict) or not isinstance(row.get('title'),(str,type(u''))) or len(row['title'])>200 or row.get('status') not in ('active','done','missed') or row.get('place') not in dg_rpg.PLACE_NAMES or row.get('who') not in dg_rpg.NPC_NAMES or type(row.get('minutes')) is not int or not 1<=row['minutes']<=120 or type(row.get('deadline')) is not int:raise ValueError('Invalid camp job')
+    __import__('dg_risk').validate(state)
     dg_clock.validate(state)

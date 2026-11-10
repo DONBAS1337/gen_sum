@@ -273,6 +273,7 @@ def cancel(state,key):
 
 
 def can_contribute(state,key,actor):
+    if actor=="hero" and __import__("dg_risk").injured(state):return False
     if actor=="hero" and not player_knows_project(state,key):return False
     index,spec=step(state,key)
     if spec is None:return False

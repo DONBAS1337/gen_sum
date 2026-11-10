@@ -81,3 +81,10 @@ def background(root, place, slot):
     filename = ('ext_music_club_verandah_day.jpg', 'ext_music_club_verandah_day.jpg',
                 'ext_music_club_sunset.jpg', 'ext_music_club_verandah_night.jpg')[slot]
     return dg_resources.asset(root, 'bkrr/images/bg/' + filename)
+
+
+def rain_background(root,place,slot):
+    import dg_resources
+    if slot not in (0,1):return None
+    name={'forest':'ext_forest_day_rainy.jpg','forest_path':'ext_forest2_day_rainy.jpg','old_camp':'ext_old_building_day_rainy.jpg'}.get(place)
+    return dg_resources.asset(root,'bkrr/images/bg/'+name) if name else None

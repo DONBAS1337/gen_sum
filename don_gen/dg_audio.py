@@ -26,8 +26,9 @@ def plan(state, who=None, setting=None):
         ambience.append('ambience_camp_center_'+suffix)
         if dg_world.weather(state)[0]=='rain': ambience.insert(0,'ambience_hard_rain_outside')
         ambience.append('ambience_forest_'+suffix)
+    if inside and dg_world.weather(state)[0]=='rain':ambience.insert(0,'ambience_hard_rain_inside')
     tension=state.get('relationships',{}).get('people',{}).get(who,{}).get('tension',0)
-    if __import__('dg_camp').enabled(state) and place=='square' and state['day']%3==0 and 1200<=state['camp_life']['minute']<1290:music=['lightness_radio','lightness','dance_of_fireflies']
+    if __import__('dg_camp').enabled(state) and place==('clubhouse' if dg_world.weather(state)[0]=='rain' else 'square') and __import__('dg_schedule').disco(state):music=['lightness_radio','lightness','dance_of_fireflies']
     elif who and tension>=6: music=['reflection_on_water','waltz_of_doubts']
     elif who and who in state.get('npc_visits',{}).get('romance',[]): music=['what_do_you_think_of_me','lets_be_friends']
     elif slot==3: music=['silhouette_in_sunset','reflection_on_water']

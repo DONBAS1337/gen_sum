@@ -276,6 +276,8 @@ init 1001 python:
             dg_camp.enable(state,arrival=False)
         elif action == "camp":
             store.dg_rpg_last_camp=dg_camp.act(state,arg)
+            if state['place']!=store.dg_rpg_scene_context['place']:
+                store.dg_rpg_scene_context=dg_stage.freeze(state,store.dg_rpg_last_camp['who'])
             pending.update(who=store.dg_rpg_last_camp['who'],intention=store.dg_rpg_last_camp['title'],result=store.dg_rpg_last_camp['text'])
         elif action == "affection":
             store.dg_rpg_last_affection=dg_affection.act(state,arg[0],arg[1])
@@ -339,6 +341,7 @@ init 1001 python:
                            result=store.dg_rpg_last_incident['text'])
         elif action == "hybrid":
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
+            if arg[0]["result"].get("kind")=="risk":store.dg_rpg_scene_context=dg_stage.freeze(state,arg[0]["result"].get("who"))
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
         elif action == "profile":
@@ -472,6 +475,7 @@ init 1001 python:
         # The background worker ONLY generates a text string. No save writes.
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         instructions, prompt = dg_hybrid.build_request(current, plan)
+        current=dg_hybrid.scene_state(current,plan)
         context = json.loads(prompt)
         context['visual_scene_facts'] = dg_rpg_visual_brief(current)
         context['voice_reference']=dg_rpg_voice_reference(current,plan.get('who'),plan['action'])
@@ -671,6 +675,8 @@ init 1001 python:
         if dg_rpg_state.get("source") == dg_bkrr.SOURCE:
             root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
             backdrop = dg_bkrr.background(root, place, visual["slot"])
+            if visual.get("weather",dg_world.weather(dg_rpg_state)[0])=="rain":
+                backdrop=dg_bkrr.rain_background(root,place,visual["slot"]) or backdrop
             if backdrop:
                 return backdrop
         external = dg_resources.background(
@@ -1156,6 +1162,8 @@ screen dg_rpg_setup:
                 xsize 1496 ysize 644 mousewheel True scrollbars "vertical"
                 vbox:
                     xsize 1420 spacing 16
+                    text u"Предыстория влияет на реплики, навыки и варианты занятий. Например: «играю на гитаре», «умею паять», «занимаюсь спортом», «боюсь высоты». Личные знакомства и вещи она не выдаёт." style "dg_ink" size 23 xmaximum 1380
+                    text (u"Распознано: "+(u", ".join(__import__('dg_hero').profile({'hero':{'background':dg_create_history}})['labels']) or u"общие интересы — уточни в описании")) style "dg_ink" size 23 xmaximum 1380
                     hbox:
                         spacing 65
                         vbox:
@@ -1641,6 +1649,8 @@ screen dg_rpg_hub(initial_show=True):
                 spacing 4
                 text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_camp_narration" size 24 bold True
                 text (dg_rpg.camp_time(dg_rpg_state)+u" · силы %d" % dg_rpg_state["energy"]) style "dg_rpg_hint" size 20 color "#A9B9C6"
+                if __import__("dg_risk").injured(dg_rpg_state):
+                    text u"Ушиб · нагрузка ограничена" size 20 color "#ffd19c"
         hbox:
             xpos 1596 ypos 30 spacing 10
             for icon, caption, command in (("map",u"Карта · M","map"),("book",u"Дневник · J","journal"),("events",u"События","controls"),("settings",u"Настройки","settings")):
@@ -3608,7 +3618,9 @@ screen dg_rpg_camp:
         xpos 90 ypos 55 xsize 1740 ysize 960 padding (30,26)
         vbox:
             spacing 18
-            text (u"Лагерный день · "+dg_rpg.camp_time(dg_rpg_state)) size 32 color "#65D8D0"
+            text (u"Лагерный день · "+dg_rpg.camp_time(dg_rpg_state)+u" · "+__import__("dg_schedule").WEEK[__import__("dg_schedule").weekday(dg_rpg_state)]) size 32 color "#65D8D0"
+            text (dg_world.weather(dg_rpg_state)[1]+u" · "+(u"После травмы: отдых и спокойные занятия" if __import__("dg_risk").injured(dg_rpg_state) else u"Самочувствие: обычное")) size 22 color "#A9B9C6"
+            text (u"Сегодня: "+(u" · ".join(row['title']+u" %02d:%02d"%(row['start']//60,row['start']%60) for row in __import__('dg_schedule').events(dg_rpg_state)) or u"свободный день по распорядку")) size 22 color "#F2E4BB" xmaximum 1630
             text u"Реплика — 5 минут; переход — 5 минут; длительность дел указана ниже. Кружок выбираешь после обхода лагеря." size 24 color "#F2E4BB" xmaximum 1640
             viewport:
                 viewport_xfill True
@@ -3616,7 +3628,7 @@ screen dg_rpg_camp:
                 vscrollbar_unscrollable "hide"
                 vscrollbar_base_bar Solid("#243441")
                 vscrollbar_thumb Solid("#65D8D0a0")
-                xsize 1660 ysize 700 mousewheel True scrollbars "vertical"
+                xsize 1660 ysize 565 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 16 xsize 1620
                     for row in dg_camp.cards(dg_rpg_state):

@@ -161,7 +161,7 @@ def context(state, kind, who=None, identity=None, moment=None):
     recent=state.get("journal",[])[-5:]
     recent_decisions=state.get("world",{}).get("decisions",[])[-6:]
     return {
-        "camp_life":__import__("dg_camp").report(state),
+        "hero_profile":__import__("dg_hero").profile(state),"health":__import__("dg_risk").report(state),"camp_life":__import__("dg_camp").report(state),
         "scene_id":key, "kind":kind, "hero":copy.deepcopy(state["hero"]),
         "day":state["day"],"slot":time,"time_of_day":dg_rpg.SLOTS[time],
         "place":dg_rpg.PLACE_NAMES[state["place"]],

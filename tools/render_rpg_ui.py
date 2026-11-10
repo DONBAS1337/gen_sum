@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -253,12 +253,20 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
-        if os.environ.get("DG_UI_SCREEN") in ('arrival','camp-day','context'):
+        if os.environ.get("DG_UI_SCREEN") in ('arrival','camp-day','context','calendar','injury'):
             state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
             if os.environ.get("DG_UI_SCREEN")=='camp-day':
                 state['day']=2;state['camp_life'].update(arrival=4,minute=600,tour_issued=True)
                 state['met']=['sl','mt'];state['place']='library'
                 cases=[('camp-day','dg_rpg_camp',{})]
+            elif os.environ.get("DG_UI_SCREEN") in ('calendar','injury'):
+                import dg_world,dg_risk
+                state['day']=5;state['slot']=2;state['camp_life'].update(arrival=4,minute=1200,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+                state['id']=next('%032x'%i for i in range(1000) if dg_world.weather(dict(state,id='%032x'%i))[0]=='rain')
+                state['place']='clubhouse'
+                if os.environ.get("DG_UI_SCREEN")=='injury':
+                    state['place']='infirmary';state['health']={'kind':'fall','until':__import__('dg_clock').absolute(state)+1000,'treated':False,'day':5}
+                cases=[(os.environ.get("DG_UI_SCREEN"),'dg_rpg_camp',{})]
             elif os.environ.get("DG_UI_SCREEN")=='context':
                 state['day']=3;state['camp_life'].update(arrival=4,minute=600,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
                 state['met']=['mi'];state['affinity']['mi']=60

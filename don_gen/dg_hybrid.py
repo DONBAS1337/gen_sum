@@ -142,6 +142,11 @@ def _simulate(state, action, mode, who, interpretation=None):
     dg_rpg.validate(shadow)
     if shadow.get("finished"):
         return shadow, {"status":"unknown","text":u"Смена завершена; действия недоступны."}
+    risk=__import__('dg_risk').intent(action)
+    if risk and __import__('dg_camp').enabled(shadow):
+        try:
+            result=__import__('dg_risk').resolve(shadow,risk);result.update(status='done',kind='risk');return shadow,result
+        except ValueError as exc:return shadow,{'status':'unknown','text':text_type(exc)}
     if interpretation is None and mode=='npc':
         physical=_physical(shadow,action,who)
         if physical is not None:return shadow,physical
@@ -299,6 +304,13 @@ def preview(state, action, mode="free", who=None, topic=None, interpretation=Non
             "interpretation":interpretation,
             "day":source["day"],"slot":source["slot"],"place":source["place"]}
 
+def scene_state(state,plan):
+    if plan.get('result',{}).get('kind')=='risk':
+        after,result=_simulate(state,plan['action'],plan['mode'],plan.get('who'),plan.get('interpretation'))
+        if after['place']!=state['place']:return after
+    return state
+
+
 def locked_context(state, plan):
     if plan.get("status")!="ready":
         raise ValueError("Invalid plan")
@@ -309,6 +321,8 @@ def locked_context(state, plan):
         raise ValueError("Game state changed before generation")
     focus=plan.get("who") or plan["result"].get("who") or plan["result"].get("npc") or plan["result"].get("target")
     confirmed_after,unused_outcome=_simulate(copy_state,plan["action"],plan["mode"],plan.get("who"),plan.get("interpretation"))
+    if plan['result'].get('kind')=='risk' and confirmed_after['place']!=copy_state['place']:
+        copy_state=copy.deepcopy(confirmed_after);focus=plan['result'].get('who')
     selected_topic = None
     if plan.get("mode") == "npc" and plan.get("topic") is not None:
         import dg_dialogue
@@ -318,7 +332,7 @@ def locked_context(state, plan):
     variation=dg_narrative.context(copy_state,"hybrid",focus,plan["action"][:180])
     return {
         "narrative_variation":variation,
-        "hero":copy_state["hero"],"world_profile":copy_state["source"],
+        "hero_profile":__import__("dg_hero").profile(copy_state),"health":__import__("dg_risk").report(confirmed_after),"calendar":__import__("dg_schedule").report(copy_state),"hero":copy_state["hero"],"world_profile":copy_state["source"],
         "day":copy_state["day"],"time_slot":dg_rpg.SLOTS[copy_state["slot"]],
         "place":dg_rpg.PLACE_NAMES[copy_state["place"]],
         "weather":dg_world.weather(copy_state)[1],
@@ -410,7 +424,7 @@ def commit(state, plan, scene_text=None):
         scene_text=scene_text.strip()
         if len(dg_stage.readable(scene_text).strip())<45 or len(scene_text)>MAX_SCENE:
             raise ValueError("Model scene too short or too long; game state unchanged")
-        dg_stage.validate_speakers(scene_text, dg_stage.freeze(original, plan.get("who"))["present"])
+        dg_stage.validate_speakers(scene_text, dg_stage.freeze(scene_state(original,plan), plan["result"].get("who") if plan["result"].get("kind")=="risk" else plan.get("who"))["present"])
     entry={"day":state["day"],"place":state["place"],"mode":plan["mode"],
            "action":plan["action"],"result":outcome["text"],
            "effects":plan["effects"],"scene":scene_text or u"",

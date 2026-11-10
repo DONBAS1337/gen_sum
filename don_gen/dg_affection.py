@@ -18,7 +18,8 @@ def options(state,who):
     if who not in dg_relationships.LIKES or who not in state['met'] or state['finished'] or dg_rpg.where_is(state,who)!=state['place']:return []
     stage=dg_camp.stage(state,who);relation=state.get('relationships',{}).get('people',{}).get(who,{})
     if not relation.get('invitations',True) or relation.get('tension',0)>=4:return []
-    disco=dg_camp.enabled(state) and state['place']=='square' and state['day']%3==0 and 1200<=state['camp_life']['minute']<1290
+    disco=dg_camp.enabled(state) and __import__('dg_schedule').disco(state) and state['place']==('clubhouse' if __import__('dg_world').weather(state)[0]=='rain' else 'square')
+    if __import__('dg_risk').injured(state):return []
     rows=[];used=state.get('affection',{}).get('cooldowns',{})
     for kind,ready in (('dance',disco),('walk',stage in ('friend','close','romance')),('hug',stage in ('close','romance') and relation.get('trust',0)>=3),('hand',stage=='romance' and relation.get('trust',0)>=4)):
         if ready and used.get(who+':'+kind)!=state['day']:rows.append((kind,LABELS[kind]))

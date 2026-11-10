@@ -436,6 +436,7 @@ def activity(state, action, who=None):
         return state
     if action not in ACTIONS:
         raise ValueError("Unknown activity")
+    if __import__("dg_risk").injured(state) and action != "rest":raise ValueError(u"После травмы временно доступны отдых и спокойные разговоры.")
     label, cost, stat, gain = ACTIONS[action]
     if action != "rest" and state["energy"] < cost:
         _journal(state, u"Недостаточно сил. Можно отдохнуть.")
@@ -533,6 +534,8 @@ def free_action(state, requested):
     validate(state)
     if state["finished"]:
         return {"status":"unknown","text":u"Смена уже завершена."}
+    if __import__("dg_risk").injured(state) and any(w in requested.lower() for w in (u"бег",u"крыш",u"плав",u"тяжел",u"тяжёл",u"оборудован")):
+        return {"status":"unknown","text":u"После травмы нужно отложить нагрузку и дождаться восстановления."}
     nearby=[who for who, name in at_place(state)]
     violation=dg_adult.validate_action(state, requested)
     if violation:
