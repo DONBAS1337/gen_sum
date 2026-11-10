@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -253,6 +253,87 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
+        if os.environ.get("DG_UI_SCREEN") in ('arrival','camp-day','context'):
+            state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+            if os.environ.get("DG_UI_SCREEN")=='camp-day':
+                state['day']=2;state['camp_life'].update(arrival=4,minute=600,tour_issued=True)
+                state['met']=['sl','mt'];state['place']='library'
+                cases=[('camp-day','dg_rpg_camp',{})]
+            elif os.environ.get("DG_UI_SCREEN")=='context':
+                state['day']=3;state['camp_life'].update(arrival=4,minute=600,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+                state['met']=['mi'];state['affinity']['mi']=60
+                state['camp_life']['contacts']['mi']={'days':[1,2,3],'count':8}
+                dg_relationships.person(state,'mi')['trust']=5
+                state['place']=dg_rpg.where_is(state,'mi')
+                cases=[('context','dg_rpg_context',{'who':'mi'})]
+            else:cases=[('arrival','dg_rpg_hub',{})]
+            store.dg_rpg_state=state
+            store.dg_rpg_scene_context=dg_stage.freeze(state)
+        if os.environ.get("DG_UI_SCREEN")=='flow':
+            import dg_narrative
+            api=dg_rpg_say_character.func_globals['renpy']
+            methods=('call_screen','say','display_menu','with_statement')
+            original=dict((name,getattr(api,name)) for name in methods)
+            original_read=dg_narrative.read_scene
+            original_audio=store.dg_rpg_audio_sync
+            store.dg_rpg_audio_sync=lambda *args:None
+            prose=u'[narrator] У музыкального кружка тихо. На веранде стоят Мику и герой. Никто ещё не принял решений.\n[mi] Привет! Как проходит твой день? Я могу немного поговорить, прежде чем вернуться к своим занятиям.\n[hero] Здравствуй. Я хотел узнать немного больше о лагере и о том, чем здесь обычно занимаются.'
+            try:
+                for modern,interrupted in ((False,False),(False,True),(True,False),(True,True)):
+                    state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=modern)
+                    if state['social'].get('incident'):state['social']['incident']['status']='resolved'
+                    dg_rpg.move(state,dg_rpg.where_is(state,'mi'))
+                    store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_interrupt=False
+                    dg_rpg.save(dg_rpg_root(),state)
+                    counts={'hub':0,'say':0,'menu':0,'cache':0}
+                    def screen_call(name,*args,**kwargs):
+                        if name!='dg_rpg_hub':raise ValueError('Unexpected screen in flow: '+name)
+                        counts['hub']+=1
+                        if counts['hub']==1:return ('talk','mi')
+                        api.jump('dg_ui_flow_done')
+                    def menu_call(items,**kwargs):
+                        if kwargs.get('screen')!='dg_rpg_choice':raise ValueError('Foreign choice screen')
+                        counts['menu']+=1
+                        return '0' if counts['menu']==1 else 'support'
+                    def say_call(character,text,*args,**kwargs):
+                        counts['say']+=1
+                        if character.dynamic or character.screen!='dg_rpg_say':raise ValueError('Foreign character in real label flow')
+                        if interrupted and counts['say']==2:store.dg_rpg_interrupt=True
+                    def cache(*args):
+                        counts['cache']+=1
+                        return {'text':prose}
+                    api.call_screen=screen_call;api.say=say_call;api.display_menu=menu_call;api.with_statement=lambda *args,**kwargs:None
+                    dg_narrative.read_scene=cache
+                    api.call_in_new_context('dg_rpg_loop')
+                    saved=dg_rpg.load(dg_rpg_root(),state['id'])
+                    if counts['hub']!=2 or not store.save_name.startswith(u'DON-GEN'):raise ValueError('Did not return to DON-GEN hub')
+                    if interrupted:
+                        if counts['say']!=2 or saved['dialogue_history']:raise ValueError('Interrupted opening committed a conversation')
+                    elif counts['cache']!=3 or counts['say']!=9 or len(saved['dialogue_history'])!=1 or store.dg_rpg_pending_turn is not None:
+                        raise ValueError('Three-page dialogue failed to complete: '+repr(counts))
+                    print('SCRIPT_FLOW_OK modern='+str(modern)+' interrupted='+str(interrupted)+' counts='+repr(counts)+' returned_to_hub=True')
+                # The first scene of a fresh UI-created shift must happen before
+                # ordinary hub interaction, and commit only after narration.
+                interrupted=False
+                state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+                store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_interrupt=False;store.dg_rpg_intro_attempted=[]
+                dg_rpg.save(dg_rpg_root(),state)
+                counts={'hub':0,'say':0,'menu':0,'cache':0}
+                prose=u'[narrator] У ворот лагеря нового пионера встречает Славя. Она останавливается, чтобы познакомиться и объяснить дорогу.\n[sl] Привет! Меня зовут Славя. Вожатая ждёт тебя в домике. Я объясню, как туда пройти.\n[hero] Спасибо. Я только приехал и пока не знаю лагеря.'
+                def arrival_hub(name,*args,**kwargs):
+                    if name!='dg_rpg_hub':raise ValueError('Unexpected arrival screen')
+                    counts['hub']+=1;api.jump('dg_ui_flow_done')
+                api.call_screen=arrival_hub
+                api.call_in_new_context('dg_rpg_loop')
+                saved=dg_rpg.load(dg_rpg_root(),state['id'])
+                if saved['camp_life']['arrival']!=1 or saved['met']!=['sl'] or counts['hub']!=1 or counts['say']<3 or store.dg_rpg_pending_turn is not None:
+                    raise ValueError('Automatic arrival failed: '+repr(counts))
+                print('SCRIPT_AUTO_ARRIVAL_OK Slavya=True committed=True returned_to_hub=True')
+            finally:
+                for name,value in original.items():setattr(api,name,value)
+                dg_narrative.read_scene=original_read
+                store.dg_rpg_audio_sync=original_audio
+            return False
         if os.environ.get("DG_UI_SCREEN") in ('dialogue','dialogue-choice','waiting'):
             state=store.dg_rpg_state
             state['place']='music'
@@ -504,6 +585,9 @@ screen dg_chrome(place_name, back=None):
     text place_name xpos 100 ypos 50 color "#ffffff" size 24
     if back is not None:
         textbutton u"Назад" xpos 1650 ypos 50 action back
+
+label dg_ui_flow_done:
+    return
 
 screen dg_ui_consistent_choice(items):
     use dg_ui_consistent_dialogue

@@ -68,10 +68,21 @@ def _contribute(state,key,actor,resource_owned=False):
         __import__('dg_relationships').contributed(state,key,index)
     return True
 
+def player_knows_project(state,key):
+    camp=__import__('dg_camp')
+    if not camp.enabled(state):return True
+    if camp.in_intro(state):return False
+    blueprint=state.get('projects',{}).get('blueprints',{}).get(key)
+    people=blueprint['participants'] if blueprint else [definitions(state)[key]['steps'][1][3]]
+    return all(who is None or camp.stage(state,who) in ('friend','close','romance') for who in people)
+
+
 def available(state):
+    if __import__("dg_camp").in_intro(state):return []
     import dg_rpg
     rows=[];system=state.get('projects',{})
     for key in sorted(definitions(state)):
+        if not player_knows_project(state,key):continue
         index,spec=step(state,key)
         if spec is None: continue
         kind,place,item,target,required,eligible=spec
@@ -218,8 +229,10 @@ def caption(state,key,index):
     return verbs[index]+u' · '+blueprint['title']
 
 def register(state,value):
+    if __import__("dg_camp").in_intro(state):raise ValueError(u"Сначала знакомство с лагерем, обходной лист и выбор кружка.")
     import hashlib,json,dg_inventory
     value=check_blueprint(value)
+    if __import__("dg_camp").enabled(state) and any(__import__("dg_camp").stage(state,who) not in ("friend","close","romance") for who in value["participants"]):raise ValueError(u"Для общего проекта сначала познакомься и подружись с участниками.")
     system=ensure(state)
     current=system.get('blueprints',{})
     if len(current)>=12 or len([row for key,row in system['records'].items() if key.startswith('custom_') and row['stage']<4 and not row.get('cancelled')])>=4:raise ValueError(u'Сначала заверши или отмени активные проекты.')
@@ -260,6 +273,7 @@ def cancel(state,key):
 
 
 def can_contribute(state,key,actor):
+    if actor=="hero" and not player_knows_project(state,key):return False
     index,spec=step(state,key)
     if spec is None:return False
     people=state.get('projects',{}).get('records',{}).get(key,{}).get('contributions',{}).get(str(index),[])

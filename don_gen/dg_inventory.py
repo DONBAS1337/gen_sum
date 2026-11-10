@@ -152,7 +152,7 @@ def act(state,operation,item,who=None):
             pocket[key]-=n;log(shadow,'use',key,'hero','craft')
         pocket[item]=pocket.get(item,0)+1;log(shadow,'craft',item,'recipe','hero')
         text=u'По известному рецепту изготовлено: '+CATALOG[item]['title']+u'. Инструмент не израсходован.'
-    shadow['energy']-=cost;dg_rpg._journal(shadow,text);dg_rpg._tick(shadow);dg_rpg.validate(shadow)
+    shadow['energy']-=cost;dg_rpg._journal(shadow,text);dg_rpg._tick(shadow,30 if operation=="craft" else 5);dg_rpg.validate(shadow)
     state.clear();state.update(shadow)
     return {'status':'done','title':u'Действие с предметом','text':text,'who':who,'kind':'inventory'}
 

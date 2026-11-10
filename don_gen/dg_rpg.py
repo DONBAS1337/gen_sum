@@ -107,7 +107,7 @@ def _clean(value, maximum):
     return value
 
 
-def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его", cabin="cabin_01", roommate="mt"):
+def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его", cabin="cabin_01", roommate="mt", camp_life=False):
     name = _clean(name, 100)
     background = _clean(background, 8000)
     age, days = int(age), int(days)
@@ -131,6 +131,8 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
         "dialogue_history": [], "dialogue_counts": {}
     }
     __import__("dg_housing").assign(state,cabin,roommate)
+    if camp_life:
+        __import__("dg_camp").enable(state,arrival=True)
     dg_world.prepare(state)
     dg_social.ensure(state)
     dg_social.prepare_incident(state)
@@ -177,6 +179,8 @@ def validate(state):
     state.setdefault("route_events_done", [])
     state.setdefault("dialogue_history", [])
     state.setdefault("dialogue_counts", {})
+    __import__("dg_affection").validate(state)
+    __import__("dg_camp").validate(state)
     __import__("dg_conversation").validate(state)
     dg_world.ensure(state)
     dg_social.ensure(state)
@@ -188,7 +192,8 @@ def validate(state):
 
 
 def camp_time(state):
-    return u"День %d/%d · %s" % (state["day"], state["duration"], SLOTS[state["slot"]])
+    label=u"День %d/%d · %s" % (state["day"], state["duration"], SLOTS[state["slot"]])
+    return label+u" · "+__import__("dg_clock").text(state) if __import__("dg_clock").enabled(state) else label
 
 
 def where_is(state, who):
@@ -198,6 +203,8 @@ def where_is(state, who):
     if who == "uv":
         secret = state.get("mystery", {})
         return "forest_path" if secret.get("yulia_discovered") and state["slot"] == 3 else None
+    camp_place=__import__('dg_camp').location(state,who)
+    if camp_place:return camp_place
     schedule = next(n for n in NPCS if n[0] == who)
     # A shared event temporarily brings two NPCs to one real map location.
     incident = dg_social.incident(state)
@@ -224,7 +231,7 @@ def where_is(state, who):
         return "square"
     if slot == 1 and state["day"] % 4 == 0 and who in ("dv", "us"):
         return "sports"
-    target = schedule[slot + 2]
+    target = "music" if __import__("dg_camp").enabled(state) and who=="mi" and slot in (0,1) else schedule[slot + 2]
     # Weather may change plans of NPCs; only on days after arrival and in daylight.
     if state["day"] > 1 and slot in (1, 2):
         conditions = dg_world.weather(state)[0]
@@ -314,7 +321,15 @@ def route_event(state, who, approach):
     return state
 
 
-def _tick(state):
+def _tick(state,minutes=None):
+    if __import__('dg_clock').enabled(state):
+        state.pop('dialogue_clock',None)
+        __import__('dg_clock').advance(state,30 if minutes is None else minutes)
+    else:
+        _period_tick(state)
+
+
+def _period_tick(state):
     state.pop("dialogue_clock", None)
     previous = dict((who,where_is(state,who)) for who in NPC_NAMES)
     if state["slot"] == 3:
@@ -363,6 +378,9 @@ def move(state, place):
         __import__("dg_conversation").end(state)
         if state["finished"]:
             return state
+    if state["place"] != place and __import__('dg_clock').enabled(state):
+        _tick(state,5)
+        if state['finished']:return state
     state["place"] = place
     state["visits"][place] = state["visits"].get(place, 0) + 1
     _check_quests(state)
@@ -483,6 +501,7 @@ def conversation(state, who, topic_index, stance):
         event += u" Открыта веха рута (%s)." % u", ".join(str(x) for x in new_milestones)
     _journal(state, event)
     _check_quests(state)
+    __import__("dg_camp").record_contact(state,who)
     dg_world.refresh_open_event(state)
     __import__("dg_conversation").consume(state, who)
     return scene

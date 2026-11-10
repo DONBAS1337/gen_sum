@@ -457,6 +457,7 @@ INCIDENT_CHOICES=(
 
 
 def prepare_incident(state):
+    if __import__("dg_camp").in_intro(state):return None
     social=ensure(state)
     current=social.get("incident")
     if state.get("finished"):

@@ -126,6 +126,7 @@ def tick(state):
 
 
 def location(state, who):
+    if __import__("dg_camp").in_intro(state):return None
     person = state.get('npc_agendas',{}).get('people',{}).get(who)
     if not person or not person.get('active') or person['goal']['status'] not in ('working','blocked'):
         return None

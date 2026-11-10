@@ -10,12 +10,19 @@ def consume(state, who):
     import dg_rpg
     count = rounds(state) + 1
     state['dialogue_clock'] = {'rounds':count, 'who':who}
+    if __import__('dg_clock').enabled(state):
+        __import__('dg_clock').advance(state,5)
+        return
     if count >= EXCHANGES:
         dg_rpg._tick(state)
 
 def end(state):
     if rounds(state):
         import dg_rpg
+        if __import__('dg_clock').enabled(state):
+            state.pop('dialogue_clock',None)
+            dg_rpg._journal(state,u'Беседа завершена. Потраченное на реплики время уже учтено.')
+            return True
         dg_rpg._journal(state, u'Беседа завершена. Прошёл один период дня.')
         dg_rpg._tick(state)
         return True
@@ -26,5 +33,5 @@ def validate(state):
     if clock is None: return
     import dg_rpg
     if (not isinstance(clock, dict) or type(clock.get('rounds')) is not int
-            or not 1 <= clock['rounds'] < EXCHANGES or clock.get('who') not in dg_rpg.NPC_NAMES):
+            or not 1 <= clock['rounds'] < (145 if __import__('dg_clock').enabled(state) else EXCHANGES) or clock.get('who') not in dg_rpg.NPC_NAMES):
         raise ValueError('Invalid dialogue clock')

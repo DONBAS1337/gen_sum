@@ -48,7 +48,8 @@ def freeze(state, focus=None):
     if focus in NAMES and focus not in present:
         present.append(focus)
     return {"day": state["day"], "slot": state["slot"], "place": state["place"],
-            "present": present, "hero_name": state["hero"]["name"]}
+            "present": present, "hero_name": state["hero"]["name"],
+            "minute":__import__("dg_clock").minute(state) if __import__("dg_clock").enabled(state) else None}
 
 
 def validate_speakers(text, present):

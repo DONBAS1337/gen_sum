@@ -262,6 +262,7 @@ def _arc(state):
 
 
 def make_event(state):
+    if __import__("dg_camp").in_intro(state):return None
     world = ensure(state)
     day, duration = int(state["day"]), int(state["duration"])
     if day > duration or state.get("finished"):
@@ -277,6 +278,8 @@ def make_event(state):
     arc = _arc(state)
     if arc is not None:
         plot = PLOTS[arc]
+        if __import__('dg_camp').enabled(state) and __import__('dg_camp').stage(state,plot['npc']) not in ('friend','close','romance'):
+            return None
         stage = world["tracks"][arc]["stage"]
         if state.get("source") == "bkrr:mi" and arc == "festival":
             import dg_bkrr
@@ -349,6 +352,9 @@ def make_event(state):
 
 def prepare(state):
     world = ensure(state)
+    if __import__("dg_camp").in_intro(state):
+        world["event"]=None
+        return None
     event = world["event"]
     if state.get("finished") or state["day"] in world["closed_days"]:
         world["event"] = None

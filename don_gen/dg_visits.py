@@ -108,7 +108,7 @@ def opening(state,event):
 
 def choices(state,event):
     rows=[('accept',u'Обсудить проблему вместе' if event['kind']=='help' else u'Провести время вместе')]
-    if event['kind']=='visit' and state['affinity'][event['who']]>=70 and event['who'] in ROMANTIC and event['who'] not in state['npc_visits']['romance'] and state.get('relationships',{}).get('people',{}).get(event['who'],{}).get('tension',0)<6:
+    if event['kind']=='visit' and state['affinity'][event['who']]>=70 and event['who'] in ROMANTIC and event['who'] not in state['npc_visits']['romance'] and state.get('relationships',{}).get('people',{}).get(event['who'],{}).get('tension',0)<6 and (not __import__('dg_camp').enabled(state) or __import__('dg_camp').stage(state,event['who']) in ('close','romance')):
         rows.append(('date',u'Начать романтические отношения и провести свидание'))
     return rows+[('later',u'Поговорить чуть позже'),('decline',u'Вежливо отказаться')]
 

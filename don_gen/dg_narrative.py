@@ -126,7 +126,8 @@ def _pick(values, *parts):
 
 def event_fingerprint(state, kind, who, identity, moment=None):
     parts=[_u(state["id"]),kind,who or "-",_u(identity),_u(state["day"]),
-           _u(state.get("source","vanilla"))]
+           _u(state.get("source","vanilla")),_u(state["place"])]
+    if __import__("dg_clock").enabled(state):parts.append(_u(__import__("dg_clock").absolute(state)))
     if moment is not None:
         parts.append(_u(moment))
     return hashlib.sha256(u"|".join(parts).encode("utf-8")).hexdigest()
@@ -136,8 +137,9 @@ def context(state, kind, who=None, identity=None, moment=None):
     import dg_rpg
     import dg_world
     source=state.get("source","vanilla")
-    time=state["slot"] if moment is None else moment
-    key=event_fingerprint(state,kind,who,identity or "",time)
+    time=state["slot"]
+    variation=time if moment is None else moment
+    key=event_fingerprint(state,kind,who,identity or "",variation)
     persona=PERSONA.get(who)
     # Shuffle motif/prop/twist choices independently. Keep the actual game
     # state in the brief, so each turn can develop previously established facts.
@@ -153,13 +155,17 @@ def context(state, kind, who=None, identity=None, moment=None):
                      u"уважение к чужой инициативе"), key, "bkrr_motive")
         if who == "mi":
             hook=_pick(dg_bkrr.HOOKS, key, "bkrr_hook")
+    route_style=STYLE_PROFILES.get(source,STYLE_PROFILES['vanilla'])
+    if __import__('dg_camp').enabled(state):
+        route_style=route_style+(u'Выбранный источник задаёт речь и настроение, а не прежнюю биографию героя. Сначала приезд и обход. Членство и знакомство подтверждаются только camp_life.',)
     recent=state.get("journal",[])[-5:]
     recent_decisions=state.get("world",{}).get("decisions",[])[-6:]
     return {
+        "camp_life":__import__("dg_camp").report(state),
         "scene_id":key, "kind":kind, "hero":copy.deepcopy(state["hero"]),
         "day":state["day"],"slot":time,"time_of_day":dg_rpg.SLOTS[time],
         "place":dg_rpg.PLACE_NAMES[state["place"]],
-        "source":source,"route_style":STYLE_PROFILES.get(source,STYLE_PROFILES["vanilla"]),
+        "source":source,"route_style":route_style,
         "character_contracts":__import__("dg_characters").cards(state,[who] if who else [code for code,name in dg_rpg.at_place(state)]),
         "who":who,"persona":(persona[:2] if persona else None),
         "present_people": [(code, name) for code, name in dg_rpg.at_place(state)],
@@ -301,7 +307,7 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
                                   u'Не выполняй варианты ответа за игрока.') % who
     brief['creative_suggestions_are_not_facts'] = ['motivation','physical_detail','unexpected_twist','character_hook','scene_seed_untrusted']
     brief['dialogue_phase'] = kind if dialogue else None
-    length = u'90–160' if kind=='npc_topics' else u'120–220' if kind=='npc_choice' else u'160–280' if dialogue else u'300–650'
+    length = u'80–160' if _u(identity or '').startswith(('camp:','affection:')) else u'90–160' if kind=='npc_topics' else u'120–220' if kind=='npc_choice' else u'160–280' if dialogue else u'300–650'
     rules=(u"Ты пишешь ОРИГИНАЛЬНУЮ сцену визуальной новеллы «Бесконечное лето» "
            u"на русском, %s слов, с живыми репликами, действиями, паузами "
            u"и собственными голосами участников. В каждой сцене используй "
@@ -324,6 +330,7 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
               u'permitted_existing_options — ещё НЕ выбранные ответы, не поступки и не обещания героя. '
               u'Игровые вещи из item_codes не выдавай и не передавай без подтверждённого механического исхода. Обычный реквизит не является полученным игровым предметом. '
               u'Если dialogue_phase — npc_topics или npc_choice, разговор не двигает время и не меняет инвентарь, отношения, обязательства и местоположение; остановись перед ответом игрока. '
+              u'Если camp_life задан, учитывай фазу знакомства и реальные отметки обхода. Незнакомый NPC не обсуждает общие достижения или проекты героя. Нельзя считать героя участником музклуба только из-за профиля БКРР. '
               u'Не растягивай вступление случайной драмой, давним долгом или придуманным общим прошлым.')
     return rules,json.dumps(brief,ensure_ascii=False,sort_keys=True)
 

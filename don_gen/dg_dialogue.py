@@ -158,7 +158,28 @@ STANCE_STATS = {"support": "kindness", "curious": "curiosity", "bold": "skill"}
 STANCE_DELTA = {"support": 8, "curious": 6, "bold": 4}
 
 
+def _early(state,who):
+    camp=__import__('dg_camp')
+    return camp.enabled(state) and camp.stage(state,who) in ('stranger','acquaintance')
+
+
+def _early_scene(state,who,phase,stance=None):
+    import dg_rpg,dg_camp
+    stranger=who not in state['met'];name=dg_rpg.NPC_NAMES[who]
+    title=u'Личное знакомство' if stranger else u'Узнать друг друга'
+    if phase=='opening':
+        return {'speaker':who,'text':(name+u' замечает нового пионера. Вы ещё не были лично представлены друг другу. Сейчас уместно обменяться именами и парой слов о лагере.' if stranger else name+u' уже знает твоё имя. Можно спокойно узнать о привычках и интересах, не назначая совместных дел и не изображая давнюю дружбу.'),
+                'options':[('0',title)] if stranger else [('0',u'Интересы и привычки'),('1',u'Как освоиться в лагере')]}
+    if phase=='topic':
+        return {'speaker':who,'title':title,'text':u'Короткий разговор о знакомстве и обычной лагерной жизни. Никаких обещаний или предложений общего проекта ещё не было.',
+                'options':[(STANCES[0],u'Представиться и вежливо расспросить'),(STANCES[1],u'Спросить об интересах и выслушать'),(STANCES[2],u'Пошутить, уважая личные границы')]}
+    if stance not in STANCES:raise ValueError('Unknown dialogue stance')
+    return {'title':title,'topic':title,'text':(u'Вы обменялись именами и немного поговорили об интересах. ' if stranger else u'Вы узнали ещё немного об интересах и привычках друг друга. ')+u'Знакомство стало теплее, но это ещё не близость, совместный проект или обещание. Собеседник может продолжить разговор или вернуться к своим делам.',
+            'affinity':3 if stance!='curious' else 4,'stat':STANCE_STATS[stance]}
+
+
 def opening(state, who):
+    if _early(state,who):return _early_scene(state,who,"opening")
     if who not in CHARACTERS:
         raise ValueError("Unknown dialogue character")
     intro, topics = CHARACTERS[who]
@@ -184,6 +205,7 @@ def opening(state, who):
 
 
 def topic(state, who, topic_index):
+    if _early(state,who):return _early_scene(state,who,"topic")
     if who not in CHARACTERS:
         raise ValueError("Unknown character")
     index = int(topic_index)
@@ -203,6 +225,7 @@ def topic(state, who, topic_index):
 
 
 def outcome(state, who, topic_index, stance):
+    if _early(state,who):return _early_scene(state,who,"outcome",stance)
     if stance not in STANCES:
         raise ValueError("Unknown dialogue response")
     topics = CHARACTERS[who][1]
@@ -215,7 +238,8 @@ def outcome(state, who, topic_index, stance):
         "title": choice[0],
         "text": choice[4][idx] + u"\n\n" + (
             u"Вы продолжаете говорить ещё некоторое время. Теперь друг друга понять немного легче. "
-            u"В лагере столько дел, что приходится расходиться, но эта встреча наверняка запомнится."
+            + (u"Можно продолжить беседу или закончить её: решение остаётся за игроком." if __import__('dg_camp').enabled(state) else
+             u"В лагере столько дел, что приходится расходиться, но эта встреча наверняка запомнится.")
         ),
         "affinity": STANCE_DELTA[stance],
         "stat": STANCE_STATS[stance],
@@ -274,3 +298,4 @@ def route_conclusion(who, level, approach):
                 u"Вы расстаётесь без ссоры, однако теперь многое остаётся недосказанным. "
                 u"Возможно, подходящий момент для откровенности появится снова.")
     raise ValueError("Unknown route choice")
+

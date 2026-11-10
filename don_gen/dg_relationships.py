@@ -73,7 +73,7 @@ def act(state,who,action,key=None):
     if action=='apologize':
         if p['tension']==0 or p['last_apology']==state['day'] or state['energy']<6: raise ValueError(u'Сейчас такой разговор недоступен.')
         p['tension']=max(0,p['tension']-2);p['last_apology']=state['day'];state['energy']-=6
-        dg_rpg._tick(state)
+        dg_rpg._tick(state,10)
         return u'Ты извинился и выслушал собеседника. Напряжение уменьшилось, но нарушенные обещания не стали выполненными.'
     raise ValueError('Unknown relationship action')
 
