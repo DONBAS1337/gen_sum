@@ -70,7 +70,7 @@ class ReportedTracebacks(unittest.TestCase):
     def test_hybrid_plan_created_on_errors_not_undefined(self):
         self.assertIn("default dg_rpg_hybrid_plan = None",SCRIPT)
         self.assertIn('store.dg_rpg_hybrid_plan = plan',SCRIPT)
-        self.assertIn('if not isinstance(dg_rpg_hybrid_plan, dict):',SCRIPT)
+        self.assertIn('if not isinstance(dg_rpg_hybrid_plan, dg_rpg.DICT_TYPE):',SCRIPT)
         self.assertIn('except (ValueError, TypeError, UnicodeError) as exc:',SCRIPT)
 
     def test_native_dialogue_used_for_all_story_paths(self):

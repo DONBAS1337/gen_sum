@@ -75,12 +75,19 @@ def board(root):
 
 
 def background(root, place, slot):
-    if place != 'music':
-        return None
     import dg_resources
-    filename = ('ext_music_club_verandah_day.jpg', 'ext_music_club_verandah_day.jpg',
-                'ext_music_club_sunset.jpg', 'ext_music_club_verandah_night.jpg')[slot]
-    return dg_resources.asset(root, 'bkrr/images/bg/' + filename)
+    if place=='music':
+        name=('ext_music_club_verandah_day.jpg','ext_music_club_verandah_day.jpg','ext_music_club_sunset.jpg','ext_music_club_verandah_night.jpg')[slot]
+    else:
+        # Only exact neutral scenes; reject wrecked rooms, built-in people and plot props.
+        names={('clubs',2):'ext_clubs_sunset.jpg',('library',2):'ext_library_sunset.jpg',
+               ('warehouse',0):'ext_storage_day.png',('warehouse',1):'ext_storage_day.png',('warehouse',2):'ext_storage_sunset.jpg',('warehouse',3):'ext_storage_night.jpg',
+               ('pier',0):'ext_pier_day.jpg',('pier',1):'ext_pier_day.jpg',('pier',2):'ext_pier_sunset.jpg',
+               ('old_camp',0):'ext_old_building_day.jpg',('old_camp',1):'ext_old_building_day.jpg',
+               ('stage',2):'ext_stage_big_day_evening_empty.jpg',('stage',3):'ext_stage_big_day_night_close.jpg',
+               ('showers',0):'ext_bathhouse_day.png',('showers',1):'ext_bathhouse_day.png',('infirmary',2):'ext_aidpost_sunset.jpg'}
+        name=names.get((place,slot))
+    return dg_resources.asset(root,'bkrr/images/bg/'+name) if name else None
 
 
 def rain_background(root,place,slot):

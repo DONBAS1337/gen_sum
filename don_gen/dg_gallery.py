@@ -10,11 +10,11 @@ MOTIFS = {
     'guitar':(u'гитар',), 'piano':(u'пианино',u'фортепиано',u'роял'),
     'rehearsal':(u'репетиц',), 'book':(u'книг',u'читает',u'читать'),
     'campfire':(u'костр',u'костёр'), 'tea':(u'чай',u'чаепит'),
-    'dance':(u'танц',u'танец',u'дискотек'), 'rain':(u'дожд',), 'beach':(u'пляж',u'берег')}
+    'cards':(u'карточ',u'турнир'), 'concert':(u'концерт',u'выступлен'), 'walk':(u'прогул',u'гуля'), 'hug':(u'обня',u'объят'), 'dance':(u'танц',u'танец',u'дискотек'), 'rain':(u'дожд',), 'beach':(u'пляж',u'берег')}
 PLACES = {'guitar':('music','stage','outdoor_stage'), 'piano':('music',),
           'rehearsal':('music','stage','outdoor_stage'), 'book':('library',),
           'campfire':('campfire',), 'tea':('canteen','cabins','music'),
-          'dance':('square','clubhouse'), 'rain':('square','gate','forest','forest_path'), 'beach':('beach','lake')}
+          'cards':('canteen','clubs','clubhouse'),'concert':('stage','music','clubhouse'),'walk':('square','forest','forest_path','beach','lake','cabins'),'hug':('square','music','clubs','library','beach','lake','cabins','forest_path'),'dance':('square','clubhouse'), 'rain':('square','gate','forest','forest_path'), 'beach':('beach','lake')}
 EXCLUDE = ('nude','naked','sex','ero','bath','shower','underwear','pant','breast',
            'sleep','kiss','hentai','dead','blood','ghost','ending','catday')
 _cache = {}
@@ -61,7 +61,7 @@ def catalog(directories):
     return result
 
 
-def candidates(rows, plan):
+def candidates(rows, plan, allow_uncertain=False):
     if not plan or plan.get('kind') != 'cg' or not plan.get('who'):
         return []
     # Many labelled donor CGs also depict the original male protagonist.
@@ -76,7 +76,7 @@ def candidates(rows, plan):
     slot = plan.get('scene_slot')
     ranked = []
     for row in rows:
-        if plan.get('setting') and row.get('setting') != plan['setting']:
+        if plan.get('setting') and row.get('setting') != plan['setting'] and not (allow_uncertain and row.get('setting') is None):
             continue
         if plan['who'] not in row['actors'] or not set(row['actors']).issubset(present):
             continue
@@ -86,7 +86,7 @@ def candidates(rows, plan):
         if (row['night'] and slot != 3) or (row['sunset'] and slot != 2):
             continue
         # An unspecified daytime illustration is not substituted into a night scene.
-        if slot in (2,3) and not (row['night'] or row['sunset'] or row.get('time_slots')):
+        if slot in (2,3) and not (row['night'] or row['sunset'] or row.get('time_slots')) and not allow_uncertain:
             continue
         topics = [motif for motif in row['motifs']
                   if place in PLACES[motif] and any(stem in text for stem in MOTIFS[motif])]
@@ -95,7 +95,7 @@ def candidates(rows, plan):
         score = len(topics) * 10 + (2 if row['source'] == '451835368' and plan.get('profile') == 'bkrr:mi' else 0)
         ranked.append((score, row['path'], row))
     ranked.sort(key=lambda item:(-item[0],item[1]))
-    return [dict(item[2], confidence='metadata_match') for item in ranked[:3]]
+    return [dict(item[2], confidence='requires_visual_check' if allow_uncertain else 'metadata_match') for item in ranked[:3]]
 
 
 def match(rows, plan):

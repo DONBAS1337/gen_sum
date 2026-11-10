@@ -104,6 +104,11 @@ class Runtime(object):
         self.active_model = ""
         self.trace_error = None
         self.cancel = threading.Event()
+        self.task_epoch=0
+        self.task_local=threading.local()
+
+    def invalidate(self):
+        self.cancel.set();self.task_epoch+=1;self.busy=False;self.result=None;self.error=None
 
     def start(self, task, *args):
         if self.busy:
@@ -115,38 +120,36 @@ class Runtime(object):
         self.cancel = threading.Event()
 
         self.log.info("Task started: %s", getattr(task, "__name__", "unknown"))
-        thread = threading.Thread(target=self._run, args=(task,) + args)
+        thread = threading.Thread(target=self._run, args=(self.task_epoch,task) + args)
         thread.daemon = True
         thread.start()
+        return thread
 
-    def _run(self, task, *args):
+    def _run(self, epoch, task, *args):
+        self.task_local.epoch=epoch
+        result=None;error=None
         try:
-            self.result = task(*args)
+            result=task(*args)
         except dg_backend.ClientError as exc:
-            self.log.warning("API/client error: %s", text_type(exc)[:300])
-            self.error = text_type(exc)
+            self.log.warning("API/client error: %s",text_type(exc)[:300]);error=text_type(exc)
         except dg_core.StoryError as exc:
-            self.log.warning("Story validation error: %s", text_type(exc)[:300])
-            self.error = "Сценарий не прошёл проверку: " + text_type(exc)
-        except (IOError, OSError):
-            self.log.exception("Disk read/write error")
-            self.error = "Не удалось прочитать или сохранить данные мода. Проверьте доступ к папке сохранений и свободное место."
+            self.log.warning("Story validation error: %s",text_type(exc)[:300]);error=u"Сценарий не прошёл проверку: "+text_type(exc)
+        except (IOError,OSError):
+            self.log.exception("Disk read/write error");error=u"Не удалось прочитать или сохранить данные мода. Проверьте доступ к папке сохранений и свободное место."
         except Exception as exc:
             self.log.exception("DON-GEN task failed")
-            detail = ("%s: %s" % (exc.__class__.__name__, text_type(exc))).strip()
-            self.error = "Не удалось выполнить операцию. Попробуйте ещё раз."
-            if detail:
-                self.error += " (" + detail[:600] + ")"
+            error=u"Не удалось выполнить операцию: "+text_type(exc)[:600]
         finally:
-            self.log.info("Task finished: %s, error=%s", getattr(task, "__name__", "unknown"), bool(self.error))
-            self.busy = False
+            if epoch==self.task_epoch:
+                self.result=result;self.error=error;self.busy=False
+            self.log.info("Task finished: %s, stale=%s",getattr(task,'__name__','unknown'),epoch!=self.task_epoch)
 
     def login(self):
         self.status = "Завершите вход в ChatGPT в открывшемся браузере."
         self.client.login(on_status=self.set_status, cancel=self.cancel)
 
     def set_status(self, status):
-        self.status = status
+        if getattr(self.task_local,"epoch",self.task_epoch)==self.task_epoch:self.status = status
 
     def refresh_models(self):
         self.set_status("Получаем доступные вашему аккаунту модели…")
@@ -391,3 +394,4 @@ def _worker():
 
 if __name__ == "__main__":
     _worker()
+

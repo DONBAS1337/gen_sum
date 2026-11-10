@@ -20,7 +20,7 @@ def topic(text):
                  if any(word in text for word in TOPICS[key])), None)
 
 
-def record(state, key, action, result, scene, who=None, origin=None, spawn_thread=True, deferred=None):
+def record(state, key, action, result, scene, who=None, origin=None, spawn_thread=True, deferred=None, private=None):
     import dg_stage
     origin = origin or state
     memory = state.setdefault('story_memory', {'episodes':[], 'threads':[], 'people':{}})
@@ -32,7 +32,7 @@ def record(state, key, action, result, scene, who=None, origin=None, spawn_threa
     row = {'id':key, 'day':origin['day'], 'slot':origin['slot'], 'place':origin['place'],
            'who':who, 'intention':action[:500], 'confirmed_result':result[:700],
            'narrated_scene':dg_stage.readable(scene)[:900]}
-    private=bool(re.search(u'наедине|ш[её]потом|личн|не рассказывай|между нами',action.lower()))
+    private=private if private is not None else bool(re.search(u'наедине|ш[её]потом|личн|не рассказывай|между нами',action.lower()))
     row['witnesses']=([who] if who else []) if private else [code for code,name in __import__('dg_rpg').at_place(origin)]
     if who and who not in row['witnesses']:row['witnesses'].append(who)
     row['public']=False if private else (origin['place'] in ('stage','radio','square') and (state.get('world',{}).get('decisions')!=origin.get('world',{}).get('decisions') or any(record['stage']==4 and origin.get('projects',{}).get('records',{}).get(key,{}).get('stage',0)<4 for key,record in state.get('projects',{}).get('records',{}).items())))

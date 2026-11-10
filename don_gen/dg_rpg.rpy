@@ -35,6 +35,9 @@ init 1001 python:
     import dg_camp
     import dg_clock
     import dg_affection
+    if getattr(persistent,"dg_stock_policy_version",None)!=1:
+        persistent.dg_prefer_generated=False
+        persistent.dg_stock_policy_version=1
 
     def dg_rpg_audio_sync(who=None):
         if store.dg_rpg_audio_pauses is None:
@@ -92,13 +95,28 @@ init 1001 python:
 
     def dg_rpg_after_load():
         state=getattr(store,'dg_rpg_state',None)
-        if not isinstance(state,dict) or not state.get('id'): return
+        if not isinstance(state,dg_rpg.DICT_TYPE) or not state.get('id'): return
         try:
             node=renpy.game.script.lookup(renpy.game.context().current)
             own_script=node.filename.replace('\\','/').endswith('/dg_rpg.rpy')
         except (KeyError,AttributeError,TypeError):
             own_script=False
         if not (getattr(store,'dg_rpg_active',False) or own_script): return
+        if state.get('native_resume')==2 or (state.get('version')==1 and getattr(store,'dg_rpg_pending_turn',None) is None):
+            try:
+                import dg_checkpoints
+                if hasattr(dg_runtime.app,'invalidate'):dg_runtime.app.invalidate()
+                pending=getattr(store,'dg_rpg_pending_turn',None)
+                store.dg_rpg_state=dg_checkpoints.restore(dg_rpg_root(),state,pending)
+                store.dg_rpg_interrupt=False
+                if pending is not None or state.get('native_resume')!=2:
+                    store.dg_rpg_pending_turn=None
+                    store.dg_rpg_stage_active=False
+                    store.dg_rpg_scene_context=dg_stage.freeze(store.dg_rpg_state)
+                    renpy.jump('dg_rpg_resume_loaded')
+                return
+            except (IOError,OSError,ValueError,KeyError,TypeError):
+                logging.getLogger('don_gen').warning('Native snapshot could not be restored; falling back to committed JSON')
         # JSON is the committed session. A native save can retain obsolete
         # Character objects and return addresses from other loaded scripts.
         try:
@@ -257,6 +275,8 @@ init 1001 python:
     def dg_rpg_open(game_id):
         store.dg_rpg_action_draft = u""
         store.dg_rpg_state = dg_rpg.load(dg_rpg_root(), game_id)
+        store.dg_rpg_state["native_resume"]=2
+        dg_rpg.save(dg_rpg_root(),store.dg_rpg_state)
         logging.getLogger("don_gen").info("RPG opened id=%s", game_id)
         renpy.block_rollback()
 
@@ -280,6 +300,7 @@ init 1001 python:
                 store.dg_rpg_scene_context=dg_stage.freeze(state,store.dg_rpg_last_camp['who'])
             if store.dg_rpg_last_camp.get('private'):
                 store.dg_rpg_scene_context['present']=[store.dg_rpg_last_camp['who']]
+            pending['private']=store.dg_rpg_last_camp.get('private')
             pending.update(who=store.dg_rpg_last_camp['who'],intention=store.dg_rpg_last_camp['title'],result=store.dg_rpg_last_camp['text'])
         elif action == "affection":
             store.dg_rpg_last_affection=dg_affection.act(state,arg[0],arg[1])
@@ -342,8 +363,9 @@ init 1001 python:
             pending.update(who=None, intention=store.dg_rpg_last_incident['title'] + u" — " + arg,
                            result=store.dg_rpg_last_incident['text'])
         elif action == "hybrid":
+            hybrid_context=dg_hybrid.scene_context(state,arg[0])
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
-            if arg[0]["result"].get("kind")=="risk":store.dg_rpg_scene_context=dg_stage.freeze(state,arg[0]["result"].get("who"))
+            if arg[0]["result"].get("kind")=="risk" or arg[0]["result"].get("private"):store.dg_rpg_scene_context=hybrid_context
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
         elif action == "profile":
@@ -477,6 +499,7 @@ init 1001 python:
         # The background worker ONLY generates a text string. No save writes.
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state["id"])
         instructions, prompt = dg_hybrid.build_request(current, plan)
+        hybrid_context=dg_hybrid.scene_context(current,plan)
         current=dg_hybrid.scene_state(current,plan)
         context = json.loads(prompt)
         context['visual_scene_facts'] = dg_rpg_visual_brief(current)
@@ -504,12 +527,12 @@ init 1001 python:
             app.refresh_models()
         model = dg_backend.default_model(app.models, persistent.dg_model)
         app.set_status(u"Пишем сцену с зафиксированным игровым исходом…")
-        story = dg_consistency.generate(app.client,instructions, prompt,dg_stage.freeze(current,plan.get("who"))["present"], model=model,
+        story = dg_consistency.generate(app.client,instructions, prompt,hybrid_context["present"], model=model,
                                     effort=dg_backend.DEFAULT_EFFORT,
                                     fast_mode=persistent.dg_fast_mode)
         if not isinstance(story, basestring) or len(dg_stage.readable(story).strip()) < 45 or len(story) > dg_hybrid.MAX_SCENE:
             raise ValueError("AI returned invalid scene length")
-        dg_stage.validate_speakers(story, dg_stage.freeze(current, plan.get("who"))["present"])
+        dg_stage.validate_speakers(story, hybrid_context["present"])
         return story.strip()
 
     def dg_rpg_auto_generate(kind, who, identity, story, choices=None):
@@ -674,22 +697,23 @@ init 1001 python:
         # Prefer the actual location AND matching time of day when available.
         # Only exact 12 canonical locations block manual BG generation.
         visual = visual or dg_rpg_visual_state()
+        lighting_slot=dg_visual.light_slot(dg_rpg_state,visual)
         if dg_rpg_state.get("source") == dg_bkrr.SOURCE:
             root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
-            backdrop = dg_bkrr.background(root, place, visual["slot"])
+            backdrop = dg_bkrr.background(root, place, lighting_slot)
             if visual.get("weather",dg_world.weather(dg_rpg_state)[0])=="rain":
-                backdrop=dg_bkrr.rain_background(root,place,visual["slot"]) or backdrop
+                backdrop=dg_bkrr.rain_background(root,place,lighting_slot) or backdrop
             if backdrop:
                 return backdrop
         external = dg_resources.background(
             dg_runtime.app.catalog.get("source_assets", {}).get("7dl", {}),
-            place, visual["slot"])
+            place, lighting_slot)
         if place not in DG_RPG_EXACT_BG:
             return external
         base = DG_RPG_BG.get(place)
         if base is None and place.startswith("cabin_"):
             base = "bg ext_houses_day"
-        for name in dg_visual.background_names(base, visual["slot"]):
+        for name in dg_visual.background_names(base, lighting_slot):
             if name in dg_runtime.original_images:
                 return name
         return external
@@ -839,7 +863,7 @@ init 1001 python:
 
     def dg_rpg_cg_candidates(plan):
         import dg_gallery
-        return dg_gallery.candidates(dg_gallery.catalog(dg_gallery.roots(dg_rpg_workshop_root())), plan)
+        return dg_gallery.candidates(dg_gallery.catalog(dg_gallery.roots(dg_rpg_workshop_root())), plan,allow_uncertain=True)
 
     def dg_rpg_verify_cg(payload):
         current = dg_rpg.load(dg_rpg_root(), dg_rpg_state['id'])
@@ -867,8 +891,8 @@ init 1001 python:
             context = dg_rpg_scene_context or dg_stage.freeze(state, who)
             present = context.get('present', [])
             cast_ids = dg_stage.cast(dg_stage.parse(description, present, who), present, who)
-            plan.update(scene_place=context['place'], scene_slot=context['slot'],
-                        cast=cast_ids, profile=state['source'], hero_pronouns=state['hero']['pronouns'],
+            plan.update(scene_place=context['place'], scene_slot=dg_visual.light_slot(state,context),
+                        cast=cast_ids, profile=state['source'],hero_description=state['hero']['background'][:2000], hero_pronouns=state['hero']['pronouns'],
                         setting=dg_rpg_visual_brief(dict(state, place=context['place'], slot=context['slot']))['setting'])
             if plan['kind'] == 'cg' and plan.get('who') is None and cast_ids:
                 plan['who'] = cast_ids[0]
@@ -1653,7 +1677,7 @@ screen dg_rpg_hub(initial_show=True):
                 text dg_rpg.PLACE_NAMES[dg_rpg_state["place"]] style "dg_camp_narration" size 24 bold True
                 text (dg_rpg.camp_time(dg_rpg_state)+u" · силы %d" % dg_rpg_state["energy"]) style "dg_rpg_hint" size 20 color "#A9B9C6"
                 if __import__("dg_risk").injured(dg_rpg_state):
-                    text u"Ушиб · нагрузка ограничена" size 20 color "#ffd19c"
+                    text ((u"Перенапряжение" if dg_rpg_state.get("health",{}).get("kind")=="strain" else u"Ушиб")+u" · нагрузка ограничена") size 20 color "#ffd19c"
         hbox:
             xpos 1596 ypos 30 spacing 10
             for icon, caption, command in (("map",u"Карта · M","map"),("book",u"Дневник · J","journal"),("events",u"События","controls"),("settings",u"Настройки","settings")):
@@ -1812,6 +1836,7 @@ screen dg_rpg_controls(initial_tab="story"):
                     textbutton (u"Атмосфера: вкл" if persistent.dg_rpg_ambience else u"Атмосфера: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_ambience"),Function(dg_rpg_audio_sync)]
                     textbutton (u"Звуки действий: вкл" if persistent.dg_rpg_effects else u"Звуки действий: выкл") style "dg_note_button" action ToggleField(persistent,"dg_rpg_effects")
                     text u"Громкость музыки и звуков — в общих настройках игры. Новые смены: короткая реплика — 5 минут, обычное дело — 30 минут. У старых смен прежний режим можно сменить кнопкой ниже." style "dg_note_hint" xmaximum 1008
+                    textbutton u"Состояния до загрузки старых слотов" style "dg_note_button" action Return(("branches",None))
                     if not dg_camp.enabled(dg_rpg_state) and shift_open:
                         textbutton u"Включить распорядок и время в минутах для этой смены" style "dg_note_button" action Return(("camp_enable",None))
                     textbutton u"Настройки изображений" style "dg_note_button" action Return(("artist", None))
@@ -2739,7 +2764,7 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None, scene_identity=Non
         menu (screen="dg_rpg_choice"):
             "Продолжить историю":
                 return None
-            "Посмотреть или создать CG":
+            "Иллюстрация сцены":
                 return "cg"
     else:
         return None
@@ -2906,9 +2931,20 @@ label dg_rpg_dispatch:
     if dg_rpg_cmd == "camp_enable":
         $ dg_rpg_apply("camp_enable")
         jump dg_rpg_loop
+    if dg_rpg_cmd == "card_table":
+        jump dg_rpg_card_table_label
+    if dg_rpg_cmd == "branches":
+        call screen dg_rpg_branches
+        if _return:
+            $ dg_rpg_state=__import__('dg_checkpoints').recover(dg_rpg_root(),dg_rpg_state['id'],_return)
+            $ dg_rpg_pending_turn=None
+        jump dg_rpg_loop
     if dg_rpg_cmd == "camp_do":
         $ dg_rpg_apply("camp",dg_rpg_value)
-        call dg_rpg_vn_scene(dg_rpg_last_camp["text"],False,dg_rpg_last_camp["who"],"camp:"+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_arrival_action
+        call dg_rpg_vn_scene(dg_rpg_last_camp["text"],dg_rpg_value.startswith(("event:","clue:")),dg_rpg_last_camp["who"],"camp:"+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_arrival_action
+        if _return=="cg":
+            $ dg_cg_plan=dg_rpg_cg_for("personal",dg_rpg_last_camp['title'],dg_rpg_last_narrated_text,dg_rpg_last_camp['who'])
+            jump dg_rpg_cg_label
         jump dg_rpg_loop
     if dg_rpg_cmd == "camp":
         jump dg_rpg_camp_label
@@ -2921,7 +2957,10 @@ label dg_rpg_dispatch:
         jump dg_rpg_dispatch
     if dg_rpg_cmd == "affection":
         $ dg_rpg_apply("affection",dg_rpg_value)
-        call dg_rpg_vn_scene(dg_rpg_last_affection["text"],False,dg_rpg_last_affection["who"],"affection:"+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_dg_rpg_vn_scene_1
+        call dg_rpg_vn_scene(dg_rpg_last_affection["text"],dg_rpg_last_affection['consent'],dg_rpg_last_affection["who"],"affection:"+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_dg_rpg_vn_scene_1
+        if _return=="cg":
+            $ dg_cg_plan=dg_rpg_cg_for("personal",dg_rpg_last_affection['title'],dg_rpg_last_narrated_text,dg_rpg_last_affection['who'])
+            jump dg_rpg_cg_label
         jump dg_rpg_loop
     if dg_rpg_cmd == "end_conversation":
         $ dg_rpg_apply("end_conversation")
@@ -3207,7 +3246,7 @@ label dg_rpg_hybrid_entry:
     jump dg_rpg_hybrid_review_label
 
 label dg_rpg_hybrid_review_label:
-    if not isinstance(dg_rpg_hybrid_plan, dict):
+    if not isinstance(dg_rpg_hybrid_plan, dg_rpg.DICT_TYPE):
         jump dg_rpg_hybrid_entry
     call screen dg_rpg_hybrid_review(dg_rpg_hybrid_plan)
     if _return == "retry":
@@ -3598,10 +3637,12 @@ screen dg_rpg_context(who=None):
                 xsize 1080 ysize 510 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 14 xsize 1040
+                    if dg_rpg_state.get('card_table',{}).get('phase') in ('playing','round_done') and dg_rpg_state['card_table']['day']==dg_rpg_state['day']:
+                        textbutton u"Вернуться к карточному столу" style "dg_camp_action" action Return(("card_table",None))
                     textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid",None))
                     if who:
                         for row in dg_camp.cards(dg_rpg_state):
-                            if row['who']==who and row['ready'] and row['key'].startswith(('risk:','clue:')):
+                            if row['who']==who and row['ready'] and row['key'].startswith(('risk:','clue:','cards:')):
                                 textbutton row['title'] style "dg_camp_nav" action Return(("camp_do",row['key']))
                         textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc",who))
                         for kind,caption in dg_affection.options(dg_rpg_state,who):
@@ -3626,15 +3667,19 @@ screen dg_rpg_camp:
             spacing 18
             text (u"Лагерный день · "+dg_rpg.camp_time(dg_rpg_state)+u" · "+__import__("dg_schedule").WEEK[__import__("dg_schedule").weekday(dg_rpg_state)]) size 32 color "#65D8D0"
             text (dg_world.weather(dg_rpg_state)[1]+u" · "+(u"После травмы: отдых и спокойные занятия" if __import__("dg_risk").injured(dg_rpg_state) else u"Самочувствие: обычное")) size 22 color "#A9B9C6"
+            if __import__('dg_cards').public(dg_rpg_state):
+                textbutton u"Открыть карточный стол" style "dg_camp_action" action Return(("table",None))
+                $ card_view=__import__('dg_cards').public(dg_rpg_state)
+                text (u"Стол «21»: твои карты "+u", ".join(str(v) for v in card_view['hero'])+u" · соперник: "+u", ".join(str(v) for v in card_view['dealer'])) size 22 color "#65D8D0"
             text (u"Сегодня: "+(u" · ".join(row['title']+u" %02d:%02d"%(row['start']//60,row['start']%60) for row in __import__('dg_schedule').events(dg_rpg_state)) or u"свободный день по распорядку")) size 22 color "#F2E4BB" xmaximum 1630
-            text u"Реплика — 5 минут; переход — 5 минут; длительность дел указана ниже. Кружок выбираешь после обхода лагеря." size 24 color "#F2E4BB" xmaximum 1640
+            text (u"Реплика — 5 минут; переход — 5 минут; длительность дел указана ниже."+(u" Кружок выбираешь после обхода лагеря." if not dg_rpg_state["camp_life"]["club"] else u"")) size 24 color "#F2E4BB" xmaximum 1640
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 14
                 vscrollbar_unscrollable "hide"
                 vscrollbar_base_bar Solid("#243441")
                 vscrollbar_thumb Solid("#65D8D0a0")
-                xsize 1660 ysize 565 mousewheel True scrollbars "vertical"
+                xsize 1660 ysize 480 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 16 xsize 1620
                     for row in dg_camp.cards(dg_rpg_state):
@@ -3657,10 +3702,87 @@ label dg_rpg_camp_label:
     if not _return:
         jump dg_rpg_loop
     $ dg_camp_cmd,dg_camp_value=_return
+    if dg_camp_cmd=="table":
+        jump dg_rpg_card_table_label
     if dg_camp_cmd=="go":
         $ dg_rpg_apply("move",dg_camp_value)
         jump dg_rpg_camp_label
     if dg_camp_cmd=="do":
         $ dg_rpg_apply("camp",dg_camp_value)
-        call dg_rpg_vn_scene(dg_rpg_last_camp["text"],False,dg_rpg_last_camp["who"],"camp:"+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_camp_result
+        call dg_rpg_vn_scene(dg_rpg_last_camp["text"],dg_camp_value.startswith(("event:","clue:")),dg_rpg_last_camp["who"],"camp:"+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_camp_result
+        if _return=="cg":
+            $ dg_cg_plan=dg_rpg_cg_for("personal",dg_rpg_last_camp['title'],dg_rpg_last_narrated_text,dg_rpg_last_camp['who'])
+            jump dg_rpg_cg_label
     jump dg_rpg_loop
+
+
+screen dg_rpg_branches:
+    modal True
+    add dg_rpg_bg()
+    add Solid("#101923e8")
+    frame:
+        align (.5,.5) xsize 1400 ysize 800 padding (30,30) background Solid("#101923")
+        vbox:
+            spacing 18
+            text u"Состояния до восстановления слотов" size 32 color "#65D8D0"
+            text u"При загрузке старого слота прежнее состояние сохраняется здесь. Выбор возобновляет эту ветку целиком." size 24 color "#F2E4BB" xmaximum 1300
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_unscrollable "hide"
+                side_spacing 12
+                xsize 1320 ysize 580 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 12 xsize 1280
+                    if not __import__('dg_checkpoints').branches(dg_rpg_root(),dg_rpg_state['id']):
+                        text u"Архив появится после восстановления более раннего слота." size 24 color "#A9B9C6"
+                    for row in __import__('dg_checkpoints').branches(dg_rpg_root(),dg_rpg_state['id']):
+                        textbutton (u"День %d · "%row['day']+dg_rpg.SLOTS[row['slot']]+u" · %02d:%02d"%(row['minute']//60,row['minute']%60)+u" · "+dg_rpg.PLACE_NAMES[row['place']]+u" · силы %d"%row['energy']) style "dg_camp_nav" action Return(row['key'])
+            textbutton u"Назад" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
+
+
+screen dg_rpg_card_table:
+    modal True
+    $ table=__import__('dg_cards').public(dg_rpg_state)
+    add dg_rpg_bg()
+    add Solid("#101923a8")
+    frame:
+        align (.5,.5) xsize 1400 ysize 870 padding (36,28) background dg_camp_button_surface("#101923f5","#65D8D080")
+        vbox:
+            spacing 16
+            text (u"Турнир Электроника · раунд %d/3"%table['round']) size 34 color "#65D8D0"
+            text u"Цель — набрать ближе к 21 без перебора. Туз — 11 или 1. Соперник добирает до 17. Равные суммы — ничья; ставок нет." size 24 color "#F2E4BB" xmaximum 1300
+            text (u"Счёт раундов: %d : %d"%(table['wins'],table['losses'])) size 25 color "#A9B9C6"
+            for caption,values in ((u"Электроник",table['dealer']+([None] if table['phase']=='playing' else [])),(u"Твои карты · %d очков"%table['hero_total'],table['hero'])):
+                text caption size 26 color "#F2E4BB"
+                hbox:
+                    spacing 12
+                    for value in values:
+                        frame:
+                            xsize 82 ysize 118 padding (0,0)
+                            background dg_camp_button_surface("#f2e4bb" if value is not None else "#285e70","#65D8D0")
+                            text (u"Т" if value==11 else str(value) if value is not None else u"?") align (.5,.5) size 38 color ("#101923" if value is not None else "#F2E4BB")
+            if table['last_result']:
+                text (u"Последний раунд: "+table['last_result']) size 25 color "#F2E4BB"
+            hbox:
+                spacing 18
+                for row in __import__('dg_cards').cards(dg_rpg_state):
+                    if row['ready']:
+                        textbutton ({'cards:hit':u'Взять карту','cards:stand':u'Остановиться','cards:next':u'Следующий раунд','cards:leave':u'Закончить турнир'}.get(row['key'],row['title'])) style "dg_camp_action" action Return(row['key'])
+            textbutton u"Вернуться в лагерь, партию пока оставить" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
+
+label dg_rpg_card_table_label:
+    call screen dg_rpg_card_table
+    if not _return:
+        jump dg_rpg_loop
+    $ dg_card_key=_return
+    $ dg_rpg_apply('camp',dg_card_key)
+    if dg_rpg_state['card_table']['phase']=='finished':
+        call dg_rpg_vn_scene(dg_rpg_last_camp['text'],False,'el','cards:'+dg_hybrid.fingerprint(dg_rpg_state)) from dg_return_card_finale
+        jump dg_rpg_loop
+    $ dg_card_text=u'[narrator] '+dg_rpg_last_camp['text']+u' '+__import__('dg_cards').public(dg_rpg_state)['rules']
+    $ dg_rpg_state=dg_turn.finish(dg_rpg_root(),dg_rpg_pending_turn,dg_hybrid.fingerprint(dg_rpg_pending_turn['state']),dg_card_text)
+    $ dg_rpg_pending_turn=None
+    jump dg_rpg_card_table_label

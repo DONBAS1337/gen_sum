@@ -163,7 +163,12 @@ def _simulate(state, action, mode, who, interpretation=None):
             result=_neutral_talk(shadow,action,who)
             result['text']+=u' Сначала личное знакомство; предложенное общее дело ещё не выполнено.'
             return shadow,result
-        if proposal['intent']=='inventory':
+        if proposal['intent']=='camp':
+            row=next(r for r in __import__('dg_camp').cards(shadow) if r['ready'] and r['title']==proposal['canonical'] and r['who']==proposal['target'])
+            result=__import__('dg_camp').act(shadow,row['key']);result.update(status='done',kind='risk' if row['key'].startswith('risk:') else 'camp')
+        elif proposal['intent']=='risk':
+            result=__import__('dg_risk').resolve(shadow,__import__('dg_risk').intent(proposal['canonical']),proposal['canonical']);result.update(status='done',kind='risk')
+        elif proposal['intent']=='inventory':
             inventory=__import__('dg_inventory');row=inventory.parse(shadow,proposal['canonical'])
             result=inventory.act(shadow,*row[:3])
         elif proposal['intent']=='promise':
@@ -311,6 +316,13 @@ def scene_state(state,plan):
     return state
 
 
+def scene_context(state,plan):
+    result=plan.get('result',{});focus=result.get('who') if result.get('private') or result.get('kind')=='risk' else plan.get('who')
+    scene=dg_stage.freeze(scene_state(state,plan),focus)
+    if result.get('private'):scene['present']=[focus] if focus else []
+    return scene
+
+
 def locked_context(state, plan):
     if plan.get("status")!="ready":
         raise ValueError("Invalid plan")
@@ -332,11 +344,11 @@ def locked_context(state, plan):
     variation=dg_narrative.context(copy_state,"hybrid",focus,plan["action"][:180])
     return {
         "narrative_variation":variation,
-        "hero_profile":__import__("dg_hero").profile(copy_state),"health":__import__("dg_risk").report(confirmed_after),"calendar":__import__("dg_schedule").report(copy_state),"hero":copy_state["hero"],"world_profile":copy_state["source"],
+        "card_game":__import__("dg_cards").public(copy_state),"hero_profile":__import__("dg_hero").profile(copy_state),"health":__import__("dg_risk").report(confirmed_after),"calendar":__import__("dg_schedule").report(copy_state),"hero":copy_state["hero"],"world_profile":copy_state["source"],
         "day":copy_state["day"],"time_slot":dg_rpg.SLOTS[copy_state["slot"]],
         "place":dg_rpg.PLACE_NAMES[copy_state["place"]],
         "weather":dg_world.weather(copy_state)[1],
-        "present_people":[name for who,name in dg_rpg.at_place(copy_state)],
+        "present_people":[dg_rpg.NPC_NAMES[w] for w in scene_context(state,plan)["present"]],
         "speaker":dg_rpg.NPC_NAMES.get(focus,u"Повествователь"),
         "selected_dialogue_topic":selected_topic,
         "affinity":copy_state["affinity"].get(focus),
@@ -424,7 +436,7 @@ def commit(state, plan, scene_text=None):
         scene_text=scene_text.strip()
         if len(dg_stage.readable(scene_text).strip())<45 or len(scene_text)>MAX_SCENE:
             raise ValueError("Model scene too short or too long; game state unchanged")
-        dg_stage.validate_speakers(scene_text, dg_stage.freeze(scene_state(original,plan), plan["result"].get("who") if plan["result"].get("kind")=="risk" else plan.get("who"))["present"])
+        dg_stage.validate_speakers(scene_text, scene_context(original,plan)["present"])
     entry={"day":state["day"],"place":state["place"],"mode":plan["mode"],
            "action":plan["action"],"result":outcome["text"],
            "effects":plan["effects"],"scene":scene_text or u"",
@@ -442,7 +454,7 @@ def commit(state, plan, scene_text=None):
                      plan['action'], outcome['text'], scene_text or u'',
                      plan.get('who') or outcome.get('npc') or outcome.get('target') or outcome.get('who'), origin=original,
                      spawn_thread=not (plan['mode'] == 'world' and (original.get('world', {}).get('event') or {}).get('thread_id')),
-                     deferred=outcome.get('deferred', []))
+                     deferred=outcome.get('deferred', []),private=outcome.get('private'))
     dg_rpg._journal(after,u"Гибридная сцена: "+plan["action"][:110])
     # Assign only after ALL validation; caller persists via the usual atomic save.
     state.clear()

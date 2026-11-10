@@ -9,7 +9,7 @@ import dg_rpg
 
 def begin(state):
     return {"before": dg_hybrid.fingerprint(state),
-            "state": copy.deepcopy(state)}
+            "origin":copy.deepcopy(state), "state": copy.deepcopy(state)}
 
 
 def finish(root, pending, scene_key, text):
@@ -27,7 +27,7 @@ def finish(root, pending, scene_key, text):
     import dg_memory
     dg_memory.record(candidate, scene_key, pending.get('intention', u'Завершённый ход'),
                      pending.get('result', candidate.get('event', u'')), text.strip(),
-                     pending.get('who'), origin=current,
+                     pending.get('who'), origin=current, private=pending.get('private'),
                      spawn_thread=bool(pending.get('intention')) and not (current.get('world', {}).get('event') or {}).get('thread_id'))
     dg_rpg.save(root, candidate)
     return candidate

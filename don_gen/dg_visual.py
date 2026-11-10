@@ -143,3 +143,12 @@ def clothing(state,who,scene=None):
         venue='clubhouse' if __import__('dg_world').weather(state)[0]=='rain' else 'square'
         if state['place']==venue:return 'dress'
     return 'pioneer'
+
+
+def light_slot(state,scene=None):
+    if scene is not None:
+        state=dict(state,**scene)
+        if 'camp_life' in state:
+            state['camp_life']=dict(state['camp_life'],minute=scene.get('minute') if scene.get('minute') is not None else state['camp_life']['minute'])
+    if 'camp_life' in state and __import__('dg_schedule').disco(state) and state['place']=='square':return 3
+    return state['slot']

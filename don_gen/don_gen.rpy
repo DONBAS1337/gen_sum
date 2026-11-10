@@ -177,6 +177,10 @@ init 1000 python:
         source_pose = dg_sprite_layer_map(source_map, distance, who).get(pose) or {}
         if token in source_pose:
             return source_pose[token]
+        # 7DL Shurik uses a complete base + same-pose uniform, not body/pioneer.
+        if who=='sh' and source_pose.get('uniform'):
+            if token=='body':return source_pose.get('nude')
+            if token=='pioneer':return source_pose['uniform']
 
         vanilla_pose = dg_sprite_layer_map(dg_runtime.original_sprite_layers, distance, who).get(pose) or {}
         return vanilla_pose.get(token)
@@ -209,6 +213,7 @@ init 1000 python:
 
         tag, emotion, clothes = parts[0], parts[1], parts[2]
         accessory = parts[3] if len(parts) == 4 else None
+        if parts[0]=="sh" and clothes=="body":return None
         match = re.match(r"^([A-Za-z_]+?)([0-9]?)$", tag)
         if not match:
             dg_runtime.source_images[cache_key] = False
@@ -229,7 +234,7 @@ init 1000 python:
             emotion_path = dg_7dl_sprite_layer(distance, who, pose, emotion)
             accessory_path = dg_7dl_sprite_layer(distance, who, pose, accessory) if accessory else None
 
-            if not body or not emotion_path:
+            if not body or (not emotion_path and not (who=='sh' and emotion=='normal' and clothes=='pioneer' and cloth)):
                 continue
             if clothes != "body" and not cloth:
                 continue
@@ -239,7 +244,7 @@ init 1000 python:
             layers = [body]
             if cloth:
                 layers.append(cloth)
-            layers.append(emotion_path)
+            if emotion_path:layers.append(emotion_path)
             if accessory_path:
                 layers.append(accessory_path)
 

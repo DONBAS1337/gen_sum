@@ -48,18 +48,22 @@ class ContextEvents(unittest.TestCase):
         dg_inventory.act(s,'return','shirt','sh');self.assertEqual(dg_inventory.bag(s,'hero')['shirt'],1)
 
     def clue_fixture(self):
-        s=self.state();s['place']='clubs';dg_inventory.ensure(s);dg_inventory.act(s,'lend','shirt','sh')
+        s=self.state();s['place']='clubs'
+        s['id']=next('%032x'%i for i in range(1000) if dg_world._seed('%032x'%i,s['day'],1,'clue')%8==0)
+        dg_inventory.ensure(s)
+        __import__('dg_epistemic').record(s,'recognition','shirt:'+s['id'],{'marker':'контрастный шов','owner':'hero'},['hero','mi'])
+        dg_inventory.act(s,'lend','shirt','sh')
         s['npc_visits']['romance']=['mi'];s['slot']=2;s['camp_life']['minute']=1295
         dg_social.ensure(s)['bonds'][dg_social._pair('sh','un')]=70
-        loan=s['inventory_world']['loans'][0]
-        s['id']=next('%032x'%i for i in range(1000) if dg_world._seed('%032x'%i,s['day'],loan['id'],'clue')%8==0)
         return s
 
     def test_borrowed_garment_is_private_question_not_automatic_cheating(self):
         s=self.clue_fixture();before=copy.deepcopy(s['affinity']);dg_clues.refresh(s)
         self.assertIsNotNone(dg_clues.known(s,'mi'));self.assertIsNone(dg_clues.known(s,'sl'))
         self.assertEqual(before,s['affinity']);s['place']='showers'
-        dg_clues.act(s,'clue:explain');self.assertIsNone(s['clues']['active'])
+        dg_clues.act(s,'clue:listen');dg_clues.act(s,'clue:explain');dg_clues.act(s,'clue:record')
+        s['place']=dg_rpg.where_is(s,'sh');dg_clues.act(s,'clue:witness')
+        s['place']=dg_rpg.where_is(s,'mi');dg_clues.act(s,'clue:resolve');self.assertIsNone(s['clues']['active'])
         self.assertEqual(before,s['affinity']);dg_rpg.validate(s)
 
     def test_known_loan_or_no_romance_does_not_create_misunderstanding(self):
@@ -78,7 +82,9 @@ class ContextEvents(unittest.TestCase):
         s=self.state();s['npc_visits']['romance']=['mi','un'];dg_clues.ensure(s)['exclusive']=['mi']
         s['affection']={'history':[{'who':'un','day':5,'kind':'hand','consent':True,'witnesses':['mi','un']}],'cooldowns':{}}
         dg_clues.refresh(s);self.assertEqual(s['clues']['active']['cause'],'agreement')
-        s['place']=dg_rpg.where_is(s,'mi');dg_clues.act(s,'clue:explain')
+        s['place']=dg_rpg.where_is(s,'mi');dg_clues.act(s,'clue:listen');dg_clues.act(s,'clue:explain')
+        self.assertEqual(s['clues']['active']['phase'],'acknowledged')
+        s['day']+=1;dg_clues.refresh(s);s['place']=dg_rpg.where_is(s,'mi');dg_clues.act(s,'clue:repair')
         dg_clues.refresh(s);self.assertIsNone(s['clues']['active']);self.assertEqual(len(s['clues']['history']),1)
 
     def test_disco_clothes_respect_frozen_scene_and_fallback(self):

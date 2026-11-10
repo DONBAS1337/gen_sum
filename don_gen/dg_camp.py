@@ -50,6 +50,11 @@ def record_contact(state,who,trust=True):
             relation=__import__('dg_relationships').person(state,who)
             relation['trust']=min(20,relation['trust']+1)
     person['count']+=1
+    __import__('dg_inventory').ensure(state)
+    if state.get('projects',{}).get('inventory',{}).get('shirt',0)>0:
+        subject='shirt:'+state['id']
+        if not __import__('dg_epistemic').knows(state,who,'recognition',subject):
+            __import__('dg_epistemic').record(state,'recognition',subject,{'item':'shirt','marker':u'контрастный шов','owner':'hero'},[who,'hero'])
 
 def stage(state,who):
     if who not in state['met']:return 'stranger'
@@ -85,16 +90,18 @@ def refresh(state):
 def location(state,who):
     if not enabled(state):return None
     c=state['camp_life'];n=c['arrival'];minute=c['minute']
+    if who=='cs' and state['place']=='infirmary' and __import__('dg_risk').injured(state):return 'infirmary'
     if n==2 and who not in ('uv','cs'):return 'square'
     if n<4:
         place,actor,title,story=ARRIVAL[n]
         if who==actor:return state['housing']['cabin'] if place=='home' else place
     if 510<=minute<540 and who not in ('uv','cs'):return 'square'
     if (540<=minute<570 or 780<=minute<840 or 1140<=minute<1200) and who not in ('uv','cs'):return 'canteen'
-    risk_place=__import__('dg_risk').location(state,who)
-    if risk_place:return risk_place
+    if who=='el' and state.get('card_table',{}).get('phase') in ('playing','round_done') and state['card_table']['day']==state['day']:return 'canteen'
     scheduled=__import__('dg_schedule').location(state,who)
     if scheduled:return scheduled
+    risk_place=__import__('dg_risk').location(state,who)
+    if risk_place:return risk_place
     if 1290<=minute<1320 and who in ('mi','dv','un','sl','mz','el','sh'):return 'showers'
     companion=c.get('companion')
     if companion and companion['who']==who and __import__('dg_clock').absolute(state)<companion['until']:return state['place']
@@ -131,6 +138,7 @@ def cards(state):
     for key,row in sorted(c['jobs'].items()):
         if row['status']=='active':add('job:'+key,row['title'],row['place'],None,row['minutes'],u'Выполнить принятое поручение лично в нужном месте. Оборудование — лагерное; оно не становится вещью героя.')
     rows.extend(__import__('dg_schedule').cards(state))
+    rows.extend(__import__('dg_cards').cards(state))
     rows.extend(__import__('dg_risk').cards(state))
     rows.extend(__import__('dg_clues').cards(state))
     if __import__('dg_risk').injured(state) and not state['health']['treated']:
@@ -139,6 +147,8 @@ def cards(state):
         rows=[r for r in rows if not r['key'].startswith('job:') and r['key'] not in ('job_issue','event:outing','event:weekly_disco')]
     add('wait',u'Подождать 10 минут',state['place'],None,10,u'Герой ждёт, пока лагерный день идёт своим чередом.')
     if minute>=1260:add('sleep',u'Вернуться в домик и лечь спать',state['housing']['cabin'],None,1440-minute,u'Вечерние дела закончены. Герой ложится спать до утреннего подъёма.')
+    priority='cards:' if state.get('card_table',{}).get('phase') in ('playing','round_done') else 'clue:' if state.get('clues',{}).get('active') else None
+    if priority:rows.sort(key=lambda r:(not r['key'].startswith(priority),r['key'].endswith('listen') or ':exclusive:' in r['key']))
     return rows
 
 def hint(state):
@@ -163,6 +173,7 @@ def intro_here(state,who):
 
 def act(state,key):
     import dg_rpg,dg_clock
+    if key.startswith('cards:'):return __import__('dg_cards').act(state,key)
     if key.startswith('clue:'):return __import__('dg_clues').act(state,key)
     if key.startswith('risk:'):return __import__('dg_risk').resolve(state,key)
     matches=[row for row in cards(state) if row['key']==key and row['ready']]
@@ -206,7 +217,7 @@ def act(state,key):
 
 def report(state):
     if not enabled(state):return None
-    return {'calendar':__import__('dg_schedule').report(state),'health':__import__('dg_risk').report(state),'hero_profile':__import__('dg_hero').profile(state),'clock':__import__('dg_clock').text(state),'arrival_step':state['camp_life']['arrival'],
+    return {'card_game':__import__('dg_cards').public(state),'calendar':__import__('dg_schedule').report(state),'health':__import__('dg_risk').report(state),'hero_profile':__import__('dg_hero').profile(state),'clock':__import__('dg_clock').text(state),'arrival_step':state['camp_life']['arrival'],
             'tour_issued':state['camp_life']['tour_issued'],'tour_stamps':list(state['camp_life']['stamps']),
             'club':state['camp_life']['club'],'relationship_stages':dict((who,stage(state,who)) for who in state['met']),
             'next_activities':copy.deepcopy(cards(state)),
@@ -228,4 +239,5 @@ def validate(state):
         if not isinstance(row,dict) or not isinstance(row.get('title'),(str,type(u''))) or len(row['title'])>200 or row.get('status') not in ('active','done','missed') or row.get('place') not in dg_rpg.PLACE_NAMES or row.get('who') not in dg_rpg.NPC_NAMES or type(row.get('minutes')) is not int or not 1<=row['minutes']<=120 or type(row.get('deadline')) is not int:raise ValueError('Invalid camp job')
     __import__('dg_risk').validate(state)
     __import__('dg_clues').validate(state)
+    __import__('dg_cards').validate(state)
     dg_clock.validate(state)

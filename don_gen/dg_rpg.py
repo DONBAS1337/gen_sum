@@ -6,6 +6,8 @@ activities, relationships and route milestones never require text generation.
 """
 from __future__ import unicode_literals
 
+DICT_TYPE=dict
+
 import io
 import json
 import os
@@ -118,7 +120,7 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
     if source not in WORLD_PROFILES:
         raise ValueError("Unknown world profile")
     state = {
-        "version": 1, "id": uuid.uuid4().hex,
+        "native_resume":2, "version": 1, "id": uuid.uuid4().hex,
         "hero": {"name": name, "age": age, "background": background, "pronouns": pronouns},
         "source": source, "duration": days, "day": 1, "slot": 0,
         "place": "gate", "energy": 100, "stats": {"curiosity": 0, "kindness": 0, "skill": 0},
@@ -179,6 +181,8 @@ def validate(state):
     state.setdefault("route_events_done", [])
     state.setdefault("dialogue_history", [])
     state.setdefault("dialogue_counts", {})
+    __import__('dg_epistemic').validate(state)
+    __import__('dg_life').validate(state)
     __import__("dg_affection").validate(state)
     __import__("dg_camp").validate(state)
     __import__("dg_conversation").validate(state)
@@ -358,7 +362,7 @@ def _period_tick(state):
             dg_world.prepare(state)
             dg_social.prepare_incident(state)
     if not state.get('finished'):
-        changes = __import__('dg_agents').tick(state)
+        changes = [] if __import__('dg_clock').enabled(state) else __import__('dg_agents').tick(state)
         if changes:
             _journal(state, u'Пока идёт время, лагерь живёт своими делами. ' + changes[-1]['text'])
         dg_world.refresh_open_event(state)

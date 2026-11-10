@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco"))
+    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -253,9 +253,25 @@ init 1100 python:
                  ("map", "dg_rpg_map", {}), ("places", "dg_rpg_places", {}),
                  ("cabins", "dg_rpg_cabins", {"region":"cabins"}),
                  ("journal", "dg_rpg_journal", {}), ("picker", "dg_rpg_picker", {})]
-        if os.environ.get("DG_UI_SCREEN") in ('arrival','camp-day','context','calendar','injury','disco'):
+        if os.environ.get("DG_UI_SCREEN") in ('arrival','camp-day','context','calendar','injury','disco','card-table','investigation'):
             state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
-            if os.environ.get("DG_UI_SCREEN")=='camp-day':
+            if os.environ.get("DG_UI_SCREEN")=='card-table':
+                import dg_cards
+                state['day']=2;state['slot']=1;state['camp_life'].update(arrival=4,minute=960)
+                state['place']='canteen';dg_cards.act(state,'cards:start')
+                cases=[('card-table','dg_rpg_card_table',{})]
+            elif os.environ.get("DG_UI_SCREEN")=='investigation':
+                import dg_clues,dg_inventory,dg_epistemic,dg_world,dg_social,dg_visits
+                state['day']=5;state['camp_life'].update(arrival=4,minute=650,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+                state['id']=next('%032x'%i for i in range(1000) if dg_world._seed('%032x'%i,5,1,'clue')%8==0)
+                state['place']='clubs';dg_inventory.ensure(state)
+                dg_epistemic.record(state,'recognition','shirt:'+state['id'],{'marker':u'контрастный шов'},['hero','mi'])
+                dg_inventory.act(state,'lend','shirt','sh');dg_visits.ensure(state)['romance']=['mi']
+                state['slot']=2;state['camp_life']['minute']=1295;state['place']='showers'
+                dg_social.ensure(state)['bonds'][dg_social._pair('sh','un')]=70
+                dg_clues.refresh(state);dg_clues.act(state,'clue:listen');dg_clues.act(state,'clue:explain');dg_clues.act(state,'clue:record')
+                state['place']=dg_rpg.where_is(state,'mi');cases=[('investigation','dg_rpg_camp',{})]
+            elif os.environ.get("DG_UI_SCREEN")=='camp-day':
                 state['day']=2;state['camp_life'].update(arrival=4,minute=600,tour_issued=True)
                 state['met']=['sl','mt'];state['place']='library'
                 cases=[('camp-day','dg_rpg_camp',{})]
@@ -283,6 +299,36 @@ init 1100 python:
             else:cases=[('arrival','dg_rpg_hub',{})]
             store.dg_rpg_state=state
             store.dg_rpg_scene_context=dg_stage.freeze(state)
+        if os.environ.get("DG_UI_SCREEN")=='branches':
+            import dg_checkpoints,copy
+            state=dg_rpg.new_game(u'Тестовый герой',23,30,camp_life=True)
+            future=copy.deepcopy(state);future['energy']=25;dg_rpg.save(dg_rpg_root(),future)
+            store.dg_rpg_state=dg_checkpoints.restore(dg_rpg_root(),state)
+            cases=[('branches','dg_rpg_branches',{})]
+        if os.environ.get("DG_UI_SCREEN")=='native-save':
+            import copy,dg_checkpoints
+            if not os.path.abspath(config.savedir).lower().startswith(os.path.abspath(config.basedir).lower()):raise ValueError('Native test save must stay in isolated project')
+            renpy.game.context().rollback=True
+            renpy.game.context().goto_label('dg_rpg_loop')
+            renpy.game.log.begin(force=True)
+            state=dg_rpg.new_game(u'Тестовый герой',23,30,camp_life=True)
+            store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_active=True
+            store.dg_rpg_vn_line=u'Страница 2';store.dg_rpg_stage_active=True
+            store.dg_rpg_scene_context=dg_stage.freeze(state)
+            dg_rpg.save(dg_rpg_root(),state)
+            renpy.loadsave.save('dg-native-probe')
+            payload=renpy.loadsave.location.load('dg-native-probe')
+            roots,log=renpy.loadsave.loads(payload[0] if isinstance(payload,tuple) else payload)
+            names=[name for name in roots if 'dg_rpg_state' in name]
+            if not names:raise ValueError('Native slot did not contain RPG state: '+repr(roots.keys()))
+            embedded=roots[names[0]];future=copy.deepcopy(state);future['energy']=25;dg_rpg.save(dg_rpg_root(),future)
+            store.dg_rpg_state=embedded
+            store.dg_rpg_after_load()
+            if store.dg_rpg_state['energy']!=100 or dg_rpg.load(dg_rpg_root(),state['id'])['energy']!=100:raise ValueError('Native checkpoint overwritten by future JSON')
+            if store.dg_rpg_vn_line!=u'Страница 2' or not store.dg_rpg_stage_active:raise ValueError('Native dialogue position discarded')
+            if len(dg_checkpoints.branches(dg_rpg_root(),state['id']))!=1:raise ValueError('Displaced future not archived')
+            print('NATIVE_SAVE_OK embedded=True exact_state=True dialogue_page_preserved=True future_archived=True')
+            cases=[]
         if os.environ.get("DG_UI_SCREEN")=='flow':
             import dg_narrative
             api=dg_rpg_say_character.func_globals['renpy']
@@ -343,6 +389,28 @@ init 1100 python:
                 if saved['camp_life']['arrival']!=1 or saved['met']!=['sl'] or counts['hub']!=1 or counts['say']<3 or store.dg_rpg_pending_turn is not None:
                     raise ValueError('Automatic arrival failed: '+repr(counts))
                 print('SCRIPT_AUTO_ARRIVAL_OK Slavya=True committed=True returned_to_hub=True')
+                import dg_cards
+                state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+                state['day']=2;state['slot']=1;state['camp_life'].update(arrival=4,minute=960)
+                state['place']='canteen';dg_cards.act(state,'cards:start')
+                store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_interrupt=False
+                dg_rpg.save(dg_rpg_root(),state)
+                counts={'hub':0,'say':0,'menu':0,'cache':0,'cards':0}
+                prose=u'[narrator] Турнир завершён. Игроки убирают карты со стола и освобождают место. Результат трёх раундов уже записан; никто не меняет правила задним числом.\n[el] Спасибо за игру! Теперь можно немного отдохнуть и заняться другими делами.'
+                def card_screen(name,*args,**kwargs):
+                    if name=='dg_rpg_hub':
+                        counts['hub']+=1;api.jump('dg_ui_flow_done')
+                    if name!='dg_rpg_card_table':raise ValueError('Unexpected card screen: '+name)
+                    counts['cards']+=1
+                    if counts['cards']>12:raise ValueError('Card table loop did not terminate')
+                    keys=[r['key'] for r in dg_cards.cards(store.dg_rpg_state) if r['ready']]
+                    return 'cards:stand' if 'cards:stand' in keys else 'cards:next'
+                api.call_screen=card_screen
+                api.call_in_new_context('dg_rpg_card_table_label')
+                saved=dg_rpg.load(dg_rpg_root(),state['id'])
+                if saved['card_table']['phase']!='finished' or store.dg_rpg_pending_turn is not None or counts['hub']!=1:
+                    raise ValueError('Card table did not commit and return to hub: '+repr(counts))
+                print('SCRIPT_CARD_TABLE_OK three_rounds=True committed=True returned_to_hub=True')
             finally:
                 for name,value in original.items():setattr(api,name,value)
                 dg_narrative.read_scene=original_read
@@ -533,7 +601,7 @@ init 1100 python:
             def debug_viewport(d):
                 if isinstance(d, renpy.display.viewport.Viewport):
                     if d.width <= 0 or d.height <= 0:
-                        raise ValueError(filename + ": empty viewport")
+                        raise ValueError(filename + ": empty viewport "+repr((d.width,d.height)))
             displayable.visit_all(debug_viewport)
             if filename == "inventory":
                 import dg_inventory
@@ -642,3 +710,4 @@ screen dg_ui_cg:
 
 if __name__ == "__main__":
     main()
+

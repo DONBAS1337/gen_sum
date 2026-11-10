@@ -55,6 +55,7 @@ def ensure(state):
         held=projects['inventory'].get('shirt',0)+sum(b.get('shirt',0) for b in projects['npc_inventory'].values())
         if not held:projects['inventory']['shirt']=1
         state['inventory_world']['personal_gear']=True
+    __import__('dg_instances').ensure(state)
     return state['inventory_world']
 
 def bag(state,actor):
@@ -63,7 +64,8 @@ def bag(state,actor):
 
 def log(state,operation,item,origin,target):
     world=ensure(state);world['sequence']+=1
-    world['ledger'].append({'id':world['sequence'],'day':state['day'],'slot':state['slot'],'operation':operation,'item':item,'origin':origin,'target':target})
+    instance=__import__('dg_instances').moved(state,operation,item,origin,target)
+    world['ledger'].append({'instance':instance,'id':world['sequence'],'day':state['day'],'slot':state['slot'],'operation':operation,'item':item,'origin':origin,'target':target})
     world['ledger']=world['ledger'][-96:]
 
 def reservation_count(state,actor,item):
@@ -120,7 +122,9 @@ def act(state,operation,item,who=None):
         transfer(shadow,item,'hero',who)
         if operation=='lend':
             if len([r for r in world['loans'] if r['status']=='open'])>=12:raise ValueError(u'Слишком много открытых займов.')
-            world['loans'].append({'id':world['sequence'],'item':item,'owner':'hero','holder':who,'deadline':shadow['day']+3,'status':'open','witnesses':[p for p,n in dg_rpg.at_place(shadow)]})
+            world['loans'].append({'id':world['sequence'],'item':item,'owner':'hero','holder':who,'deadline':shadow['day']+3,'status':'open','witnesses':[p for p,n in dg_rpg.at_place(shadow)],'instance':world['ledger'][-1].get('instance')})
+            for instance in world.get('instances',[]):
+                if instance['id']==world['loans'][-1]['instance']:instance['owner']='hero'
             opened=[r for r in world['loans'] if r['status']=='open']
             closed=[r for r in world['loans'] if r['status']!='open'][-(48-len(opened)):]
             world['loans']=sorted(opened+closed,key=lambda r:r['id'])
@@ -162,6 +166,7 @@ def act(state,operation,item,who=None):
     return {'status':'done','title':u'Действие с предметом','text':text,'who':who,'kind':'inventory'}
 
 def validate(state):
+    __import__('dg_instances').validate(state)
     world=state.get('inventory_world')
     if world is None:return
     import dg_rpg

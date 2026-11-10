@@ -6,7 +6,7 @@ import re
 import dg_social
 import dg_world
 
-INTENTS = ('help','search','create','practice','mediate','rest','talk','observe','project','promise','inventory')
+INTENTS = ('help','search','create','practice','mediate','rest','talk','observe','project','promise','inventory','camp','risk')
 
 
 def needs_ai(text, mode):
@@ -19,7 +19,7 @@ def needs_ai(text, mode):
 
 def request(state, text, mode, who):
     import dg_rpg
-    context = {'player_text':text, 'mode':mode, 'focus':who,
+    context = {'physical_state':__import__('dg_risk').report(state),'hero_profile':__import__('dg_hero').profile(state),'camp_actions':[{'caption':r['title'],'target':r['who']} for r in __import__('dg_camp').cards(state) if r['ready']], 'player_text':text, 'mode':mode, 'focus':who,
                'place':state['place'], 'present':[code for code,name in dg_rpg.at_place(state)],
                'energy':state['energy'], 'weather':dg_world.weather(state)[0],
                'npc_goals':__import__('dg_agents').report(state),
@@ -27,10 +27,11 @@ def request(state, text, mode, who):
                'available_promises':__import__('dg_relationships').available_promises(state),
                'inventory_actions':[{'caption':row[3],'target':row[2]} for row in __import__('dg_inventory').actions(state)]}
     rules = (u'Разбери намерение игрока лагерной RPG. Верни только JSON: '
-             u'{"status":"ready|clarify","intent":"help|search|create|practice|mediate|rest|talk|observe|project|promise|inventory",'
+             u'{"status":"ready|clarify","intent":"help|search|create|practice|mediate|rest|talk|observe|project|promise|inventory|camp|risk",'
              u'"target":"код NPC или null","canonical":"один поступок на русском",'
              u'"deferred":["поступки на будущее"],"question":"уточнение или пустая строка",'
              u'"when":null или {"weather":"rain|heat|sun|breeze|cloud","not":false}}. '
+             u'camp — выбери точный caption из camp_actions и его target: это позволяет выполнить доступное лагерное дело или шаг личной истории. risk — один непосредственный физический поступок с крышей или деревом; canonical сохраняет реальное намерение и опьянение, без объявления успеха. Не подменяй риск обычной тренировкой. '
              u'Выдели ровно ОДИН немедленный поступок; остальные части сохрани в deferred, максимум три. '
              u'Обещать сделать — это talk/observe, а не уже выполнить обещание. '
              u'Условия проверь по контексту; не подменяй отрицание согласием. '
@@ -82,7 +83,12 @@ def validate(state, proposal):
         condition = dg_world.weather(state)[0] == when['weather']
         if condition == when['not']:
             raise ValueError(u'Условие выбранного шага сейчас не выполнено. Уточни другой вариант.')
-    if intent=='inventory':
+    if intent=='camp':
+        rows=[r for r in __import__('dg_camp').cards(state) if r['ready'] and r['title']==canonical and r['who']==target]
+        if not rows:raise ValueError(u'Такой шаг лагерного дела или личного разговора сейчас недоступен.')
+    elif intent=='risk':
+        if not __import__('dg_risk').intent(canonical):raise ValueError(u'Уточни конкретный физический поступок.')
+    elif intent=='inventory':
         row=__import__('dg_inventory').parse(state,canonical)
         if not row or row[2]!=target:raise ValueError(u'Недоступное действие с предметом.')
     elif intent=='promise':

@@ -16,6 +16,7 @@ def events(state):
     if day==0 and state['day']>1:
         add('science',u'Открытая мастерская Электроника','clubs','el',960,1080,40,u'Электроник показывает простой опыт. Герой может наблюдать и задавать вопросы; участие не завершает проект радио.')
     if day==3:
+        add('concert_prep',u'Подготовить место пятничного концерта','clubhouse' if rain else 'stage',None,900,960,25,u'Герой проверяет площадку и помогает подготовить место концерта. Это отдельное небольшое дело, не готовый музыкальный проект.')
         add('sports',u'Товарищеские спортивные игры','gym' if rain else 'sports','sl',960,1080,40,u'Командные игры без обязательной победы. При дожде занятие перенесено в зал.')
     if day==6:
         add('campfire',u'Отрядный вечер: истории и песни','clubhouse' if rain else 'campfire','mt',1200,1290,45,u'Отряд собирается на истории и песни у костра; при дожде — без огня в помещении. Рассказанный героем эпизод не становится историческим фактом без подтверждения.')
@@ -39,6 +40,7 @@ def cards(state):
     import dg_camp,dg_rpg
     minute=state['camp_life']['minute'];rows=[]
     for row in events(state):
+        if row['key']=='event:cards' and state.get('card_table',{}).get('phase') in ('playing','round_done') and state['card_table']['day']==state['day']:continue
         if not dg_camp._done(state,row['key']) and row['start']<=minute<row['end']:
             row=dict(row,ready=state['place']==row['place'] and (row['who'] is None or dg_rpg.where_is(state,row['who'])==row['place']))
             rows.append(row)
@@ -50,10 +52,14 @@ def resolve(state,row):
         score=dg_world._seed(state['id'],state['day'],'cards')%100
         win=score<(65 if dg_hero.has(state,'cards') else 35)
         row=dict(row,story=(u'Ты выиграл товарищеский карточный турнир Электроника.' if win else u'Ты сыграл в турнире Электроника, но не занял первое место.')+u' Денежных ставок и предметного приза не было.')
+    elif row['key']=='event:concert_prep':
+        __import__('dg_world').ensure(state)['preparations']['festival']=min(100,state['world']['preparations'].get('festival',0)+(5 if dg_hero.has(state,'technical') else 3))
     elif row['key']=='event:concert':
         member=state['camp_life']['club']=='music' and not __import__('dg_risk').injured(state)
         role=u'Ты сыграл небольшую подготовленную партию с кружком.' if member and dg_hero.has(state,'music') and state.get('activity_counts',{}).get('practice',0)>=2 else u'Ты помог за кулисами как участник кружка.' if member else u'Ты слушал выступление из зрительного зала.'
-        row=dict(row,story=row['story']+u' '+role)
+        quality=state['world']['preparations'].get('festival',0)
+        details=(u' Подготовленное оборудование помогло провести программу без технической заминки.' if quality>=60 else u' Небольшая техническая заминка потребовала короткой паузы; программа всё же состоялась.')
+        row=dict(row,story=row['story']+u' '+role+details)
     return row
 
 def report(state):

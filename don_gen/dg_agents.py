@@ -67,14 +67,17 @@ def tick(state):
     if state.get('finished'):
         return []
     system = ensure(state)
-    moment = (state['day']-1)*4+state['slot']
+    modern=__import__('dg_clock').enabled(state)
+    moment = __import__('dg_clock').absolute(state)//30 if modern else (state['day']-1)*4+state['slot']
+    if modern and system.get('clock')!='minutes':system.update(clock='minutes',last_turn=None)
     if system['last_turn'] == moment:
         return []
     previous = copy.deepcopy(system['history'][-1:])
     system['last_turn'] = moment
     people = sorted(who for who in system['people'] if (who == 'uv') == (state['slot'] == 3))
     for who, person in system['people'].items():
-        if state['slot'] == 0:
+        if state['slot'] == 0 and (not modern or person.get('rest_day')!=state['day']):
+            person['rest_day']=state['day']
             person['energy'] = min(100,person['energy']+40)
         if state['slot'] == 3 and who != 'uv':
             person['active'] = False
@@ -90,6 +93,9 @@ def tick(state):
         if goal['status'] in ('completed','abandoned'):
             person['cycle'] += 1
             person['goal'] = goal = _new_goal(state,who,person['cycle'])
+        if modern:
+            if person.get('work_day')!=state['day']:person.update(work_day=state['day'],work_steps=0)
+            if person['work_steps']>=3:continue
         person['active'] = True
         if state['day'] > goal['deadline']:
             goal['status'] = 'abandoned'
@@ -106,6 +112,7 @@ def tick(state):
             person['active'] = False
             _log(state,who,u'Отдыхает перед продолжением своего дела.', 'rest')
             continue
+        if modern:person['work_steps']+=1
         person['energy'] -= 12
         obstacle = (_number(state,who,moment) % 5 == 0 and goal['progress'] < 2)
         if obstacle:
@@ -126,6 +133,7 @@ def tick(state):
 
 
 def location(state, who):
+    if __import__("dg_clock").enabled(state):return __import__("dg_life").location(state,who)
     if __import__("dg_camp").in_intro(state):return None
     person = state.get('npc_agendas',{}).get('people',{}).get(who)
     if not person or not person.get('active') or person['goal']['status'] not in ('working','blocked'):

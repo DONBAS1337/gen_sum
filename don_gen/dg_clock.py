@@ -19,11 +19,15 @@ def advance(state,minutes):
     if type(minutes) is not int or not 0<=minutes<=1440: raise ValueError('Invalid action duration')
     while minutes and not state['finished']:
         current=minute(state);boundary=BOUNDARIES[state['slot']]
-        spend=min(minutes,boundary-current)
+        spend=min(minutes,boundary-current,5-current%5)
         state['camp_life']['minute']=current+spend;minutes-=spend
         if current+spend==boundary:
             dg_rpg._period_tick(state)
             state['camp_life']['minute']=420 if state['slot']==0 else BOUNDARIES[state['slot']-1]
+        if not state['finished']:
+            __import__('dg_life').tick(state)
+            __import__('dg_agents').tick(state)
+            __import__('dg_camp').refresh(state)
     __import__('dg_camp').refresh(state)
 
 def validate(state):
