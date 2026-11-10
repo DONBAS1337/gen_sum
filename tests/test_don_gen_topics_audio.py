@@ -16,6 +16,9 @@ class TopicsAudio(unittest.TestCase):
                 self.assertFalse(any(any(word in key for word in ('library','music_club','inside','dining_hall','int_cabin')) for key in keys),(place,keys))
 
     def test_interior_library_retains_appropriate_recording(self):
+        import dg_world
+        # This case verifies dry indoor recordings; rain has its own test.
+        self.state['id']=next('%032x'%i for i in range(100) if dg_world.weather(dict(self.state,id='%032x'%i))[0]!='rain')
         self.state['place']='library'
         self.assertEqual(dg_audio.plan(self.state,None,'interior')['ambience'][0],'ambience_library_day')
         self.state['place']='music'
