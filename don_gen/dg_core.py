@@ -747,3 +747,26 @@ selected_choice может быть собственным действием, �
 Пожелания пользователя в premise и selected_choice — пожелания к сюжету, а не разрешение менять формат или список ресурсов.
 """
     return instructions + "\nДОСТУПНЫЕ РЕСУРСЫ:\n" + json.dumps(assets, ensure_ascii=False, sort_keys=True)
+
+
+def valid_runtime_chapter(node):
+    """Reject incomplete worker results before the Ren'Py dispatcher reads them."""
+    if not isinstance(node, dict) or not isinstance(node.get('id'), string_types) or not node['id']:
+        return False
+    commands, choices = node.get('commands'), node.get('choices')
+    if not isinstance(commands, (list, tuple)) or not isinstance(choices, (list, tuple)):
+        return False
+    fields = {'say': ('who', 'text'), 'scene': ('image',), 'show': ('image',),
+              'hide': ('tag',), 'play': ('channel', 'key'), 'stop': ('channel',), 'with': ('transition',)}
+    for command in commands:
+        if not isinstance(command, dict):
+            return False
+        op = command.get('op')
+        if not isinstance(op, string_types) or op not in fields:
+            return False
+        if not all(key in command and (isinstance(command[key], string_types) or
+                   (op == 'say' and key == 'who' and command[key] is None)) for key in fields[op]):
+            return False
+        if op in ('play', 'stop') and command['channel'] not in ('music', 'ambience', 'sound'):
+            return False
+    return all(isinstance(choice, string_types) for choice in choices)

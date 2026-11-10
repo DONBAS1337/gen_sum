@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
     # Additional production screens are accepted below by extending the existing action.
-    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing','shift-trash','shift-confirm','shift-purge','shift-flow')
+    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing','shift-trash','shift-confirm','shift-purge','shift-flow','menu-audio')
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -70,9 +70,9 @@ def main():
     import textwrap
     init_source = textwrap.dedent(base.split('init 1000 python:\n', 1)[1].split('\ndefault persistent.', 1)[0])
     parsed = ast.parse(init_source)
-    helper_names = {"dg_sprite_layer_map", "dg_7dl_sprite_layer", "dg_7dl_sprite_poses", "dg_7dl_sprite_displayable"}
+    helper_names = {"dg_menu_audio", "dg_sprite_layer_map", "dg_7dl_sprite_layer", "dg_7dl_sprite_poses", "dg_7dl_sprite_displayable"}
     helpers = [ast.get_source_segment(init_source, node) for node in parsed.body if isinstance(node, ast.FunctionDef) and node.name in helper_names]
-    (game / "sprite_helpers.rpy").write_bytes(('init 1050 python:\n    import re\n' + textwrap.indent('\n\n'.join(helpers), '    ') + '\n').encode('utf-8'))
+    (game / "sprite_helpers.rpy").write_bytes(('init 1050 python:\n    import re\n    renpy.music.register_channel("ambience", mixer="sfx", loop=True)\n    renpy.music.register_channel("dg_theme", mixer="music", loop=True)\n    renpy.music.register_channel("dg_nature", mixer="sfx", loop=True)\n' + textwrap.indent('\n\n'.join(helpers), '    ') + '\n').encode('utf-8'))
     styles = base[base.index("style dg_text:"):base.index("screen dg_scene(")]
     (game / "styles.rpy").write_bytes(styles.encode("utf-8"))
     (game / "test.rpy").write_bytes(HARNESS.encode("utf-8"))
@@ -315,6 +315,20 @@ init 1100 python:
             dg_commitments.act(state,'invite:mi')
             store.dg_rpg_state=state;store.dg_rpg_scene_context=dg_stage.freeze(state)
             cases=[(os.environ['DG_UI_SCREEN'],'dg_rpg_deeds',{'selection':('objects' if os.environ['DG_UI_SCREEN']=='deeds' else 'commitments',None)})]
+        if os.environ.get("DG_UI_SCREEN")=='menu-audio':
+            # Both init blocks share store: dg_audio is the RPG module here.
+            assert not callable(dg_audio) and callable(dg_menu_audio)
+            store.DG_PLACES={'gate': ('unused', 'missing_ambience', 'day')}
+            store.DG_THEME='missing_theme'
+            store.music_list={}
+            store.dg_audio_pauses=None
+            persistent.dg_atmosphere_sound=True
+            Function(dg_menu_audio,'gate')()
+            assert dg_audio_pauses is not None
+            Function(dg_menu_audio,None)()
+            assert dg_audio_pauses is None
+            print('NATIVE_MENU_AUDIO_OK: RPG module and menu callbacks coexist; enter/leave restored channels')
+            cases=[('menu-audio','dg_rpg_hub',{})]
         if os.environ.get("DG_UI_SCREEN")=='crew':
             import dg_ensemble,dg_life,dg_clock
             state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)

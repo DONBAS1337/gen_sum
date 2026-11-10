@@ -95,7 +95,7 @@ init 1000 python:
     # The paper of the game's own in-game menu, without its twig frame.
     DG_PAPER = Fixed(Solid("#f3e6cf"), Frame(im.Crop("images/gui/ingame_menu/day/ingame_menu.png", (140, 120, 380, 210)), 24, 24))
 
-    def dg_audio(place=None):
+    def dg_menu_audio(place=None):
         # One theme for the whole menu, the ambience of the place; None leaves the mod's menus.
         if place is not None and dg_audio_pauses is None:
             store.dg_audio_pauses = [(ch, renpy.music.get_pause(channel=ch)) for ch in ("music", "ambience")]
@@ -360,8 +360,16 @@ init 1000 python:
             renpy.suspend_rollback(False)
 
     def dg_run(mode, task, *args):
-        dg_runtime.app.start(task, *args)
+        # Do not consume a result belonging to another request.
+        if dg_runtime.app.busy:
+            dg_wait_screen(mode)
+        if dg_runtime.app.start(task, *args) is None:
+            raise RuntimeError("The requested background task did not start")
         dg_wait_screen(mode)
+
+    def dg_valid_chapter(node):
+        import dg_core
+        return dg_core.valid_runtime_chapter(node)
 
     def dg_poll(mode):
         if not dg_runtime.app.busy:
@@ -557,9 +565,9 @@ style dg_ink_act_text is dg_ink:
 
 screen dg_scene(place):
     zorder -10
-    on "show" action Function(dg_audio, place)
-    on "replace" action Function(dg_audio, place)
-    on "hide" action Function(dg_audio, None)
+    on "show" action Function(dg_menu_audio, place)
+    on "replace" action Function(dg_menu_audio, place)
+    on "hide" action Function(dg_menu_audio, None)
     $ dg_image = DG_PLACES[place][0]
     add Solid("#0e0b0a")
     if renpy.has_image(dg_image) or renpy.loadable(dg_image):
@@ -964,7 +972,7 @@ screen dg_settings():
             textbutton u"Обновить список моделей" style "dg_ink_act" action Return("refresh")
             null height 22
             text u"ОФОРМЛЕНИЕ" style "dg_ink_label"
-            textbutton (u"Музыка и звуки меню · вкл" if persistent.dg_atmosphere_sound else u"Музыка и звуки меню · выкл") style "dg_ink_act" action [ToggleField(persistent, "dg_atmosphere_sound"), Function(dg_audio, dg_current)]
+            textbutton (u"Музыка и звуки меню · вкл" if persistent.dg_atmosphere_sound else u"Музыка и звуки меню · выкл") style "dg_ink_act" action [ToggleField(persistent, "dg_atmosphere_sound"), Function(dg_menu_audio, dg_current)]
             textbutton (u"Движение · вкл" if persistent.dg_motion else u"Движение · выкл") style "dg_ink_act" action ToggleField(persistent, "dg_motion")
     textbutton u"Готово" style "dg_primary" xpos 1060 ypos 830 action Return("back") at dg_enter(3)
     use dg_narrator(u"Новая модель начнёт работать со следующей главы. Уже написанные главы останутся прежними.")
@@ -1070,6 +1078,8 @@ label dg_fetch:
     $ dg_setup()
     $ dg_place("road")
     $ dg_run("chapter", dg_runtime.app.generate, dg_story_id, dg_parent_id, dg_choice_index, persistent.dg_model, dg_custom_choice, persistent.dg_fast_mode)
+    if not dg_runtime.app.error and not dg_valid_chapter(dg_runtime.app.result):
+        $ dg_runtime.app.error = u"Генерация не вернула корректную главу. Можно повторить попытку."
     if dg_runtime.app.error:
         call screen dg_error
         menu:
@@ -1091,6 +1101,10 @@ label dg_fetch:
 label dg_play:
     # Each native say/menu interaction has its own static Ren'Py statement.
     $ dg_setup()
+    if not dg_valid_chapter(dg_node):
+        $ dg_runtime.app.error = u"Глава отсутствует или повреждена. Вернись к списку историй и открой её снова."
+        call screen dg_error
+        jump dg_menu
     if dg_index < len(dg_node["commands"]):
         $ dg_command = dg_node["commands"][dg_index]
         if dg_command["op"] == "say":
@@ -1100,6 +1114,8 @@ label dg_play:
         $ dg_index += 1
         jump dg_play
 label dg_choose:
+    if not dg_valid_chapter(dg_node):
+        jump dg_menu
     if not dg_node["choices"]:
         menu:
             "История завершена."
