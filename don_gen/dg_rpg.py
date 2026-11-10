@@ -183,6 +183,8 @@ def validate(state):
     state.setdefault("dialogue_counts", {})
     __import__('dg_epistemic').validate(state)
     __import__('dg_life').validate(state)
+    __import__('dg_actions').validate(state)
+    __import__('dg_commitments').validate(state)
     __import__("dg_affection").validate(state)
     __import__("dg_camp").validate(state)
     __import__("dg_conversation").validate(state)

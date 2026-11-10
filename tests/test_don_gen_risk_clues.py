@@ -99,7 +99,8 @@ class ContextEvents(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             folder=Path(root)/'451835368/bkrr/images/cg';folder.mkdir(parents=True)
             (folder/'d7_mi_dance.png').write_bytes(b'image');dg_gallery._cache.clear()
-            rows=dg_gallery.catalog([str(Path(root)/'451835368')])
+            # Exercise the filename fallback independently of the installed-file manifest.
+            rows=dg_gallery.catalog([str(Path(root)/'451835368')],include_index=False)
             plan={'kind':'cg','who':'mi','place':'square','scene_slot':2,'setting':'exterior','description':'Мику и герой танцуют на дискотеке.'}
             self.assertEqual(len(dg_gallery.candidates(rows,plan)),1)
             self.assertEqual(dg_gallery.candidates(rows,dict(plan,scene_slot=0)),[])

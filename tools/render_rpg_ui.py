@@ -22,6 +22,8 @@ def main():
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
+    # Additional production screens are accepted below by extending the existing action.
+    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog')
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -39,6 +41,8 @@ def main():
     images.mkdir(parents=True, exist_ok=True)
     for source in root.glob("*.py"):
         shutil.copyfile(source, modules / source.name)
+    if (root / 'stock_catalog.json').is_file():
+        shutil.copyfile(root / 'stock_catalog.json', modules / 'stock_catalog.json')
     shutil.copyfile(root / "dg_rpg.rpy", game / "dg_rpg.rpy")
     for source in (root / "images").glob("*.png"):
         shutil.copyfile(source, images / source.name)
@@ -299,6 +303,18 @@ init 1100 python:
             else:cases=[('arrival','dg_rpg_hub',{})]
             store.dg_rpg_state=state
             store.dg_rpg_scene_context=dg_stage.freeze(state)
+        if os.environ.get("DG_UI_SCREEN") in ('deeds','commitments'):
+            import dg_commitments,dg_life,dg_clock
+            state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+            state['day']=5;state['place']='square';state['camp_life'].update(arrival=4,minute=650,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+            state['met']=['mi'];state['affinity']['mi']=50;state['camp_life']['contacts']['mi']={'days':[1,2,3],'count':8}
+            state['dialogue_clock']={'who':'mi','rounds':1}
+            dg_life.ensure(state)['people']['mi']={'place':'square','destination':'square','route':[],'next':dg_clock.absolute(state)+5}
+            dg_commitments.act(state,'invite:mi')
+            store.dg_rpg_state=state;store.dg_rpg_scene_context=dg_stage.freeze(state)
+            cases=[(os.environ['DG_UI_SCREEN'],'dg_rpg_deeds',{'selection':('objects' if os.environ['DG_UI_SCREEN']=='deeds' else 'commitments',None)})]
+        if os.environ.get("DG_UI_SCREEN")=='stock-catalog':
+            cases=[('stock-catalog','dg_rpg_stock_catalog',{})]
         if os.environ.get("DG_UI_SCREEN")=='branches':
             import dg_checkpoints,copy
             state=dg_rpg.new_game(u'Тестовый герой',23,30,camp_life=True)
@@ -411,6 +427,26 @@ init 1100 python:
                 if saved['card_table']['phase']!='finished' or store.dg_rpg_pending_turn is not None or counts['hub']!=1:
                     raise ValueError('Card table did not commit and return to hub: '+repr(counts))
                 print('SCRIPT_CARD_TABLE_OK three_rounds=True committed=True returned_to_hub=True')
+                state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+                state['day']=5;state['place']='square';state['camp_life'].update(arrival=4,minute=650,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+                store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_interrupt=False
+                dg_rpg.save(dg_rpg_root(),state)
+                counts={'hub':0,'say':0,'menu':0,'cache':0,'deeds':0}
+                prose=u'[narrator] Герой протёр скамейки на площади. Работа заняла двадцать минут. Уборка закончена; инструменты и вещи лагеря не стали личной собственностью героя. Теперь можно вернуться к остальным делам.'
+                def deed_screen(name,*args,**kwargs):
+                    if name=='dg_rpg_hub':
+                        counts['hub']+=1
+                        if counts['hub']==1:return ('deeds',('objects',None))
+                        api.jump('dg_ui_flow_done')
+                    if name=='dg_rpg_deeds':
+                        counts['deeds']+=1;return ('camp_do','object:clean:benches:square')
+                    raise ValueError('Unexpected deed screen: '+name)
+                api.call_screen=deed_screen
+                api.call_in_new_context('dg_rpg_loop')
+                saved=dg_rpg.load(dg_rpg_root(),state['id'])
+                if counts['hub']!=2 or counts['deeds']!=1 or saved['affordances']['done'].get('clean:benches:square')!=5 or store.dg_rpg_pending_turn is not None:
+                    raise ValueError('Object action did not commit through production dispatcher: '+repr(counts))
+                print('SCRIPT_OBJECT_ACTION_OK dispatcher=True narration=True committed=True returned_to_hub=True')
             finally:
                 for name,value in original.items():setattr(api,name,value)
                 dg_narrative.read_scene=original_read

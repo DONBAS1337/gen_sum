@@ -72,6 +72,7 @@ def refresh(state):
     if not enabled(state):return
     c=state['camp_life']
     __import__('dg_clues').refresh(state)
+    __import__('dg_commitments').tick(state)
     if c['minute']>=720 and c['arrival']==4:
         for name in ('wash','assembly'):
             if not _done(state,name) and not _done(state,'missed_'+name):
@@ -141,6 +142,8 @@ def cards(state):
     rows.extend(__import__('dg_cards').cards(state))
     rows.extend(__import__('dg_risk').cards(state))
     rows.extend(__import__('dg_clues').cards(state))
+    rows.extend(dict(r,key='object:'+r['key']) for r in __import__('dg_actions').available(state))
+    rows.extend(dict(r,key='commit:'+r['key']) for r in __import__('dg_commitments').options(state))
     if __import__('dg_risk').injured(state) and not state['health']['treated']:
         add('treatment',u'Повторный осмотр после травмы','infirmary','cs',20,u'Повторный осмотр ушиба в медпункте; выздоровление требует времени.')
     if __import__('dg_risk').injured(state):
@@ -173,6 +176,8 @@ def intro_here(state,who):
 
 def act(state,key):
     import dg_rpg,dg_clock
+    if key.startswith('object:'):return __import__('dg_actions').act(state,key.split(':',1)[1])
+    if key.startswith('commit:'):return __import__('dg_commitments').act(state,key.split(':',1)[1])
     if key.startswith('cards:'):return __import__('dg_cards').act(state,key)
     if key.startswith('clue:'):return __import__('dg_clues').act(state,key)
     if key.startswith('risk:'):return __import__('dg_risk').resolve(state,key)

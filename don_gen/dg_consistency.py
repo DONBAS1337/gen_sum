@@ -53,6 +53,8 @@ def narrator_context(context):
             elif key=='npc_agendas' and isinstance(child,dict):
                 child['people']=dict((k,v) for k,v in child.get('people',{}).items() if k in codes)
                 child['recent_actions']=[r for r in child.get('recent_actions',[]) if r.get('who') in codes]
+            elif key=='commitments' and isinstance(child,dict):
+                child['records']=[r for r in child.get('records',[]) if r.get('who') in codes]
             else:scrub(child)
     scrub(result)
     result['knowledge_rule']=u'Скрытый реестр передач и чужих карманов исключён. Пиши по знаниям персонажа и подтверждённому исходу. Услышанная версия — ещё не проверенное объяснение; стадию проверки не завершать раньше подтверждённого resolution.'

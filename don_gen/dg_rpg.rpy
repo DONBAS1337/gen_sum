@@ -1844,6 +1844,7 @@ screen dg_rpg_controls(initial_tab="story"):
                     if shift_open and bg_state["status"] == "missing":
                         textbutton u"Создать фон этого места" style "dg_note_button" action Return(("background", dg_rpg_state["place"]))
                     textbutton u"Галерея CG" style "dg_note_button" action Return(("cg_gallery", None))
+                    textbutton u"Каталог ресурсов БКРР / 7ДЛ" style "dg_note_button" action Return(("stock_catalog",None))
                     textbutton u"Диагностика" style "dg_note_button" action Return(("diag", None))
                     textbutton u"К выбору смены" style "dg_note_button" action Return(("exit",None))
                     text (u"Навык %d · Доброта %d · Любознательность %d" % (dg_rpg_state["stats"]["skill"], dg_rpg_state["stats"]["kindness"], dg_rpg_state["stats"]["curiosity"])) style "dg_note_hint"
@@ -2928,6 +2929,15 @@ label dg_rpg_loop:
         call screen dg_rpg_controls(dg_initial_tab)
         $ dg_rpg_cmd, dg_rpg_value = _return
 label dg_rpg_dispatch:
+    if dg_rpg_cmd == "stock_catalog":
+        call screen dg_rpg_stock_catalog
+        jump dg_rpg_loop
+    if dg_rpg_cmd == "deeds":
+        call screen dg_rpg_deeds(dg_rpg_value)
+        if not _return:
+            jump dg_rpg_loop
+        $ dg_rpg_cmd,dg_rpg_value=_return
+        jump dg_rpg_dispatch
     if dg_rpg_cmd == "camp_enable":
         $ dg_rpg_apply("camp_enable")
         jump dg_rpg_loop
@@ -3649,6 +3659,8 @@ screen dg_rpg_context(who=None):
                             textbutton caption style "dg_camp_nav" action Return(("affection",(who,kind)))
                         text u"Близкие жесты открываются по знакомству и доверию. Каждое предложение требует отдельного согласия; занятость и усталость могут привести к отказу." size 23 color "#A9B9C6" xmaximum 1000
                     if dg_camp.enabled(dg_rpg_state):
+                        textbutton u"Дела на месте" style "dg_camp_nav" action Return(("deeds",("objects",None)))
+                        textbutton u"Договорённости и встречи" style "dg_camp_nav" action Return(("deeds",("commitments",who)))
                         textbutton u"Распорядок, обходной лист и поручения" style "dg_camp_nav" action Return(("camp",None))
                     textbutton u"Предметы" style "dg_camp_nav" action Return(("inventory",None))
                     if dg_projects.available(dg_rpg_state):
@@ -3682,7 +3694,7 @@ screen dg_rpg_camp:
                 xsize 1660 ysize 480 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 16 xsize 1620
-                    for row in dg_camp.cards(dg_rpg_state):
+                    for row in [r for r in dg_camp.cards(dg_rpg_state) if not r['key'].startswith(('object:','commit:'))]:
                         frame:
                             background Solid("#1c3040e8") padding (20,16) xsize 1610
                             vbox:
@@ -3715,6 +3727,111 @@ label dg_rpg_camp_label:
             jump dg_rpg_cg_label
     jump dg_rpg_loop
 
+
+screen dg_rpg_deeds(selection):
+    modal True
+    default deeds_tab = selection[0]
+    $ deeds_who=selection[1]
+    add dg_rpg_bg()
+    add Solid("#101923c8")
+    frame:
+        background dg_camp_button_surface("#101923f5","#65D8D080")
+        align (.5,.5) xsize 1600 ysize 920 padding (30,26)
+        vbox:
+            spacing 16
+            text (u"Дела и договорённости · "+dg_rpg.PLACE_NAMES[dg_rpg_state['place']]) size 32 color "#65D8D0"
+            hbox:
+                spacing 18
+                textbutton u"Дела на месте" style "dg_camp_nav" action SetScreenVariable("deeds_tab","objects")
+                textbutton u"Договорённости" style "dg_camp_nav" action SetScreenVariable("deeds_tab","commitments")
+            text (u"Нужны время, силы и реальные инструменты. Недоступные действия объясняют причину." if deeds_tab=="objects" else u"Слова не выполняют работу. Встреча требует реального прихода; об отмене можно предупредить заранее.") size 23 color "#A9B9C6" xmaximum 1500
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                xsize 1530 ysize 630 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 14 xsize 1480
+                    if deeds_tab=="objects":
+                        $ deed_rows=__import__('dg_actions').available(dg_rpg_state,True)
+                        if not deed_rows:
+                            text u"Здесь пока нет размеченных объектов. Свой поступок можно описать с основного экрана." size 24 color "#F2E4BB" xmaximum 1420
+                        for row in deed_rows:
+                            frame:
+                                background Solid("#1c3040e8") padding (18,14) xsize 1460
+                                vbox:
+                                    spacing 10
+                                    text (row['title']+u" · %d мин · %d сил"%(row['minutes'],row['cost'])) size 25 color "#F2E4BB"
+                                    if row['ready']:
+                                        textbutton u"Выполнить" style "dg_camp_action" action Return(("camp_do","object:"+row['key']))
+                                    else:
+                                        text row['reason'] size 23 color "#A9B9C6" xmaximum 1400
+                    else:
+                        for record in [r for r in __import__('dg_commitments').report(dg_rpg_state)['records'][::-1] if deeds_who is None or r['who']==deeds_who]:
+                            frame:
+                                background Solid("#1c3040e8") padding (18,14) xsize 1460
+                                vbox:
+                                    spacing 8
+                                    text (record['title']+u" · "+dg_rpg.NPC_NAMES[record['who']]) size 25 color "#F2E4BB"
+                                    text (u"День %d · %02d:%02d · "%(record['due']//1440+1,(record['due']%1440)//60,record['due']%60)+dg_rpg.PLACE_NAMES[record['place']]+u" · "+{'open':u'договорились','performed':u'дело сделано, нужен личный отчёт','fulfilled':u'подтверждено','cancelled':u'отменено заранее','missed':u'не выполнено','excused':u'собеседник не смог прийти'}[record['status']]) size 22 color "#A9B9C6" xmaximum 1400
+                        $ commitment_rows=[r for r in __import__('dg_commitments').options(dg_rpg_state) if r['ready'] and (deeds_who is None or r['who']==deeds_who)]
+                        if not commitment_rows:
+                            text u"Подойди к знакомому персонажу, чтобы договориться о деле или встрече. Личные встречи открываются после развития дружбы." size 24 color "#F2E4BB" xmaximum 1420
+                        for row in commitment_rows:
+                            textbutton row['title'] style "dg_camp_nav" text_xmaximum 1380 action Return(("camp_do","commit:"+row['key']))
+            textbutton u"Назад" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
+
+screen dg_rpg_stock_catalog:
+    modal True
+    default stock_kind = 'cg'
+    default stock_source = None
+    default stock_page = 0
+    $ stock_data=__import__('dg_catalog').load()
+    $ stock_stats=__import__('dg_catalog').summary(stock_data)
+    $ stock_rows=[r for r in stock_data.get('assets',[]) if r['kind']==stock_kind and (stock_source is None or r['source']==stock_source)]
+    add dg_rpg_bg()
+    add Solid("#101923ed")
+    frame:
+        background Solid("#101923")
+        align (.5,.5) xsize 1660 ysize 960 padding (30,26)
+        vbox:
+            spacing 14
+            text u"Каталог ресурсов · БКРР / 7ДЛ" size 32 color "#65D8D0"
+            text (u"CG: %d · BG: %d · Спрайты: %d · Групп дубликатов: %d"%(stock_stats['counts']['cg'],stock_stats['counts']['bg'],stock_stats['counts']['sprite'],stock_stats['duplicate_groups'])) size 24 color "#F2E4BB"
+            text u"Это учёт файлов установленных источников. Метаданные и ссылки сценария не заменяют визуальную проверку CG. Изображения сюда не копируются." size 22 color "#A9B9C6" xmaximum 1550
+            hbox:
+                spacing 14
+                for code,title in [('cg','CG'),('bg','Фоны'),('sprite','Спрайты')]:
+                    textbutton title style "dg_camp_nav" action [SetScreenVariable('stock_kind',code),SetScreenVariable('stock_page',0)]
+                for code,title in [(None,'Все'),('451835368','БКРР'),('3266357374','7ДЛ')]:
+                    textbutton title style "dg_camp_nav" action [SetScreenVariable('stock_source',code),SetScreenVariable('stock_page',0)]
+            viewport:
+                viewport_xfill True
+                vscrollbar_xsize 14
+                vscrollbar_base_bar Solid("#243441")
+                vscrollbar_thumb Solid("#65D8D0a0")
+                vscrollbar_unscrollable "hide"
+                xsize 1580 ysize 570 mousewheel True scrollbars "vertical"
+                vbox:
+                    spacing 12 xsize 1520
+                    for row in stock_rows[stock_page*40:(stock_page+1)*40]:
+                        frame:
+                            background Solid("#1c3040e8") padding (16,12) xsize 1500
+                            vbox:
+                                spacing 6
+                                text (('БКРР' if row['source']=='451835368' else '7ДЛ')+u' · '+row['name']) size 24 color "#F2E4BB"
+                                text (u"Участники: "+(', '.join(dg_rpg.NPC_NAMES.get(w,w) for w in row['actors']) or u'не размечены')+u" · "+(u'файл не читается' if row.get('readable') is False else u'есть ограничения' if row.get('restrictions') else u'нужна проверка сцены')) size 21 color "#A9B9C6" xmaximum 1420
+                                text row['relative'] size 18 color "#A9B9C6" xmaximum 1420
+            hbox:
+                spacing 20
+                textbutton u"Предыдущие" style "dg_camp_nav" sensitive stock_page>0 action SetScreenVariable('stock_page',stock_page-1)
+                text (u"%d–%d из %d"%(min(stock_page*40+1,len(stock_rows)),min((stock_page+1)*40,len(stock_rows)),len(stock_rows))) size 23 color "#F2E4BB" yalign .5
+                textbutton u"Следующие" style "dg_camp_nav" sensitive (stock_page+1)*40<len(stock_rows) action SetScreenVariable('stock_page',stock_page+1)
+            textbutton u"Назад" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_branches:
     modal True

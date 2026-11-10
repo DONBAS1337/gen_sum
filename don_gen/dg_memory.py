@@ -76,7 +76,7 @@ def recall(state, who=None):
     for row in rows:
         if row['id'] not in [item['id'] for item in unique]:
             unique.append(copy.deepcopy(row))
-    return {'relevant_episodes':unique, 'people':copy.deepcopy(dict((code,person) for code,person in memory.get('people',{}).items() if who is None or code==who)),
+    return {'environment':__import__('dg_actions').report(state,who),'commitments':__import__('dg_commitments').report(state,who),'relevant_episodes':unique, 'people':copy.deepcopy(dict((code,person) for code,person in memory.get('people',{}).items() if who is None or code==who)),
             'milestones':copy.deepcopy([row for row in memory.get('milestones',[]) if known(row)][-8:]),
             'open_threads':copy.deepcopy([row for row in memory.get('threads', [])
                                          if row['status'] == 'open' and known(row)][-8:]),

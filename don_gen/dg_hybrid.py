@@ -142,6 +142,13 @@ def _simulate(state, action, mode, who, interpretation=None):
     dg_rpg.validate(shadow)
     if shadow.get("finished"):
         return shadow, {"status":"unknown","text":u"Смена завершена; действия недоступны."}
+    if interpretation is None and mode=='free':
+        object_action=__import__('dg_actions').parse(shadow,action)
+        if object_action:
+            try:return shadow,__import__('dg_actions').act(shadow,object_action['key'])
+            except ValueError as exc:return shadow,{'status':'unknown','text':text_type(exc)}
+        if __import__('dg_actions').recognizes(action):
+            return shadow,{'status':'unknown','text':u'Этот объект или способ действия здесь недоступен. Уточни один поступок; доступные варианты есть в «Дела на месте».'}
     risk=__import__('dg_risk').intent(action)
     if risk and __import__('dg_camp').enabled(shadow):
         try:
@@ -163,7 +170,15 @@ def _simulate(state, action, mode, who, interpretation=None):
             result=_neutral_talk(shadow,action,who)
             result['text']+=u' Сначала личное знакомство; предложенное общее дело ещё не выполнено.'
             return shadow,result
-        if proposal['intent']=='camp':
+        if proposal['intent']=='appointment':
+            slot=proposal['appointment'];result=__import__('dg_commitments').schedule(shadow,proposal['target'],slot['day'],slot['minute'],slot['place'])
+        elif proposal['intent']=='affordance':
+            row=next(r for r in __import__('dg_actions').available(shadow) if r['title']==proposal['canonical'])
+            result=__import__('dg_actions').act(shadow,row['key'])
+        elif proposal['intent']=='commitment':
+            row=next(r for r in __import__('dg_commitments').options(shadow) if r['ready'] and r['title']==proposal['canonical'] and r['who']==proposal['target'])
+            result=__import__('dg_commitments').act(shadow,row['key'])
+        elif proposal['intent']=='camp':
             row=next(r for r in __import__('dg_camp').cards(shadow) if r['ready'] and r['title']==proposal['canonical'] and r['who']==proposal['target'])
             result=__import__('dg_camp').act(shadow,row['key']);result.update(status='done',kind='risk' if row['key'].startswith('risk:') else 'camp')
         elif proposal['intent']=='risk':
@@ -214,6 +229,10 @@ def _simulate(state, action, mode, who, interpretation=None):
 
 def _effects(before, after):
     changes = []
+    old_contracts=dict((r['id'],r) for r in before.get('commitments',{}).get('records',[]))
+    for row in after.get('commitments',{}).get('records',[]):
+        if old_contracts.get(row['id'])!=row:
+            changes.append(u'Договорённость: '+row['title']+u' · '+{'open':u'принята','performed':u'выполнена, нужен личный отчёт','fulfilled':u'подтверждена','cancelled':u'отменена заранее','missed':u'пропущена','excused':u'сорвана занятостью NPC'}[row['status']])
     for key, title in (("energy",u"Энергия"),):
         old,new=before[key],after[key]
         if old != new:
