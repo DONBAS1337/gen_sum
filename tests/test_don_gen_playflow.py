@@ -17,6 +17,7 @@ class PlayflowRegressions(unittest.TestCase):
             dg_rpg.save(root,self.s);s=dg_rpg.load(root,self.s['id'])
             self.assertIn('mi',s['met']);self.assertEqual(s['dialogue_counts']['1:mi'],1)
             self.assertIn('Знакомы',dg_presentation.status(s,'mi'))
+            self.assertEqual(dg_rpg.relationship_label(s,'mi'),'Знакомы')
             new=dg_narrative.context(s,'npc_topics','mi','mi:0:topics:1')['scene_id']
             self.assertNotEqual(old,new)
             _,prompt=dg_hybrid.build_request(s,dg_hybrid.preview(s,'Что тебе нравится слушать?','npc','mi'))

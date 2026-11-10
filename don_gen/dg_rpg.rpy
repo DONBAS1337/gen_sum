@@ -1979,7 +1979,7 @@ screen dg_rpg_controls(initial_tab="story"):
                             vbox:
                                 spacing 12 xsize 572
                                 text person style "dg_note_heading" size 34
-                                text (u"%s · %d/100" % (dg_rpg.route_label(dg_rpg_state["affinity"][who]), dg_rpg_state["affinity"][who])) style "dg_note_hint"
+                                text (u"%s · %d/100" % (dg_rpg.relationship_label(dg_rpg_state,who), dg_rpg_state["affinity"][who])) style "dg_note_hint"
                                 textbutton u"Сказать своими словами" style "dg_note_main" action Return(("hybrid_npc", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 6)
                                 textbutton u"Выбрать тему разговора" style "dg_note_button" action Return(("talk", who)) sensitive (shift_open and dg_rpg_state["energy"] >= 8)
                                 textbutton u"Другие встречи" style "dg_note_button" selected dg_expanded_npc == who action SetScreenVariable("dg_expanded_npc", None if dg_expanded_npc == who else who)
@@ -2721,7 +2721,7 @@ screen dg_rpg_journal(initial_view="timeline"):
                     text u"ОТНОШЕНИЯ" style "dg_note_hint"
                     for who, name, morning, daytime, evening, night in dg_rpg.NPCS:
                         if who != "uv" or dg_rpg_state.get("mystery", {}).get("yulia_discovered", False):
-                            text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.route_label(dg_rpg_state["affinity"][who]))) style "dg_note_body" size 25
+                            text (u"%s: %d/100 · %s" % (name, dg_rpg_state["affinity"][who], dg_rpg.relationship_label(dg_rpg_state,who))) style "dg_note_body" size 25
                     null height 18
                     text u"ЗАДАНИЯ" style "dg_note_hint"
                     for key, title, progress, goal in dg_rpg.quest_progress(dg_rpg_state):

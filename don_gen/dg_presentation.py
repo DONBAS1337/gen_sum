@@ -45,7 +45,7 @@ def status(state,who):
     if who=='el' and __import__('dg_risk').encounter(state):return u'Просит помочь с антенной клубов'
     person=state.get('npc_agendas',{}).get('people',{}).get(who,{})
     relation=state.get('relationships',{}).get('people',{}).get(who,{})
-    text=(u'Знакомы' if who in state.get('met',[]) and state['affinity'][who]<10 else dg_rpg.route_label(state['affinity'][who]))
+    text=dg_rpg.relationship_label(state,who)
     if relation.get('tension',0)>=4:text+=u' · есть напряжение'
     elif person.get('goal',{}).get('status')=='blocked':text+=u' · нужна помощь'
     elif person.get('active'):text+=u' · занят своим делом'

@@ -261,6 +261,10 @@ def at_place(state, place=None):
     return [(who, NPC_NAMES[who]) for who in NPC_NAMES if where_is(state, who) == place]
 
 
+def relationship_label(state,who):
+    return u'Знакомы' if who in state.get('met',[]) and state['affinity'][who]<10 else route_label(state['affinity'][who])
+
+
 def route_label(score):
     if score >= 70:
         return u"Близость"
@@ -433,7 +437,7 @@ def activity(state, action, who=None):
         if first_meeting:
             state["met"].append(who)
         score = state["affinity"][who]
-        event = u"Вы поговорили с %s. Отношения: %s (%d/100)." % (NPC_NAMES[who], route_label(score), score)
+        event = u"Вы поговорили с %s. Отношения: %s (%d/100)." % (NPC_NAMES[who], relationship_label(state,who), score)
         if first_meeting:
             event = u"Первое знакомство! " + event
         for threshold in MILESTONES:
@@ -632,7 +636,7 @@ def summary_for_ai(state, who, intent):
         "slot": SLOTS[state["slot"]], "place": PLACE_NAMES[state["place"]],
         "speaker": NPC_NAMES[who], "affinity": state["affinity"][who],
         "present_people": at_place(state),
-        "relation": route_label(state["affinity"][who]), "player_action": intent,
+        "relation": relationship_label(state,who), "player_action": intent,
         "recent_journal": [],
         "recent_scenes": [row for row in state["ai_scenes"] if row["who"]==who][-3:],
         "recent_dialogue": [row for row in state["dialogue_history"] if row["who"]==who][-6:],
