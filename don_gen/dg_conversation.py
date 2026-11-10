@@ -11,7 +11,7 @@ def consume(state, who):
     count = rounds(state) + 1
     state['dialogue_clock'] = {'rounds':count, 'who':who}
     if __import__('dg_clock').enabled(state):
-        __import__('dg_clock').advance(state,5)
+        __import__('dg_clock').advance(state,__import__('dg_pacing').dialogue_minutes(state))
         return
     if count >= EXCHANGES:
         dg_rpg._tick(state)

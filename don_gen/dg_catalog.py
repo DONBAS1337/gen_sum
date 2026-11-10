@@ -144,10 +144,29 @@ def resolve(root,relative):
     if not os.path.normcase(path).startswith(os.path.normcase(root+os.sep)):return None
     return path if os.path.isfile(path) else None
 
-def cg_rows(directories,data=None):
+def visual(path=None):
+    path=path or os.path.join(os.path.dirname(__file__),'stock_visual.json')
+    try:
+        stamp=(os.path.getmtime(path),os.path.getsize(path))
+        if path in _CACHE and _CACHE[path][0]==stamp:return _CACHE[path][1]
+        with io.open(path,'r',encoding='utf-8') as f:data=json.load(f)
+        if data.get('version')!=1 or not isinstance(data.get('images'),dict):return {'images':{}}
+        _CACHE[path]=(stamp,data);return data
+    except (IOError,OSError,ValueError,AttributeError):return {'images':{}}
+
+def cg_rows(directories,data=None,visual_data=None):
     result=[];roots=dict((os.path.basename(os.path.realpath(r)),r) for r in directories)
+    reviewed=(visual_data if visual_data is not None else visual()).get('images',{})
     for row in (data or load()).get('assets',[]):
-        if row.get('kind')!='cg' or row.get('source') not in roots or row.get('restrictions') or row.get('alpha') or row.get('readable') is False or not row.get('actors') or not row.get('motifs'):continue
+        if row.get('kind')!='cg' or row.get('source') not in roots or row.get('restrictions') or row.get('alpha') or row.get('readable') is False:continue
+        row=dict(row);review=reviewed.get(row.get('sha256'))
+        if review is not None:
+            if review.get('review')!='ai_reviewed' or not review.get('safe') or not review.get('whole_scene') or review.get('confidence',0)<.8 or 'unknown' in review.get('actors',[]):continue
+            row.update(actors=[a for a in review['actors'] if a!='hero'],motifs=review.get('tags',[]),
+                       setting=None if review.get('setting')=='unknown' else review.get('setting'),
+                       time_slots={'day':[0,1],'sunset':[2],'night':[3]}.get(review.get('time')),
+                       visual_review='ai_reviewed',metadata_status='visual',clothes=review.get('clothes'))
+        if not row.get('actors') or not row.get('motifs'):continue
         path=resolve(roots[row['source']],row['relative'])
         if not path or os.path.getsize(path)!=row.get('bytes'):continue
         result.append(dict(row,path=path.replace('\\','/'),night=row.get('time_slots')==[3],sunset=row.get('time_slots')==[2]))
@@ -155,7 +174,10 @@ def cg_rows(directories,data=None):
 
 def summary(data=None):
     data=data or load();assets=data.get('assets',[])
+    reviewed=visual().get('images',{})
     return {'total':len(assets),'counts':dict((k,sum(r['kind']==k for r in assets)) for k in KINDS),
+            'cg_reviewed':sum(r['kind']=='cg' and r['sha256'] in reviewed for r in assets),
+            'cg_ai_reviewed':sum(r['kind']=='cg' and reviewed.get(r['sha256'],{}).get('review')=='ai_reviewed' for r in assets),
             'cg_referenced':sum(r['kind']=='cg' and bool(r.get('usage')) for r in assets),
             'cg_restricted':sum(r['kind']=='cg' and bool(r.get('restrictions')) for r in assets),
             'unreadable':sum(r.get('readable') is False for r in assets),

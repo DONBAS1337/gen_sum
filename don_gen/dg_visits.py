@@ -66,10 +66,10 @@ def tick(state,previous):
     if system['active']:
         if system['active']['status']!='departing': _log(state,system['active'],'expired')
         system['active']=None
-    if state.get('finished') or state['slot']==3 or now-system['last_offer']<2: return
+    if state.get('finished') or state['slot']==3 or now-system['last_offer']<__import__('dg_pacing').visit_gap(state): return
     candidates=[]
     for who in sorted(dg_rpg.NPC_NAMES):
-        if who=='uv' or busy(state,who) or now-system['cooldowns'].get(who,-10)<4: continue
+        if who=='uv' or busy(state,who) or now-system['cooldowns'].get(who,-10)<__import__('dg_pacing').visit_gap(state,True): continue
         relation=state.get('relationships',{}).get('people',{}).get(who,{})
         if not relation.get('invitations',True):continue
         start=previous.get(who) or dg_rpg.where_is(state,who)

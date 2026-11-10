@@ -39,11 +39,14 @@ def tick(state):
             p.update(place=imposed,destination=imposed,route=[],next=now+5);continue
         if state.get('dialogue_clock',{}).get('who')==who or (state.get('interaction',{}).get('who')==who and now<=state['interaction']['until']):
             p.update(place=state['place'],route=[]);continue
+        work=state.get('ensemble_work',{})
+        if who in work.get('people',[]) and now<=work['until']:
+            p.update(place=work['place'],destination=work['place'],route=[]);continue
         if state['slot']==3:
             p.update(place=dg_rpg.where_is(dict(state,npc_life={}),who),route=[]);continue
         appointment=next((r for r in s['plans'] if who in r['pair'] and r['start']-30<=minute<r['end'] and r['status'] in ('planned','meeting')),None)
         goal=state.get('npc_agendas',{}).get('people',{}).get(who,{})
-        target=__import__('dg_commitments').destination(state,who) or (appointment['place'] if appointment else goal.get('goal',{}).get('place'))
+        target=__import__('dg_commitments').destination(state,who) or __import__('dg_ensemble').destination(state,who) or (appointment['place'] if appointment else goal.get('goal',{}).get('place'))
         if dg_visits.busy(state,who) or dg_visits.location(state,who):
             p.update(place=current,route=[]);continue
         if target and target!=p['destination']:

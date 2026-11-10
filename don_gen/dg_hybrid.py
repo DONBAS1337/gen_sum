@@ -80,12 +80,11 @@ def _neutral_talk(state, action, who):
     # Explicit social intentions have bounded local consequences. Quoted
     # claims about achievements still cannot award items or finish a quest.
     folded = action.lower()
-    gain = 0
-    if not re.search(u"\\b(?:не|нет|никогда)\\b", folded):
-        if any(word in folded for word in (u"извини", u"спасибо", u"благодар", u"могу помочь", u"чем помочь")):
-            gain = 2
-        elif any(word in folded for word in (u"дура", u"ненавиж", u"заткни", u"тупая", u"идиот")):
-            gain = -3
+    personality=__import__('dg_personality')
+    kind=personality.classify(action)
+    reaction=personality.react(state,who,kind,'speech:%d:%s'%(state['day'],kind),action[:150]) if kind else {'gain':0}
+    gain=reaction['gain']
+    if 'camp_life' not in state and gain>0:gain=2
     previous = state["affinity"][who]
     state["affinity"][who] = dg_world.clamp(previous + gain)
     gain = state["affinity"][who] - previous
@@ -284,7 +283,7 @@ def _effects(before, after):
     rounds=__import__('dg_conversation').rounds(after)
     if rounds and rounds!=__import__('dg_conversation').rounds(before):
         if __import__('dg_clock').enabled(after):
-            changes.append(u"Беседа: обмен репликами (5 минут).")
+            changes.append(u"Беседа: обмен репликами (%d минут)."%__import__('dg_pacing').dialogue_minutes(after))
         else:changes.append(u"Беседа: %d/6 обменов репликами; период дня пока не изменился." % rounds)
     if __import__('dg_clock').enabled(after):
         clock=__import__('dg_clock');elapsed=clock.absolute(after)-clock.absolute(before)
@@ -377,7 +376,7 @@ def locked_context(state, plan):
         "last_world_decisions":copy_state["world"]["decisions"][-5:],
         "recent_journal":copy_state["journal"][-7:] if focus is None else [],
         "recent_dialogue":[row for row in copy_state["dialogue_history"] if focus is None or row["who"]==focus][-3:],
-        "character_contracts":__import__("dg_characters").cards(copy_state,[focus] if focus else [code for code,name in dg_rpg.at_place(copy_state)]),
+        "character_contracts":__import__("dg_characters").directions(copy_state,focus),
         "long_term_memory":__import__('dg_memory').recall(copy_state, focus),
         "npc_agendas":__import__('dg_agents').report(copy_state),
         "housing":__import__("dg_housing").report(copy_state),

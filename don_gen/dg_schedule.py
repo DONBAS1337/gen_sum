@@ -60,6 +60,9 @@ def resolve(state,row):
         quality=state['world']['preparations'].get('festival',0)
         details=(u' Подготовленное оборудование помогло провести программу без технической заминки.' if quality>=60 else u' Небольшая техническая заминка потребовала короткой паузы; программа всё же состоялась.')
         row=dict(row,story=row['story']+u' '+role+details)
+    if row['key'] in ('event:concert','event:outing'):
+        extra=__import__('dg_ensemble').calendar_result(state,'concert' if row['key']=='event:concert' else 'outing')
+        if extra:row=dict(row,story=row['story']+u' '+extra)
     return row
 
 def report(state):

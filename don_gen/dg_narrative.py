@@ -166,7 +166,7 @@ def context(state, kind, who=None, identity=None, moment=None):
         "day":state["day"],"slot":time,"time_of_day":dg_rpg.SLOTS[time],
         "place":dg_rpg.PLACE_NAMES[state["place"]],
         "source":source,"route_style":route_style,
-        "character_contracts":__import__("dg_characters").cards(state,[who] if who else [code for code,name in dg_rpg.at_place(state)]),
+        "character_contracts":__import__("dg_characters").directions(state,who),
         "who":who,"persona":(persona[:2] if persona else None),
         "present_people": [(code, name) for code, name in dg_rpg.at_place(state)],
         "relationship":state["affinity"].get(who,0) if who else None,

@@ -33,6 +33,8 @@ def act(state,who,kind):
     minute=dg_clock.minute(state)
     routine=dg_camp.enabled(state) and (510<=minute<570 or 780<=minute<840 or 1140<=minute<1200)
     consent=not routine and not dg_visits.busy(state,who) and goal.get('energy',80)>=20
+    willing,reason=__import__('dg_personality').consent(state,who,kind)
+    consent=consent and willing
     system=state.setdefault('affection',{'history':[],'cooldowns':{}})
     system['cooldowns'][who+':'+kind]=state['day']
     system['history'].append({'who':who,'kind':kind,'consent':consent,'day':state['day'],'witnesses':[p for p,n in dg_rpg.at_place(state)]})
@@ -43,7 +45,7 @@ def act(state,who,kind):
               'hand':u'Собеседник явно согласился взять тебя за руку. Это согласие только на данный жест.'}[kind]
         state['affinity'][who]=min(100,state['affinity'][who]+1)
         if kind=='walk' and dg_camp.enabled(state):state['camp_life']['companion']={'who':who,'until':dg_clock.absolute(state)+35}
-    else:text=u'Собеседник сейчас занят или устал и вежливо отказался. Прикосновения не произошло; отношения не оштрафованы.'
+    else:text=(reason or u'Собеседник сейчас занят или устал и вежливо отказался.')+u' Прикосновения не произошло; отношения не оштрафованы.'
     dg_rpg._tick(state,10 if kind=='dance' else 5)
     dg_rpg._journal(state,LABELS[kind]+u': '+text)
     return {'who':who,'title':LABELS[kind],'text':text,'consent':consent}

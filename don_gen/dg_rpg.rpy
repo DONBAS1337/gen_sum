@@ -1835,11 +1835,21 @@ screen dg_rpg_controls(initial_tab="story"):
                     textbutton (u"Музыка сцен: вкл" if persistent.dg_rpg_music else u"Музыка сцен: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_music"),Function(dg_rpg_audio_sync)]
                     textbutton (u"Атмосфера: вкл" if persistent.dg_rpg_ambience else u"Атмосфера: выкл") style "dg_note_button" action [ToggleField(persistent,"dg_rpg_ambience"),Function(dg_rpg_audio_sync)]
                     textbutton (u"Звуки действий: вкл" if persistent.dg_rpg_effects else u"Звуки действий: выкл") style "dg_note_button" action ToggleField(persistent,"dg_rpg_effects")
-                    text u"Громкость музыки и звуков — в общих настройках игры. Новые смены: короткая реплика — 5 минут, обычное дело — 30 минут. У старых смен прежний режим можно сменить кнопкой ниже." style "dg_note_hint" xmaximum 1008
+                    text (u"Громкость музыки и звуков — в общих настройках игры. Реплика — %d мин; обычное дело — 30 мин. У старых смен прежний режим можно сменить кнопкой ниже."%__import__('dg_pacing').dialogue_minutes(dg_rpg_state)) style "dg_note_hint" xmaximum 1008
                     textbutton u"Состояния до загрузки старых слотов" style "dg_note_button" action Return(("branches",None))
                     if not dg_camp.enabled(dg_rpg_state) and shift_open:
                         textbutton u"Включить распорядок и время в минутах для этой смены" style "dg_note_button" action Return(("camp_enable",None))
                     textbutton u"Настройки изображений" style "dg_note_button" action Return(("artist", None))
+                    text u"Длительность реплики" style "dg_note_hint"
+                    hbox:
+                        spacing 14
+                        for minutes in (3,5,8):
+                            textbutton (u"%d мин"%minutes) style "dg_note_button" xfill False xsize 190 selected __import__('dg_pacing').dialogue_minutes(dg_rpg_state)==minutes action Return(("pacing",('dialogue_minutes',minutes)))
+                    text u"Инициативные визиты NPC" style "dg_note_hint"
+                    hbox:
+                        spacing 14
+                        for value,title in [('rare',u'Реже'),('normal',u'Обычно'),('often',u'Чаще')]:
+                            textbutton title style "dg_note_button" xfill False xsize 190 selected dg_rpg_state.get('pacing',{}).get('visits','normal')==value action Return(("pacing",('visits',value)))
                     $ bg_state = dg_rpg_bg_status()
                     if shift_open and bg_state["status"] == "missing":
                         textbutton u"Создать фон этого места" style "dg_note_button" action Return(("background", dg_rpg_state["place"]))
@@ -2929,6 +2939,10 @@ label dg_rpg_loop:
         call screen dg_rpg_controls(dg_initial_tab)
         $ dg_rpg_cmd, dg_rpg_value = _return
 label dg_rpg_dispatch:
+    if dg_rpg_cmd == "pacing":
+        $ dg_rpg_state.setdefault('pacing',{})[dg_rpg_value[0]]=dg_rpg_value[1]
+        $ dg_rpg.save(dg_rpg_root(),dg_rpg_state)
+        jump dg_rpg_loop
     if dg_rpg_cmd == "stock_catalog":
         call screen dg_rpg_stock_catalog
         jump dg_rpg_loop
@@ -3661,6 +3675,7 @@ screen dg_rpg_context(who=None):
                     if dg_camp.enabled(dg_rpg_state):
                         textbutton u"Дела на месте" style "dg_camp_nav" action Return(("deeds",("objects",None)))
                         textbutton u"Договорённости и встречи" style "dg_camp_nav" action Return(("deeds",("commitments",who)))
+                        textbutton u"Совместные события с продолжением" style "dg_camp_nav" action Return(("deeds",("crew",None)))
                         textbutton u"Распорядок, обходной лист и поручения" style "dg_camp_nav" action Return(("camp",None))
                     textbutton u"Предметы" style "dg_camp_nav" action Return(("inventory",None))
                     if dg_projects.available(dg_rpg_state):
@@ -3684,7 +3699,7 @@ screen dg_rpg_camp:
                 $ card_view=__import__('dg_cards').public(dg_rpg_state)
                 text (u"Стол «21»: твои карты "+u", ".join(str(v) for v in card_view['hero'])+u" · соперник: "+u", ".join(str(v) for v in card_view['dealer'])) size 22 color "#65D8D0"
             text (u"Сегодня: "+(u" · ".join(row['title']+u" %02d:%02d"%(row['start']//60,row['start']%60) for row in __import__('dg_schedule').events(dg_rpg_state)) or u"свободный день по распорядку")) size 22 color "#F2E4BB" xmaximum 1630
-            text (u"Реплика — 5 минут; переход — 5 минут; длительность дел указана ниже."+(u" Кружок выбираешь после обхода лагеря." if not dg_rpg_state["camp_life"]["club"] else u"")) size 24 color "#F2E4BB" xmaximum 1640
+            text ((u"Реплика — %d мин; переход — 5 минут; длительность дел указана ниже."%__import__('dg_pacing').dialogue_minutes(dg_rpg_state))+(u" Кружок выбираешь после обхода лагеря." if not dg_rpg_state["camp_life"]["club"] else u"")) size 24 color "#F2E4BB" xmaximum 1640
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 14
@@ -3694,7 +3709,7 @@ screen dg_rpg_camp:
                 xsize 1660 ysize 480 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 16 xsize 1620
-                    for row in [r for r in dg_camp.cards(dg_rpg_state) if not r['key'].startswith(('object:','commit:'))]:
+                    for row in [r for r in dg_camp.cards(dg_rpg_state) if not r['key'].startswith(('object:','commit:','crew:'))]:
                         frame:
                             background Solid("#1c3040e8") padding (20,16) xsize 1610
                             vbox:
@@ -3744,7 +3759,8 @@ screen dg_rpg_deeds(selection):
                 spacing 18
                 textbutton u"Дела на месте" style "dg_camp_nav" action SetScreenVariable("deeds_tab","objects")
                 textbutton u"Договорённости" style "dg_camp_nav" action SetScreenVariable("deeds_tab","commitments")
-            text (u"Нужны время, силы и реальные инструменты. Недоступные действия объясняют причину." if deeds_tab=="objects" else u"Слова не выполняют работу. Встреча требует реального прихода; об отмене можно предупредить заранее.") size 23 color "#A9B9C6" xmaximum 1500
+                textbutton u"Общие события" style "dg_camp_nav" action SetScreenVariable("deeds_tab","crew")
+            text (u"Нужны время, силы и реальные инструменты. Недоступные действия объясняют причину." if deeds_tab=="objects" else u"Участники готовятся вечером в 18:15–18:55; их обязательные дела сохраняют приоритет." if deeds_tab=="crew" else u"Слова не выполняют работу. Встреча требует реального прихода; об отмене можно предупредить заранее.") size 23 color "#A9B9C6" xmaximum 1500
             viewport:
                 viewport_xfill True
                 vscrollbar_xsize 14
@@ -3768,6 +3784,24 @@ screen dg_rpg_deeds(selection):
                                         textbutton u"Выполнить" style "dg_camp_action" action Return(("camp_do","object:"+row['key']))
                                     else:
                                         text row['reason'] size 23 color "#A9B9C6" xmaximum 1400
+                    elif deeds_tab=="crew":
+                        for event in __import__('dg_ensemble').report(dg_rpg_state)['events'][::-1]:
+                            text (__import__('dg_ensemble').SPECS[event['kind']]['title']+u" · день %d"%(event['due']//1440+1)) size 25 color "#65D8D0"
+                            text ({'plan':u'Обсуждение плана','rehearsal':u'Репетиция','scout':u'Проверка маршрута','research':u'Подготовка материалов','technical':u'Проверка оборудования','ready':u'Подготовлено','feedback':u'Можно обсудить результат','closed':u'История завершена','missed':u'Подготовку не удалось закончить'}[event['phase']]) size 23 color "#A9B9C6"
+                        $ crew_rows=__import__('dg_ensemble').cards(dg_rpg_state)
+                        if not crew_rows:
+                            text u"Познакомься с координатором и закончи обход лагеря. Новое дело можно начать при наличии времени до конца смены." size 24 color "#F2E4BB" xmaximum 1400
+                        for row in crew_rows:
+                            frame:
+                                background Solid("#1c3040e8") padding (18,14) xsize 1460
+                                vbox:
+                                    spacing 10
+                                    text (row['title']+u" · "+dg_rpg.PLACE_NAMES[row['place']]) size 25 color "#F2E4BB" xmaximum 1400
+                                    if row['ready']:
+                                        textbutton u"Участвовать" style "dg_camp_action" action Return(("camp_do",row['key']))
+                                    else:
+                                        text (row.get('reason') or u'Подойди к координатору или дождись сбора участников.') size 23 color "#A9B9C6" xmaximum 1400
+                                        textbutton u"Открыть карту" style "dg_camp_nav" action Return(("map",None))
                     else:
                         for record in [r for r in __import__('dg_commitments').report(dg_rpg_state)['records'][::-1] if deeds_who is None or r['who']==deeds_who]:
                             frame:
@@ -3791,6 +3825,7 @@ screen dg_rpg_stock_catalog:
     default stock_page = 0
     $ stock_data=__import__('dg_catalog').load()
     $ stock_stats=__import__('dg_catalog').summary(stock_data)
+    $ stock_visual=__import__('dg_catalog').visual().get('images',{})
     $ stock_rows=[r for r in stock_data.get('assets',[]) if r['kind']==stock_kind and (stock_source is None or r['source']==stock_source)]
     add dg_rpg_bg()
     add Solid("#101923ed")
@@ -3801,6 +3836,7 @@ screen dg_rpg_stock_catalog:
             spacing 14
             text u"Каталог ресурсов · БКРР / 7ДЛ" size 32 color "#65D8D0"
             text (u"CG: %d · BG: %d · Спрайты: %d · Групп дубликатов: %d"%(stock_stats['counts']['cg'],stock_stats['counts']['bg'],stock_stats['counts']['sprite'],stock_stats['duplicate_groups'])) size 24 color "#F2E4BB"
+            text (u"CG обработано: %d · визуально классифицировано ИИ: %d · накладки и ограниченные файлы исключены"%(stock_stats['cg_reviewed'],stock_stats['cg_ai_reviewed'])) size 22 color "#65D8D0" xmaximum 1550
             text u"Это учёт файлов установленных источников. Метаданные и ссылки сценария не заменяют визуальную проверку CG. Изображения сюда не копируются." size 22 color "#A9B9C6" xmaximum 1550
             hbox:
                 spacing 14
@@ -3814,16 +3850,18 @@ screen dg_rpg_stock_catalog:
                 vscrollbar_base_bar Solid("#243441")
                 vscrollbar_thumb Solid("#65D8D0a0")
                 vscrollbar_unscrollable "hide"
-                xsize 1580 ysize 570 mousewheel True scrollbars "vertical"
+                xsize 1580 ysize 520 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 12 xsize 1520
                     for row in stock_rows[stock_page*40:(stock_page+1)*40]:
+                        $ stock_review=stock_visual.get(row['sha256'],{})
+                        $ stock_cast=stock_review.get('actors',row['actors'])
                         frame:
                             background Solid("#1c3040e8") padding (16,12) xsize 1500
                             vbox:
                                 spacing 6
                                 text (('БКРР' if row['source']=='451835368' else '7ДЛ')+u' · '+row['name']) size 24 color "#F2E4BB"
-                                text (u"Участники: "+(', '.join(dg_rpg.NPC_NAMES.get(w,w) for w in row['actors']) or u'не размечены')+u" · "+(u'файл не читается' if row.get('readable') is False else u'есть ограничения' if row.get('restrictions') else u'нужна проверка сцены')) size 21 color "#A9B9C6" xmaximum 1420
+                                text (u"Участники: "+(', '.join(dg_rpg.NPC_NAMES.get(w,{'hero':u'герой','unknown':u'неопознанный персонаж'}.get(w,w)) for w in stock_cast) or u'не определены')+u" · "+(u'файл не читается' if row.get('readable') is False else u'есть ограничения' if row.get('restrictions') else u'нужна проверка сцены')) size 21 color "#A9B9C6" xmaximum 1420
                                 text row['relative'] size 18 color "#A9B9C6" xmaximum 1420
             hbox:
                 spacing 20

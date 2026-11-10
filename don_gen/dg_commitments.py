@@ -87,6 +87,7 @@ def act(state,key):
         if verb=='cancel':r['status']='cancelled';text=u'Ты заранее предупредил об отмене. Обещание не считается выполненным; штрафа за честное предупреждение нет.'
         elif verb=='report':
             r['status']='fulfilled';p=_relation(state,who);p['trust']=min(20,p['trust']+2)
+            __import__('dg_personality').react(state,who,'promise_kept','contract:'+r['id'],r['title'])
             text=u'Ты рассказал о выполненной работе. Запись реального поступка подтверждена; собеседник теперь знает о результате.'
         elif verb=='attend':
             tick(state)
@@ -103,6 +104,7 @@ def performed(state,key,at,witnesses):
             r['evidence']={'key':key,'at':at,'witnesses':list(witnesses)};r['status']='performed'
             if r['who'] in witnesses:
                 r['status']='fulfilled';p=_relation(state,r['who']);p['trust']=min(20,p['trust']+2)
+                __import__('dg_personality').react(state,r['who'],'promise_kept','contract:'+r['id'],r['title'])
 
 def destination(state,who):
     now=_now(state)
@@ -131,6 +133,7 @@ def tick(state):
             r['status']='missed' if r['kind']=='task' or r['arrived'] else 'excused'
             if r['status']=='missed':
                 p=_relation(state,r['who']);p['trust']=max(-20,p['trust']-2);p['tension']=min(20,p['tension']+2)
+                __import__('dg_personality').react(state,r['who'],'promise_broken','contract:'+r['id'],r['title'])
             dg_rpg._journal(state,(u'Договорённость не выполнена: ' if r['status']=='missed' else u'Встреча сорвалась из-за занятости собеседника: ')+r['title'])
 
 def report(state,who=None):

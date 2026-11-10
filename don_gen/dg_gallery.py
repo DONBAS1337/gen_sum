@@ -105,6 +105,7 @@ def candidates(rows, plan, allow_uncertain=False):
             continue
         score = len(topics) * 10 + (2 if row['source'] == '451835368' and plan.get('profile') == 'bkrr:mi' else 0)
         if row.get('metadata_status')=='curated':score+=12
+        if row.get('metadata_status')=='visual':score+=14
         if row.get('setting')==plan.get('setting') and row.get('setting') is not None:score+=3
         if slot is not None and row.get('time_slots') and slot in row['time_slots']:score+=3
         ranked.append((score, row['path'], row))

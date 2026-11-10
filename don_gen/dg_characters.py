@@ -31,4 +31,18 @@ def cards(state,people):
           'preferences':copy.deepcopy(dg_relationships.PREFERENCES.get(who,{})),
           'boundaries':{'invitations':relation.get('invitations',True),'home_visits':relation.get('home_visits',True)},
           'rule':u'Характер устойчив, реакция зависит от отношений, усталости, границ и текущего дела. Близость не подтверждает роман; примеры исходника не являются личными воспоминаниями.'})
+        result[-1]['personality']=__import__('dg_personality').brief(state,who)
+        result[-1]['shared_events']=__import__('dg_ensemble').report(state,who)
+    return result
+
+def directions(state,focus=None):
+    """Give secondary actors their voice without leaking their private memories."""
+    present=[w for w,n in __import__('dg_rpg').at_place(state)]
+    order=([focus] if focus in VOICES else [])+[w for w in present if w!=focus]
+    result=[]
+    for who in order[:4]:
+        if who==focus:result.extend(cards(state,[who]));continue
+        result.append({'who':who,'voice':VOICES[who],'source_profile':state['source'],
+                       'priorities':copy.deepcopy(__import__('dg_personality').PROFILES[who]),
+                       'rule':u'Второстепенный участник в текущем кадре. Собственная манера речи и право возражать; его частная память сюда не передана. Не сочиняй ему секреты и не сообщай чужие мысли.'})
     return result

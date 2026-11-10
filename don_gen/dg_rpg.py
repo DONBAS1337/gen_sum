@@ -185,6 +185,9 @@ def validate(state):
     __import__('dg_life').validate(state)
     __import__('dg_actions').validate(state)
     __import__('dg_commitments').validate(state)
+    __import__('dg_personality').validate(state)
+    __import__('dg_ensemble').validate(state)
+    __import__('dg_pacing').validate(state)
     __import__("dg_affection").validate(state)
     __import__("dg_camp").validate(state)
     __import__("dg_conversation").validate(state)
@@ -478,7 +481,8 @@ def conversation(state, who, topic_index, stance):
     if first_meeting:
         state["met"].append(who)
     # Prevent farming unlimited reputation without stopping roleplay.
-    gain = outcome["affinity"] if repeated == 0 else 1
+    bonus=__import__('dg_personality').stance(state,who,stance)
+    gain = outcome["affinity"]+bonus if repeated == 0 else 1
     if first_meeting:
         gain += 2
     stat_gain = 2 if repeated == 0 else 0
@@ -656,22 +660,20 @@ def save(root, state):
                 raise
     path = _path(root, state["id"])
     temporary = path + "." + uuid.uuid4().hex + ".tmp"
+    backup_temporary=temporary+'.bak'
     try:
         with io.open(temporary, "w", encoding="utf-8") as stream:
             stream.write(json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2))
             stream.flush()
             os.fsync(stream.fileno())
         if os.path.isfile(path):
-            shutil.copy2(path, path + ".bak")
-        if os.name == "nt":
-            import ctypes
-            if not ctypes.windll.kernel32.MoveFileExW(text_type(temporary), text_type(path), 9):
-                raise OSError("Could not replace RPG save")
-        else:
-            os.rename(temporary, path)
+            __import__('dg_atomic').retry(lambda:shutil.copy2(path,backup_temporary))
+            __import__('dg_atomic').replace(backup_temporary,path+'.bak')
+        __import__('dg_atomic').replace(temporary,path)
     finally:
         if os.path.isfile(temporary):
             os.unlink(temporary)
+        if os.path.isfile(backup_temporary):os.unlink(backup_temporary)
     return state
 
 

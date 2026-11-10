@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
     # Additional production screens are accepted below by extending the existing action.
-    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog')
+    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing')
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -43,6 +43,8 @@ def main():
         shutil.copyfile(source, modules / source.name)
     if (root / 'stock_catalog.json').is_file():
         shutil.copyfile(root / 'stock_catalog.json', modules / 'stock_catalog.json')
+    if (root / 'stock_visual.json').is_file():
+        shutil.copyfile(root / 'stock_visual.json', modules / 'stock_visual.json')
     shutil.copyfile(root / "dg_rpg.rpy", game / "dg_rpg.rpy")
     for source in (root / "images").glob("*.png"):
         shutil.copyfile(source, images / source.name)
@@ -313,8 +315,23 @@ init 1100 python:
             dg_commitments.act(state,'invite:mi')
             store.dg_rpg_state=state;store.dg_rpg_scene_context=dg_stage.freeze(state)
             cases=[(os.environ['DG_UI_SCREEN'],'dg_rpg_deeds',{'selection':('objects' if os.environ['DG_UI_SCREEN']=='deeds' else 'commitments',None)})]
+        if os.environ.get("DG_UI_SCREEN")=='crew':
+            import dg_ensemble,dg_life,dg_clock
+            state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+            state['day']=3;state['place']='music';state['camp_life'].update(arrival=4,minute=650,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+            dg_rpg.validate(state)
+            if state['social'].get('incident'):state['social']['incident']['status']='resolved'
+            state['met']=['mi','dv','el']
+            for w in state['met']:dg_life.ensure(state)['people'][w]={'place':'music','destination':'music','route':[],'next':dg_clock.absolute(state)+5}
+            dg_ensemble.act(state,'crew:start:concert');dg_ensemble.act(state,'crew:1:plan:acoustic')
+            state['slot']=2;state['camp_life']['minute']=1095;state['place']='music'
+            for w in ('mi','dv'):dg_life.ensure(state)['people'][w].update(place='music',destination='music',route=[])
+            store.dg_rpg_state=state;store.dg_rpg_scene_context=dg_stage.freeze(state)
+            cases=[('crew','dg_rpg_deeds',{'selection':('crew',None)})]
         if os.environ.get("DG_UI_SCREEN")=='stock-catalog':
             cases=[('stock-catalog','dg_rpg_stock_catalog',{})]
+        if os.environ.get("DG_UI_SCREEN")=='pacing':
+            cases=[('pacing','dg_rpg_controls',{'initial_tab':'settings'})]
         if os.environ.get("DG_UI_SCREEN")=='branches':
             import dg_checkpoints,copy
             state=dg_rpg.new_game(u'Тестовый герой',23,30,camp_life=True)
@@ -447,6 +464,32 @@ init 1100 python:
                 if counts['hub']!=2 or counts['deeds']!=1 or saved['affordances']['done'].get('clean:benches:square')!=5 or store.dg_rpg_pending_turn is not None:
                     raise ValueError('Object action did not commit through production dispatcher: '+repr(counts))
                 print('SCRIPT_OBJECT_ACTION_OK dispatcher=True narration=True committed=True returned_to_hub=True')
+                import dg_ensemble,dg_life,dg_clock
+                state=dg_rpg.new_game(u'Тестовый герой',23,30,source='bkrr:mi',camp_life=True)
+                state['day']=3;state['place']='music';state['camp_life'].update(arrival=4,minute=650,tour_issued=True,stamps=[p for p,w in dg_camp.TOUR],club='music')
+                dg_rpg.validate(state)
+                if state['social'].get('incident'):state['social']['incident']['status']='resolved'
+                state['met']=['mi','dv','el']
+                for w in state['met']:dg_life.ensure(state)['people'][w]={'place':'music','destination':'music','route':[],'next':dg_clock.absolute(state)+5}
+                dg_ensemble.act(state,'crew:start:concert');dg_ensemble.act(state,'crew:1:plan:acoustic')
+                state['slot']=2;state['camp_life']['minute']=1095;state['place']='music'
+                for w in ('mi','dv'):dg_life.ensure(state)['people'][w].update(place='music',destination='music',route=[])
+                store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_interrupt=False
+                dg_rpg.save(dg_rpg_root(),state)
+                counts={'hub':0,'say':0,'menu':0,'cache':0}
+                prose=u'[narrator] Мику и Алиса вместе с героем закончили репетицию. Работа заняла двадцать минут. Номер подготовлен к будущему концерту; выступление ещё не состоялось. Вклад участников записан отдельно от планов.'
+                def crew_screen(name,*args,**kwargs):
+                    if name=='dg_rpg_hub':
+                        counts['hub']+=1
+                        if counts['hub']==1:return ('deeds',('crew',None))
+                        api.jump('dg_ui_flow_done')
+                    if name=='dg_rpg_deeds':return ('camp_do','crew:1:work')
+                    raise ValueError('Unexpected crew screen: '+name)
+                api.call_screen=crew_screen;api.call_in_new_context('dg_rpg_loop')
+                saved=dg_rpg.load(dg_rpg_root(),state['id'])
+                if saved['ensemble']['records'][0]['phase']!='ready' or counts['hub']!=2 or store.dg_rpg_pending_turn is not None:
+                    raise ValueError('Shared event dispatcher failed: '+repr(counts))
+                print('SCRIPT_SHARED_EVENT_OK dispatcher=True group_work=True committed=True returned_to_hub=True')
             finally:
                 for name,value in original.items():setattr(api,name,value)
                 dg_narrative.read_scene=original_read
@@ -639,6 +682,15 @@ init 1100 python:
                     if d.width <= 0 or d.height <= 0:
                         raise ValueError(filename + ": empty viewport "+repr((d.width,d.height)))
             displayable.visit_all(debug_viewport)
+            if filename=='pacing':
+                views=[]
+                displayable.visit_all(lambda d:views.append(d) if isinstance(d,renpy.display.viewport.Viewport) else None)
+                for viewport in views:
+                    viewport.yadjustment.change(min(viewport.yadjustment.range,700))
+                    renpy.display.render.invalidate(viewport)
+                renpy.display.render.invalidate(displayable)
+                scroll_render=renpy.display.render.render(displayable,1920,1080,.6,.6)
+                pygame.image.save(renpy.display.draw.render_to_texture(scroll_render,True),os.path.join(config.basedir,'pacing-scrolled.png'))
             if filename == "inventory":
                 import dg_inventory
                 buttons = []
