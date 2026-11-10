@@ -173,6 +173,8 @@ def context(state, kind, who=None, identity=None, moment=None):
         "motivation":motif,"physical_detail":detail,"unexpected_twist":twist,
         "character_hook":hook,"recent_journal":copy.deepcopy(recent) if who is None else [],
         "recent_decisions":copy.deepcopy(recent_decisions),
+        "met":list(state.get('met',[])),
+        "previous_scene_texts":__import__('dg_presentation').recent_scenes(state,who),
         "recent_conversations":copy.deepcopy([row for row in state.get("dialogue_history",[]) if who is None or row["who"]==who][-4:]),
         "world":copy.deepcopy(state.get("world",{}).get("preparations",{})),
         "social_bonds":copy.deepcopy(state.get("social",{}).get("bonds",{})),
@@ -313,7 +315,7 @@ def request(state,kind,who,identity,source_text,choices=None,moment=None,source_
            u"и собственными голосами участников. В каждой сцене используй "
            u"отличающийся конфликт и несколько значимых деталей из scene_identity. "
            u"Избегай штампов вроде «собеседник внимательно посмотрел» и "
-           u"повторения текста вчерашнего разговора. "
+           u"повторения текста вчерашнего разговора. previous_scene_texts — уже показанное, не повторяй его и не перезапускай ту же сцену. Продолжай с последнего ответа, не роняй повторно поднятую вещь. met содержит уже знакомых персонажей; повторное представление не нужно. "
            u"УЧИТЫВАЙ указанные различия профилей 7ДЛ Мику, не перемешивай "
            u"маршруты mi_7dl, mi_dj, mi_cl. "
            u"Если предоставлен исходный контекст 7ДЛ, используй только "

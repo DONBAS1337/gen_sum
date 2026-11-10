@@ -152,3 +152,25 @@ def light_slot(state,scene=None):
             state['camp_life']=dict(state['camp_life'],minute=scene.get('minute') if scene.get('minute') is not None else state['camp_life']['minute'])
     if 'camp_life' in state and __import__('dg_schedule').disco(state) and state['place']=='square':return 3
     return state['slot']
+
+
+def music_door(state, inside):
+    """Entering a building is separate from joining its club."""
+    import dg_rpg
+    if state['place']!='music' or state.get('finished') or type(inside) is not bool:
+        raise ValueError(u'Вход в музыкальный кружок сейчас недоступен.')
+    if state.get('music_inside',False)==inside:
+        return {'status':'done','text':u'Ты уже здесь.','kind':'door','who':None}
+    state['music_inside']=inside
+    if __import__('dg_clock').enabled(state):dg_rpg._tick(state,1)
+    text=u'Ты вошёл в здание музыкального кружка. Членство в кружке от этого не меняется.' if inside else u'Ты вышел на крыльцо музыкального кружка.'
+    dg_rpg._journal(state,text)
+    return {'status':'done','text':text,'kind':'door','who':None}
+
+def door_intent(state, action):
+    if state['place']!='music':return None
+    action=action.lower().strip()
+    if '?' in action or not re.match(u'^(?:я\s+)?(?:зайти|захожу|войти|вхожу|зайду|выйти|выхожу|выйду)(?:\s|$)',action):return None
+    if re.search(u'(?:зайти|захожу|войти|вхожу|зайду|войти внутрь)',action) and re.search(u'(?:муз|круж|внутр)',action):return True
+    if re.search(u'(?:выйти|выхожу|выйду)',action) and re.search(u'(?:крыльц|наруж|круж)',action):return False
+    return None

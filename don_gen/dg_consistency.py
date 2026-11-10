@@ -75,6 +75,8 @@ def generate(client,instructions,prompt,present,model=None,effort=None,fast_mode
             if not isinstance(text,(str,type(u''))) or len(text)>12000 or not 100<=len(dg_stage.readable(text))<=12000:raise ValueError('Invalid scene length')
             dg_stage.validate_speakers(text,present)
         except ValueError as exc: errors=[{'code':'format','text':type(u'')(exc)[:600]}]
+        if not errors and __import__('dg_presentation').repeats_scene(text,context.get('previous_scene_texts',context.get('scene_identity',{}).get('previous_scene_texts',[]))):
+            errors=[{'code':'continuity','text':u'Черновик повторяет уже показанную сцену. Продолжи с последней реплики, без повторного вступления и прежних действий.'}]
         if not errors:
             rules,check=audit_request(context,text)
             checked=verdict(client.generate(rules,check,**kwargs),__import__('dg_facts').contract(context))

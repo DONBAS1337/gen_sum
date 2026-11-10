@@ -272,6 +272,7 @@ init 1001 python:
         if dg_runtime.app.busy:
             renpy.notify(u'Дождись завершения текущей операции.')
             return False
+        renpy.block_rollback()
         try:
             if hasattr(dg_runtime.app,'invalidate'):dg_runtime.app.invalidate()
             if action=='trash':dg_sessions.trash(dg_rpg_root(),value)
@@ -283,7 +284,7 @@ init 1001 python:
             renpy.notify({'trash':u'Смена перемещена в корзину.','restore':u'Смена восстановлена.','purge':u'Смена удалена окончательно.'}[action])
             return True
         except (IOError,OSError,ValueError,KeyError,TypeError) as exc:
-            logging.getLogger('don_gen').warning('Shift management failed action=%s error=%s',action,type(exc).__name__)
+            logging.getLogger('don_gen').exception('Shift management failed action=%s id=%s',action,value)
             renpy.notify(u'Операция не завершилась. Проверь доступ к папке сохранений и повтори её.')
             return False
 
@@ -307,6 +308,13 @@ init 1001 python:
         renpy.block_rollback()
 
     def dg_rpg_apply(action, arg=None):
+        if action == "music_door":
+            state=dg_rpg.load(dg_rpg_root(),dg_rpg_state['id'])
+            dg_visual.music_door(state,arg)
+            dg_rpg.save(dg_rpg_root(),state)
+            store.dg_rpg_state=state
+            store.dg_rpg_scene_context=dg_stage.freeze(state)
+            return True
         if action == "inventory":
             arg = dg_inventory.command(arg)
             if arg is None:
@@ -451,7 +459,7 @@ init 1001 python:
         for item,spec in sorted(dg_inventory.CATALOG.items()):
             if spec['source']:
                 waiting=sum(1 for key,row in system.get('records',{}).items() if row['stage']==0 and not row.get('cancelled') and dg_projects.definitions(state)[key]['steps'][0][2]==item)
-                free=max(0,dg_inventory.stock_at(state,spec['source']).get(item,0)-waiting)+sum(dg_inventory.free_count(state,who,item) for who in ['hero']+list(system.get('npc_inventory',{})))
+                free=__import__('dg_inventory').nonnegative(dg_inventory.stock_at(state,spec['source']).get(item,0)-waiting)+sum(dg_inventory.free_count(state,who,item) for who in ['hero']+list(system.get('npc_inventory',{})))
                 if free:choices.append({'item':item,'title':spec['title'],'source':spec['source'],'available':free})
         if not choices:raise ValueError(u'Для нового дела нет свободных материалов. Сначала заверши текущие дела или освободи материалы отменой.')
         rules=(u'Предложи одно реалистичное безопасное лагерное дело по запросу игрока. Верни только JSON: '
@@ -724,6 +732,9 @@ init 1001 python:
         # Only exact 12 canonical locations block manual BG generation.
         visual = visual or dg_rpg_visual_state()
         lighting_slot=dg_visual.light_slot(dg_rpg_state,visual)
+        if place=='music' and visual.get('music_inside',False):
+            for room_name in dg_visual.background_names('bg int_musclub_day',lighting_slot):
+                if room_name in dg_runtime.original_images:return room_name
         if dg_rpg_state.get("source") == dg_bkrr.SOURCE:
             root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
             backdrop = dg_bkrr.background(root, place, lighting_slot)
@@ -1793,6 +1804,8 @@ screen dg_rpg_hub(initial_show=True):
             xalign .5 ypos 838 spacing 14
             if dg_conversation.rounds(dg_rpg_state) and shift_open:
                 textbutton (u"Завершить беседу" if dg_camp.enabled(dg_rpg_state) else u"Завершить беседу · %d/%d" % (dg_conversation.rounds(dg_rpg_state),dg_conversation.EXCHANGES)) style "dg_camp_nav" action Return(("end_conversation",None))
+            if shift_open and dg_rpg_state['place']=='music':
+                textbutton (u"Выйти на крыльцо" if dg_rpg_state.get('music_inside',False) else u"Войти в музклуб") style "dg_camp_nav" action Return(("music_door",not dg_rpg_state.get('music_inside',False)))
             if intro_here and shift_open:
                 textbutton intro_here["title"] style "dg_camp_action" action Return(("camp_do","arrival"))
             elif inhabitants and shift_open:
@@ -2854,11 +2867,8 @@ label dg_rpg_vn_scene(scene_text, cg_possible=True, who=None, scene_identity=Non
     if _return == "__interrupted__":
         return None
     if cg_possible:
-        menu (screen="dg_rpg_choice"):
-            "Продолжить историю":
-                return None
-            "Иллюстрация сцены":
-                return "cg"
+        $ dg_scene_next=renpy.display_menu([(u"Вернуться к сцене лагеря","back"),(u"Иллюстрация сцены","cg")],screen="dg_rpg_choice")
+        return "cg" if dg_scene_next=="cg" else None
     else:
         return None
 
@@ -2938,22 +2948,32 @@ label dg_rpg_main:
     $ renpy.hide_screen("dg_scene")
 label dg_rpg_picker_label:
     $ dg_rpg_audio_stop()
+    $ renpy.block_rollback()
     call screen dg_rpg_picker
-    $ dg_rpg_cmd, dg_rpg_value = _return
+    $ renpy.block_rollback()
+    $ dg_rpg_cmd, dg_rpg_value = dg_presentation.command(_return)
+    if dg_rpg_cmd not in ("delete_shift","trash","back","new","load"):
+        $ dg_rpg_active=False
+        jump dg_menu
     if dg_rpg_cmd == "delete_shift":
-        $ dg_shift_delete_info=dg_rpg.load(dg_rpg_root(),dg_rpg_value)
-        call screen dg_rpg_shift_confirm(dg_shift_delete_info['hero']['name'],False)
+        $ dg_shift_delete_info=next((r for r in dg_rpg.list_games(dg_rpg_root()) if r['id']==dg_rpg_value),None)
+        if dg_shift_delete_info is None:
+            $ renpy.notify(u'Смена больше не найдена. Список обновлён.')
+            jump dg_rpg_picker_label
+        call screen dg_rpg_shift_confirm(dg_shift_delete_info['name'],False)
         if _return:
             $ dg_rpg_manage_shift('trash',dg_rpg_value)
         jump dg_rpg_picker_label
     if dg_rpg_cmd == "trash":
         call screen dg_rpg_shift_trash
         if _return:
-            $ dg_shift_trash_action,dg_shift_trash_key=_return
+            $ dg_shift_trash_action,dg_shift_trash_key=dg_presentation.command(_return)
             if dg_shift_trash_action == "restore":
                 $ dg_rpg_manage_shift('restore',dg_shift_trash_key)
             elif dg_shift_trash_action == "purge":
-                $ dg_shift_purge_info=next(r for r in __import__('dg_sessions').deleted(dg_rpg_root()) if r['key']==dg_shift_trash_key)
+                $ dg_shift_purge_info=next((r for r in __import__('dg_sessions').deleted(dg_rpg_root()) if r['key']==dg_shift_trash_key),None)
+                if dg_shift_purge_info is None:
+                    jump dg_rpg_picker_label
                 call screen dg_rpg_shift_confirm(dg_shift_purge_info['name'],True)
                 if _return:
                     $ dg_rpg_manage_shift('purge',dg_shift_trash_key)
@@ -2977,7 +2997,7 @@ label dg_rpg_picker_label:
 
 label dg_rpg_create_loop:
     call screen dg_rpg_setup
-    $ dg_create_cmd = _return
+    $ dg_create_cmd = dg_presentation.creation_command(_return)
     if not dg_create_cmd or dg_create_cmd[0] == "cancel":
         jump dg_rpg_picker_label
     if dg_create_cmd[0] == "housing":
@@ -2994,7 +3014,7 @@ label dg_rpg_create_loop:
         else:
             $ dg_edit_current = dg_create_history
         call screen dg_rpg_edit_field(dg_edit_name, dg_edit_current)
-        $ dg_edit_result = _return
+        $ dg_edit_result = dg_presentation.command(_return,"cancel")
         if dg_edit_result and dg_edit_result[0] == "save":
             if dg_edit_name == "name":
                 $ dg_create_name = dg_edit_result[1]
@@ -3032,13 +3052,16 @@ label dg_rpg_loop:
     if dg_active_visit and not dg_active_visit["seen"]:
         jump dg_rpg_visit_label
     call screen dg_rpg_hub
-    $ dg_rpg_cmd, dg_rpg_value = _return
+    $ dg_rpg_cmd, dg_rpg_value = dg_presentation.command(_return,"noop")
     if dg_rpg_cmd in ("controls","settings"):
         $ dg_initial_tab="settings" if dg_rpg_cmd=="settings" else "story"
         $ dg_rpg_apply("events_seen")
         call screen dg_rpg_controls(dg_initial_tab)
-        $ dg_rpg_cmd, dg_rpg_value = _return
+        $ dg_rpg_cmd, dg_rpg_value = dg_presentation.command(_return,"noop")
 label dg_rpg_dispatch:
+    if dg_rpg_cmd == "music_door":
+        $ dg_rpg_apply("music_door",dg_rpg_value)
+        jump dg_rpg_loop
     if dg_rpg_cmd == "pacing":
         $ dg_rpg_state.setdefault('pacing',{})[dg_rpg_value[0]]=dg_rpg_value[1]
         $ dg_rpg.save(dg_rpg_root(),dg_rpg_state)
@@ -3050,7 +3073,7 @@ label dg_rpg_dispatch:
         call screen dg_rpg_deeds(dg_rpg_value)
         if not _return:
             jump dg_rpg_loop
-        $ dg_rpg_cmd,dg_rpg_value=_return
+        $ dg_rpg_cmd,dg_rpg_value=dg_presentation.command(_return,"noop")
         jump dg_rpg_dispatch
     if dg_rpg_cmd == "camp_enable":
         $ dg_rpg_apply("camp_enable")
@@ -3077,7 +3100,7 @@ label dg_rpg_dispatch:
         call screen dg_rpg_context(dg_context_who)
         if not _return:
             jump dg_rpg_loop
-        $ dg_rpg_cmd,dg_rpg_value=_return
+        $ dg_rpg_cmd,dg_rpg_value=dg_presentation.command(_return,"noop")
         jump dg_rpg_dispatch
     if dg_rpg_cmd == "affection":
         $ dg_rpg_apply("affection",dg_rpg_value)
@@ -3398,7 +3421,20 @@ label dg_rpg_hybrid_review_label:
         $ dg_rpg_hybrid_scene = dg_runtime.app.result
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, dg_rpg_hybrid_scene))
         $ dg_rpg_action_draft = u""
-        call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"]) from dg_return_dg_rpg_vn_scene_11
+        if dg_rpg_hybrid_plan.get("mode")=="npc":
+            call dg_rpg_vn_text(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"],dg_rpg_hybrid_plan.get("who")) from dg_return_hybrid_conversation_text
+            if _return=="__interrupted__":
+                jump dg_rpg_loop
+            $ dg_continue_conversation=renpy.display_menu([(u"Продолжить беседу своей репликой","continue"),(u"Вернуться к сцене лагеря","back"),(u"Иллюстрация сцены","cg")],screen="dg_rpg_choice")
+            if dg_continue_conversation=="continue":
+                $ dg_rpg_action_draft=u""
+                jump dg_rpg_hybrid_entry
+            if dg_continue_conversation=="cg":
+                $ dg_cg_plan=dg_rpg_cg_for("hybrid",u"Беседа",dg_rpg_hybrid_entry["scene"],dg_rpg_hybrid_plan.get("who"),dg_rpg_hybrid_entry["action"])
+                jump dg_rpg_cg_label
+            jump dg_rpg_loop
+        else:
+            call dg_rpg_vn_scene(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"]) from dg_return_dg_rpg_vn_scene_11
         if _return == "cg":
             $ dg_cg_who = dg_rpg_hybrid_plan.get("who") or dg_rpg_hybrid_plan["result"].get("npc")
             $ dg_cg_plan = dg_rpg_cg_for("hybrid", u"Мой поступок", dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"], dg_cg_who, dg_rpg_hybrid_entry["action"])
@@ -3602,7 +3638,7 @@ screen dg_rpg_dialogue_history(overlay=False):
                 xsize 1660 ysize 760 mousewheel True scrollbars "vertical"
                 vbox:
                     spacing 14
-                    for row in dg_presentation.history(dg_rpg_state)[::-1]:
+                    for row in dg_presentation.history_display(dg_rpg_state):
                         text (u"День %d · "%row["day"]+dg_rpg.SLOTS[row["slot"]]+u" · "+(dg_rpg.NPC_NAMES.get(row["who"],dg_rpg_state["hero"]["name"] if row["who"]=="hero" else u"Повествование"))) size 21 color "#65D8D0"
                         text dg_literal(row["text"]) size 24 color "#F2E4BB" xmaximum 1580
                     if not dg_presentation.history(dg_rpg_state):
@@ -3765,6 +3801,8 @@ screen dg_rpg_context(who=None):
                         textbutton u"Вернуться к карточному столу" style "dg_camp_action" action Return(("card_table",None))
                     textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid",None))
                     if who:
+                        if dg_rpg_state['place']=='music' and dg_rpg_state.get('camp_life',{}).get('club') is None:
+                            text u"Вход в здание свободный. Запись в кружок — отдельное действие после обходного листа второго дня: пять отметок, затем «Выбрать: Музыкальный кружок» в распорядке." size 22 color "#A9B9C6" xmaximum 1000
                         for row in dg_camp.cards(dg_rpg_state):
                             if row['who']==who and row['ready'] and row['key'].startswith(('risk:','clue:','cards:')):
                                 textbutton row['title'] style "dg_camp_nav" action Return(("camp_do",row['key']))
@@ -3966,7 +4004,7 @@ screen dg_rpg_stock_catalog:
             hbox:
                 spacing 20
                 textbutton u"Предыдущие" style "dg_camp_nav" sensitive stock_page>0 action SetScreenVariable('stock_page',stock_page-1)
-                text (u"%d–%d из %d"%(min(stock_page*40+1,len(stock_rows)),min((stock_page+1)*40,len(stock_rows)),len(stock_rows))) size 23 color "#F2E4BB" yalign .5
+                text (u"%d–%d из %d"%((stock_page*40+1 if stock_rows else 0),((stock_page+1)*40 if (stock_page+1)*40<len(stock_rows) else len(stock_rows)),len(stock_rows))) size 23 color "#F2E4BB" yalign .5
                 textbutton u"Следующие" style "dg_camp_nav" sensitive (stock_page+1)*40<len(stock_rows) action SetScreenVariable('stock_page',stock_page+1)
             textbutton u"Назад" style "dg_camp_nav" action Return(False)
     key "K_ESCAPE" action Return(False)

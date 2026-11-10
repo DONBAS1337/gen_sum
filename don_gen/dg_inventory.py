@@ -224,3 +224,7 @@ def daily(state):
         if previous<CATALOG[item]['count']:
             world['stock']['canteen'][item]=CATALOG[item]['count']
             log(state,'restock',item,'camp_meals','canteen')
+
+
+def nonnegative(value):
+    return value if value>0 else 0

@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
     parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
     # Additional production screens are accepted below by extending the existing action.
-    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing','shift-trash','shift-confirm','shift-purge','shift-flow','menu-audio')
+    parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing','shift-trash','shift-confirm','shift-purge','shift-flow','menu-audio','hybrid-flow','music-entry')
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
     parser.add_argument("--slot", type=int, choices=range(4), default=0, help="0 morning, 1 day, 2 evening, 3 night")
     parser.add_argument("--source", default="vanilla", choices=("vanilla", "bkrr:mi", "7dl:mi_7dl", "7dl:mi_dj", "7dl:mi_cl"))
@@ -343,6 +343,7 @@ init 1100 python:
             store.dg_rpg_state=state;store.dg_rpg_scene_context=dg_stage.freeze(state)
             cases=[('crew','dg_rpg_deeds',{'selection':('crew',None)})]
         if os.environ.get("DG_UI_SCREEN")=='stock-catalog':
+            store.min=u'host character min';store.max=u'host character max'
             cases=[('stock-catalog','dg_rpg_stock_catalog',{})]
         if os.environ.get("DG_UI_SCREEN")=='pacing':
             cases=[('pacing','dg_rpg_controls',{'initial_tab':'settings'})]
@@ -390,6 +391,57 @@ init 1100 python:
             dg_sessions.trash(dg_rpg_root(),state['id'])
             if os.environ['DG_UI_SCREEN']=='shift-trash':cases=[('shift-trash','dg_rpg_shift_trash',{})]
             else:cases=[(os.environ['DG_UI_SCREEN'],'dg_rpg_shift_confirm',{'name':state['hero']['name'],'permanent':os.environ['DG_UI_SCREEN']=='shift-purge'})]
+        if os.environ.get("DG_UI_SCREEN")=='music-entry':
+            state=dg_rpg.new_game(u'Игорь',23,30,source='bkrr:mi',camp_life=True)
+            state['place']='music';store.dg_rpg_state=state;store.dg_rpg_stage_active=False
+            dg_rpg.save(dg_rpg_root(),state)
+            outside=dg_rpg_visual_brief(state)['setting']
+            dg_rpg_apply('music_door',True)
+            inside=dg_rpg_visual_brief(store.dg_rpg_state)['setting']
+            if outside!='exterior' or inside!='interior' or store.dg_rpg_state['camp_life']['club'] is not None:
+                raise ValueError('Music door did not change the actual BG: '+repr((outside,inside)))
+            dg_rpg_apply('music_door',False)
+            if dg_rpg_visual_brief(store.dg_rpg_state)['setting']!='exterior':raise ValueError('Music exit failed')
+            print('NATIVE_MUSIC_DOOR_OK actual exterior/interior BG and frozen context; no fabricated membership')
+            cases=[('music-entry','dg_rpg_hub',{})]
+        if os.environ.get("DG_UI_SCREEN")=='hybrid-flow':
+            state=dg_rpg.new_game(u'Игорь',23,30,source='bkrr:mi',camp_life=True)
+            state['place']=dg_rpg.where_is(state,'mi')
+            dg_rpg.save(dg_rpg_root(),state)
+            store.dg_rpg_state=state;store.dg_rpg_pending_turn=None;store.dg_rpg_scene_context=dg_stage.freeze(state)
+            store.dg_rpg_hybrid_mode='npc';store.dg_rpg_hybrid_who='mi';store.dg_rpg_hybrid_topic=None
+            store.dg_rpg_action_context=('npc','mi',None)
+            store.dg_rpg_hybrid_plan=dg_hybrid.preview(state,u'Привет, я Игорь. Давай познакомимся.','npc','mi')
+            api=dg_rpg_say_character.func_globals['renpy']
+            original_call=api.call_screen;original_say=api.say;original_menu=api.display_menu;original_with=api.with_statement
+            original_audio=store.dg_rpg_audio_sync;original_run=store.dg_rpg_run
+            counts={'input':0,'review':0,'menu':0,'hub':0}
+            def hybrid_call(name,*args,**kwargs):
+                if name=='dg_rpg_hybrid_review':counts['review']+=1;return 'ai'
+                if name=='dg_rpg_hybrid_input':
+                    counts['input']+=1
+                    if store.dg_rpg_action_draft:raise ValueError('Previous draft leaked into continuation')
+                    return ('submit',u'А какую музыку тебе нравится слушать?')
+                if name=='dg_rpg_hub':counts['hub']+=1;api.jump('dg_ui_flow_done')
+                raise ValueError('Unexpected continuation screen '+name)
+            def hybrid_menu(items,**kwargs):
+                counts['menu']+=1
+                return items[0 if counts['menu']==1 else 1][1]
+            def hybrid_run(*args):
+                dg_runtime.app.error=None
+                dg_runtime.app.result=u'[mi] Приятно познакомиться, Игорь. Я запомнила твоё имя и то, что ты играешь на гитаре. Давай немного поговорим, если ты не спешишь к вожатой. [narrator] Мику отложила папку и выслушала вопрос.'
+            try:
+                api.call_screen=hybrid_call;api.say=lambda *args,**kwargs:None;api.display_menu=hybrid_menu;api.with_statement=lambda *args,**kwargs:None
+                store.dg_rpg_audio_sync=lambda *args:None;store.dg_rpg_run=hybrid_run
+                api.call_in_new_context('dg_rpg_hybrid_review_label')
+                saved=dg_rpg.load(dg_rpg_root(),state['id'])
+                if counts!={'input':1,'review':2,'menu':2,'hub':1} or saved['dialogue_counts']['1:mi']!=2 or 'mi' not in saved['met']:
+                    raise ValueError('Continuation failed '+repr(counts))
+                print('NATIVE_HYBRID_CONTINUE_OK two commits; introduction persisted; input reopened; returned to hub')
+            finally:
+                api.call_screen=original_call;api.say=original_say;api.display_menu=original_menu;api.with_statement=original_with
+                store.dg_rpg_audio_sync=original_audio;store.dg_rpg_run=original_run
+            return False
         if os.environ.get("DG_UI_SCREEN")=='branches':
             import dg_checkpoints,copy
             state=dg_rpg.new_game(u'Тестовый герой',23,30,camp_life=True)
@@ -740,6 +792,13 @@ init 1100 python:
                     if d.width <= 0 or d.height <= 0:
                         raise ValueError(filename + ": empty viewport "+repr((d.width,d.height)))
             displayable.visit_all(debug_viewport)
+            if filename=='stock-catalog':
+                for variant,changes in [('last',{'stock_page':99999}),('empty',{'stock_source':'missing','stock_page':0})]:
+                    displayable.scope.update(changes)
+                    displayable.per_interact()
+                    extra=renpy.display.render.render(displayable,1920,1080,.6,.6)
+                    pygame.image.save(renpy.display.draw.render_to_texture(extra,True),os.path.join(config.basedir,'catalog-'+variant+'.png'))
+                print('NATIVE_CATALOG_OK first/last/empty; host min/max are strings')
             if filename=='pacing':
                 views=[]
                 displayable.visit_all(lambda d:views.append(d) if isinstance(d,renpy.display.viewport.Viewport) else None)

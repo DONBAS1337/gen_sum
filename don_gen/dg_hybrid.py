@@ -90,6 +90,8 @@ def _neutral_talk(state, action, who):
     gain = state["affinity"][who] - previous
     if who not in state["met"]:
         state["met"].append(who)
+    day_key='%d:%s'%(state['day'],who)
+    state['dialogue_counts'][day_key]=state['dialogue_counts'].get(day_key,0)+1
     text = u"Ты обращаешься к %s: «%s». Собеседник внимательно слушает; подробнее разговор раскроется, если заказать AI-сцену." % (
         dg_rpg.NPC_NAMES[who], action)
     state.setdefault("dialogue_history", []).append({
@@ -141,6 +143,9 @@ def _simulate(state, action, mode, who, interpretation=None):
     dg_rpg.validate(shadow)
     if shadow.get("finished"):
         return shadow, {"status":"unknown","text":u"Смена завершена; действия недоступны."}
+    door=__import__('dg_visual').door_intent(shadow,action)
+    if door is not None:
+        return shadow,__import__('dg_visual').music_door(shadow,door)
     if interpretation is None and mode=='free':
         object_action=__import__('dg_actions').parse(shadow,action)
         if object_action:
@@ -375,6 +380,9 @@ def locked_context(state, plan):
         "world_state":dg_world.world_report(copy_state),
         "last_world_decisions":copy_state["world"]["decisions"][-5:],
         "recent_journal":copy_state["journal"][-7:] if focus is None else [],
+        "met":list(copy_state.get('met',[])),
+        "camp_life":__import__('dg_camp').report(copy_state),
+        "previous_scene_texts":__import__('dg_presentation').recent_scenes(copy_state,focus),
         "recent_dialogue":[row for row in copy_state["dialogue_history"] if focus is None or row["who"]==focus][-3:],
         "character_contracts":__import__("dg_characters").directions(copy_state,focus),
         "long_term_memory":__import__('dg_memory').recall(copy_state, focus),
@@ -420,6 +428,7 @@ INSTRUCTIONS = (
     u"Не изменяй характер NPC, отношения и факты прошлых решений. Соблюдай character_contracts и knowledge каждого участника; чужие частные разговоры и примеры источника не являются его личными знаниями. "
     u"Оживи сцену через narrative_variation: уникальную цель, конфликт и детали "
     u"данного персонажа; для Мику учитывай отдельные профили 7ДЛ, DJ и классики. "
+    u"Продолжай с последней произнесённой реплики. Не начинай знакомство заново, если персонаж есть в met или уже разговаривал с героем. Не роняй повторно поднятые вещи и не возвращай обсуждение к уже полученному ответу. "
     u"Не повторяй сюжет предыдущей сцены, не превращай всех NPC в одинаковых собеседников. "
     u"При свободной реплике NPC покажи конкретный ответ собеседника, оставь инициативу игроку. "
     u"Дай живой диалог, реакции, обстановку, 160–350 слов на русском. "

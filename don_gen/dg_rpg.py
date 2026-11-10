@@ -149,6 +149,7 @@ def set_source(state, source):
 
 
 def validate(state):
+    if type(state.get("music_inside",False)) is not bool:raise ValueError("Invalid music room view")
     if not isinstance(state, dict) or state.get("version") != 1:
         raise ValueError("Unsupported save format")
     __import__('dg_memory').validate(state)
@@ -390,6 +391,7 @@ def move(state, place):
     if state["place"] != place and __import__('dg_clock').enabled(state):
         _tick(state,5)
         if state['finished']:return state
+    if state["place"]!=place:state.pop("music_inside",None)
     state["place"] = place
     state["visits"][place] = state["visits"].get(place, 0) + 1
     _check_quests(state)
@@ -684,7 +686,8 @@ def load(root, game_id):
         try:
             with io.open(candidate, "r", encoding="utf-8") as stream:
                 return validate(json.load(stream))
-        except (IOError, OSError, ValueError, KeyError, TypeError):
+        except (IOError, OSError, ValueError, KeyError, TypeError) as exc:
+            __import__('logging').getLogger('don_gen').warning('RPG save candidate failed id=%s backup=%s error=%s',game_id,candidate.endswith('.bak'),type(exc).__name__)
             continue
     raise IOError("Could not load RPG save")
 
