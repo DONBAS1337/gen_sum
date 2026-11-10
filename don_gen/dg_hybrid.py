@@ -145,7 +145,7 @@ def _simulate(state, action, mode, who, interpretation=None):
     risk=__import__('dg_risk').intent(action)
     if risk and __import__('dg_camp').enabled(shadow):
         try:
-            result=__import__('dg_risk').resolve(shadow,risk);result.update(status='done',kind='risk');return shadow,result
+            result=__import__('dg_risk').resolve(shadow,risk,action);result.update(status='done',kind='risk');return shadow,result
         except ValueError as exc:return shadow,{'status':'unknown','text':text_type(exc)}
     if interpretation is None and mode=='npc':
         physical=_physical(shadow,action,who)

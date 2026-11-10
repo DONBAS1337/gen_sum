@@ -23,7 +23,7 @@ def cards(state,people):
         relation=state.get('relationships',{}).get('people',{}).get(who,{})
         agent=state.get('npc_agendas',{}).get('people',{}).get(who,{})
         memory=__import__('dg_memory').recall(state,who)
-        result.append({'allowed_proposals':[kind for kind,label in __import__('dg_affection').options(state,who)],'last_contact':[row for row in state.get('affection',{}).get('history',[]) if row['who']==who][-1:],'knowledge':{'episodes':memory['relevant_episodes'][-3:],'milestones':memory['milestones'][-3:],'threads':memory['open_threads'][-3:]},'relationship_stage':__import__('dg_camp').stage(state,who),'who':who,'voice':VOICES[who],'source_profile':state['source'],
+        result.append({'allowed_proposals':[kind for kind,label in __import__('dg_affection').options(state,who)],'last_contact':[row for row in state.get('affection',{}).get('history',[]) if row['who']==who][-1:],'private_observation':__import__('dg_clues').known(state,who),'knowledge':{'episodes':memory['relevant_episodes'][-3:],'milestones':memory['milestones'][-3:],'threads':memory['open_threads'][-3:]},'relationship_stage':__import__('dg_camp').stage(state,who),'who':who,'voice':VOICES[who],'source_profile':state['source'],
           'familiarity':state['affinity'][who],'met':who in state['met'],
           'romance_confirmed':who in state.get('npc_visits',{}).get('romance',[]),
           'trust':relation.get('trust',0),'tension':relation.get('tension',0),

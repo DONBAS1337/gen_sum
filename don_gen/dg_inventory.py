@@ -3,6 +3,7 @@
 from __future__ import unicode_literals
 import copy
 CATALOG={
+ 'shirt':{'title':u'Личная рубашка с контрастным швом','source':None,'count':0,'loanable':True},
  'notes':{'title':u'Ноты общего номера','source':'library','count':1},
  'parts':{'title':u'Детали радиооборудования','source':'warehouse','count':1},
  'paper':{'title':u'Бумага','source':'storage','count':4},
@@ -50,6 +51,10 @@ def ensure(state):
                 if projects['records'].get(legacy,{}).get('stage',0)>=2 and not projects['records'][legacy].get('materials'):committed+=1
             stock.setdefault(spec['source'],{})[item]=max(0,spec['count']-held-committed)
         state['inventory_world']={'stock':stock,'loans':[],'ledger':[],'sequence':0,'last_supply_day':state['day']}
+    if 'camp_life' in state and not state['inventory_world'].get('personal_gear'):
+        held=projects['inventory'].get('shirt',0)+sum(b.get('shirt',0) for b in projects['npc_inventory'].values())
+        if not held:projects['inventory']['shirt']=1
+        state['inventory_world']['personal_gear']=True
     return state['inventory_world']
 
 def bag(state,actor):
@@ -115,7 +120,7 @@ def act(state,operation,item,who=None):
         transfer(shadow,item,'hero',who)
         if operation=='lend':
             if len([r for r in world['loans'] if r['status']=='open'])>=12:raise ValueError(u'Слишком много открытых займов.')
-            world['loans'].append({'id':world['sequence'],'item':item,'owner':'hero','holder':who,'deadline':shadow['day']+3,'status':'open'})
+            world['loans'].append({'id':world['sequence'],'item':item,'owner':'hero','holder':who,'deadline':shadow['day']+3,'status':'open','witnesses':[p for p,n in dg_rpg.at_place(shadow)]})
             opened=[r for r in world['loans'] if r['status']=='open']
             closed=[r for r in world['loans'] if r['status']!='open'][-(48-len(opened)):]
             world['loans']=sorted(opened+closed,key=lambda r:r['id'])
@@ -164,6 +169,8 @@ def validate(state):
     for place,items in world['stock'].items():
         if place not in dg_rpg.PLACE_NAMES or not isinstance(items,dict) or any(item not in CATALOG or not isinstance(n,int) or isinstance(n,bool) or not 0<=n<=20 for item,n in items.items()):raise ValueError('Invalid stock')
     for loan in world['loans']:
+        if not isinstance(loan,dict):raise ValueError('Invalid loan')
+        if not isinstance(loan.get('witnesses',[]),list) or len(loan.get('witnesses',[]))>11 or any(w not in dg_rpg.NPC_NAMES for w in loan.get('witnesses',[])):raise ValueError('Invalid loan witnesses')
         if not isinstance(loan,dict) or loan.get('item') not in CATALOG or not CATALOG[loan['item']].get('loanable') or loan.get('owner')!='hero' or loan.get('holder') not in dg_rpg.NPC_NAMES or loan.get('status') not in ('open','returned') or not isinstance(loan.get('deadline'),int) or not 1<=loan['deadline']<=50000:raise ValueError('Invalid loan')
     for row in world['ledger']:
         if not isinstance(row,dict) or row.get('item') not in CATALOG or row.get('operation') not in ('take','transfer','use','craft','commit','restock') or not isinstance(row.get('id'),int) or not isinstance(row.get('day'),int) or row.get('slot') not in (0,1,2,3):raise ValueError('Invalid inventory ledger')

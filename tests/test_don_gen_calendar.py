@@ -38,10 +38,10 @@ class Calendar(unittest.TestCase):
     def test_rain_moves_concert_and_outing_with_cast(self):
         s=self.state(5,rain=True);self.assertEqual(dg_rpg.where_is(s,'mi'),'clubhouse')
         self.assertEqual(dg_schedule.events(s)[0]['place'],'clubhouse')
-        s=self.state(7,930,True);r=dg_schedule.events(s)[0]
+        s=self.state(7,930,True);r=next(r for r in dg_schedule.events(s) if r['key']=='event:outing')
         self.assertEqual(r['place'],'clubhouse');self.assertEqual(dg_rpg.where_is(s,'mt'),'clubhouse')
         self.assertIn('дождя',r['story'])
-        dry=self.state(7,930);self.assertEqual(dg_schedule.events(dry)[0]['place'],'beach')
+        dry=self.state(7,930);self.assertEqual(next(r for r in dg_schedule.events(dry) if r['key']=='event:outing')['place'],'beach')
 
     def test_weather_stable_after_save_and_audio_indoors(self):
         s=self.state(rain=True)

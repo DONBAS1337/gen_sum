@@ -23,6 +23,8 @@ def seen(state):state.setdefault('presentation',{'lines':[],'seen_events':None})
 
 def status(state,who):
     import dg_rpg
+    if __import__('dg_clues').known(state,who):return u'Хочет разобраться в личном вопросе'
+    if who=='el' and __import__('dg_risk').encounter(state):return u'Просит помочь с антенной клубов'
     person=state.get('npc_agendas',{}).get('people',{}).get(who,{})
     relation=state.get('relationships',{}).get('people',{}).get(who,{})
     text=dg_rpg.route_label(state['affinity'][who])

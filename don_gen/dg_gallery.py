@@ -10,11 +10,11 @@ MOTIFS = {
     'guitar':(u'гитар',), 'piano':(u'пианино',u'фортепиано',u'роял'),
     'rehearsal':(u'репетиц',), 'book':(u'книг',u'читает',u'читать'),
     'campfire':(u'костр',u'костёр'), 'tea':(u'чай',u'чаепит'),
-    'rain':(u'дожд',), 'beach':(u'пляж',u'берег')}
+    'dance':(u'танц',u'танец',u'дискотек'), 'rain':(u'дожд',), 'beach':(u'пляж',u'берег')}
 PLACES = {'guitar':('music','stage','outdoor_stage'), 'piano':('music',),
           'rehearsal':('music','stage','outdoor_stage'), 'book':('library',),
           'campfire':('campfire',), 'tea':('canteen','cabins','music'),
-          'rain':('square','gate','forest','forest_path'), 'beach':('beach','lake')}
+          'dance':('square','clubhouse'), 'rain':('square','gate','forest','forest_path'), 'beach':('beach','lake')}
 EXCLUDE = ('nude','naked','sex','ero','bath','shower','underwear','pant','breast',
            'sleep','kiss','hentai','dead','blood','ghost','ending','catday')
 _cache = {}
@@ -51,10 +51,11 @@ def catalog(directories):
                 path = os.path.realpath(os.path.join(folder, name))
                 if not os.path.normcase(path).startswith(os.path.normcase(root + os.sep)):
                     continue
-                result.append({'path':path.replace('\\','/'), 'actors':actors, 'motifs':motifs,
+                annotated_dance=os.path.basename(root)=='451835368' and stem=='d7_mi_dance' or os.path.basename(root)=='3266357374' and stem in ('d3_mi_dance_7dl','d3_mi_dance_bordo_7dl')
+                result.append({'time_slots':(2,3) if annotated_dance else None,'path':path.replace('\\','/'), 'actors':actors, 'motifs':motifs,
                                'night':('night' in words), 'sunset':('sunset' in words),
                                'source':os.path.basename(root), 'name':stem,
-                               'setting':('exterior' if words.intersection(('ext','outside','verandah','beach','campfire')) else
+                               'setting':('exterior' if annotated_dance else 'exterior' if words.intersection(('ext','outside','verandah','beach','campfire')) else
                                           'interior' if words.intersection(('int','club','library','piano')) else None)})
     _cache[key] = result
     return result
@@ -79,12 +80,13 @@ def candidates(rows, plan):
             continue
         if plan['who'] not in row['actors'] or not set(row['actors']).issubset(present):
             continue
+        if row.get('time_slots') and slot not in row['time_slots']:continue
         if slot is None and (row['night'] or row['sunset']):
             continue
         if (row['night'] and slot != 3) or (row['sunset'] and slot != 2):
             continue
         # An unspecified daytime illustration is not substituted into a night scene.
-        if slot in (2,3) and not (row['night'] or row['sunset']):
+        if slot in (2,3) and not (row['night'] or row['sunset'] or row.get('time_slots')):
             continue
         topics = [motif for motif in row['motifs']
                   if place in PLACES[motif] and any(stem in text for stem in MOTIFS[motif])]

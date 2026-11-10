@@ -278,6 +278,8 @@ init 1001 python:
             store.dg_rpg_last_camp=dg_camp.act(state,arg)
             if state['place']!=store.dg_rpg_scene_context['place']:
                 store.dg_rpg_scene_context=dg_stage.freeze(state,store.dg_rpg_last_camp['who'])
+            if store.dg_rpg_last_camp.get('private'):
+                store.dg_rpg_scene_context['present']=[store.dg_rpg_last_camp['who']]
             pending.update(who=store.dg_rpg_last_camp['who'],intention=store.dg_rpg_last_camp['title'],result=store.dg_rpg_last_camp['text'])
         elif action == "affection":
             store.dg_rpg_last_affection=dg_affection.act(state,arg[0],arg[1])
@@ -696,7 +698,7 @@ init 1001 python:
         backdrop = dg_rpg_bg_native(state['place'], visual=state) or ''
         filename = os.path.basename(backdrop).lower().replace('bg ', '')
         setting = 'exterior' if filename.startswith('ext_') else 'interior' if filename.startswith('int_') else None
-        return {'setting':setting, 'rule':u'Сцена должна соответствовать показанному фону: exterior — снаружи, interior — внутри. Не меняй место без действия игрока.'}
+        return {'wardrobe':dict((who,dg_visual.clothing(state,who)) for who,name in dg_rpg.at_place(state)),'setting':setting, 'rule':u'wardrobe задаёт одежду: dress — праздничная, pioneer — форма. Сцена должна соответствовать показанному фону: exterior — снаружи, interior — внутри. Не меняй место без действия игрока.'}
 
     def dg_rpg_bg_status():
         place = dg_rpg_visual_state()["place"]
@@ -727,21 +729,22 @@ init 1001 python:
         # composition when the exact named pose is missing. No image generation.
         if who not in dg_rpg.NPC_NAMES:
             return None
+        clothes=dg_visual.clothing(dg_rpg_state,who,dg_rpg_visual_state())
         if pose is not None:
-            for name in dg_visual.sprite_queries(who, emotion, distance):
+            for name in dg_visual.sprite_queries(who, emotion, distance,clothes):
                 sprite = dg_7dl_sprite_displayable(name, pose_hint=pose)
                 if sprite is not None:
                     return sprite
         known = dg_visual.sprite_names(who,emotion,distance,
-                                        dg_runtime.original_images.keys())
+                                        dg_runtime.original_images.keys(),clothes=clothes)
         exact=[name for name in known if
                (name.endswith(" "+distance) if distance!="normal"
                 else not name.endswith((" far"," close")))]
         # For the specific 7DL route, layer-aware image composition may supply
         # a more expressive pose that doesn't have a registered vanilla name.
-        use_7dl=dg_rpg_state["source"].startswith("7dl:")
+        use_7dl=dg_rpg_state["source"].startswith("7dl:") or clothes!="pioneer"
         if use_7dl:
-            for name in dg_visual.sprite_queries(who,emotion,distance):
+            for name in dg_visual.sprite_queries(who,emotion,distance,clothes):
                 sprite=dg_7dl_sprite_displayable(name)
                 if sprite is not None:
                     return sprite
@@ -751,7 +754,7 @@ init 1001 python:
         # normal-distance sprite. Never scale a normal pose as if it were close.
         if known:
             return dg_runtime.original_images[known[0]]
-        for name in dg_visual.sprite_queries(who,emotion,distance):
+        for name in dg_visual.sprite_queries(who,emotion,distance,clothes):
             sprite=dg_7dl_sprite_displayable(name)
             if sprite is not None:
                 return sprite
@@ -3597,6 +3600,9 @@ screen dg_rpg_context(who=None):
                     spacing 14 xsize 1040
                     textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid",None))
                     if who:
+                        for row in dg_camp.cards(dg_rpg_state):
+                            if row['who']==who and row['ready'] and row['key'].startswith(('risk:','clue:')):
+                                textbutton row['title'] style "dg_camp_nav" action Return(("camp_do",row['key']))
                         textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc",who))
                         for kind,caption in dg_affection.options(dg_rpg_state,who):
                             textbutton caption style "dg_camp_nav" action Return(("affection",(who,kind)))

@@ -66,6 +66,7 @@ def _meet(state,who):
 def refresh(state):
     if not enabled(state):return
     c=state['camp_life']
+    __import__('dg_clues').refresh(state)
     if c['minute']>=720 and c['arrival']==4:
         for name in ('wash','assembly'):
             if not _done(state,name) and not _done(state,'missed_'+name):
@@ -90,8 +91,11 @@ def location(state,who):
         if who==actor:return state['housing']['cabin'] if place=='home' else place
     if 510<=minute<540 and who not in ('uv','cs'):return 'square'
     if (540<=minute<570 or 780<=minute<840 or 1140<=minute<1200) and who not in ('uv','cs'):return 'canteen'
+    risk_place=__import__('dg_risk').location(state,who)
+    if risk_place:return risk_place
     scheduled=__import__('dg_schedule').location(state,who)
     if scheduled:return scheduled
+    if 1290<=minute<1320 and who in ('mi','dv','un','sl','mz','el','sh'):return 'showers'
     companion=c.get('companion')
     if companion and companion['who']==who and __import__('dg_clock').absolute(state)<companion['until']:return state['place']
     if state['day']>=2 and not c['tour_issued'] and who=='mt':return state['housing']['cabin']
@@ -128,6 +132,7 @@ def cards(state):
         if row['status']=='active':add('job:'+key,row['title'],row['place'],None,row['minutes'],u'Выполнить принятое поручение лично в нужном месте. Оборудование — лагерное; оно не становится вещью героя.')
     rows.extend(__import__('dg_schedule').cards(state))
     rows.extend(__import__('dg_risk').cards(state))
+    rows.extend(__import__('dg_clues').cards(state))
     if __import__('dg_risk').injured(state) and not state['health']['treated']:
         add('treatment',u'Повторный осмотр после травмы','infirmary','cs',20,u'Повторный осмотр ушиба в медпункте; выздоровление требует времени.')
     if __import__('dg_risk').injured(state):
@@ -158,6 +163,7 @@ def intro_here(state,who):
 
 def act(state,key):
     import dg_rpg,dg_clock
+    if key.startswith('clue:'):return __import__('dg_clues').act(state,key)
     if key.startswith('risk:'):return __import__('dg_risk').resolve(state,key)
     matches=[row for row in cards(state) if row['key']==key and row['ready']]
     if not matches:raise ValueError(u'Сейчас это лагерное действие недоступно в этом месте.')
@@ -221,4 +227,5 @@ def validate(state):
     for row in c['jobs'].values():
         if not isinstance(row,dict) or not isinstance(row.get('title'),(str,type(u''))) or len(row['title'])>200 or row.get('status') not in ('active','done','missed') or row.get('place') not in dg_rpg.PLACE_NAMES or row.get('who') not in dg_rpg.NPC_NAMES or type(row.get('minutes')) is not int or not 1<=row['minutes']<=120 or type(row.get('deadline')) is not int:raise ValueError('Invalid camp job')
     __import__('dg_risk').validate(state)
+    __import__('dg_clues').validate(state)
     dg_clock.validate(state)

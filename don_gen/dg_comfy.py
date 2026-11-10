@@ -21,6 +21,11 @@ except ImportError:
     from urllib import urlencode
     from urlparse import urlsplit
 
+try:
+    text_types=(str,unicode)
+except NameError:
+    text_types=(str,)
+
 class ComfyError(Exception):
     pass
 
@@ -157,11 +162,11 @@ def generate(workflow_path,prompt,kind,base_url="http://127.0.0.1:8188",
                         continue
                     name=item.get("filename","")
                     folder=item.get("subfolder","")
-                    if not isinstance(name,str) or not name.endswith(".png"):
+                    if not isinstance(name,text_types) or not name.endswith(".png"):
                         continue
                     if "/" in name or "\\" in name or ".." in name:
                         continue
-                    if not isinstance(folder,str) or ".." in folder or "\\" in folder:
+                    if not isinstance(folder,text_types) or ".." in folder or "\\" in folder:
                         continue
                     query=urlencode({"filename":name,"subfolder":folder,"type":"output"})
                     data=_read(base+"/view?"+query,maxbytes=32*1024*1024,timeout=45)
@@ -171,3 +176,4 @@ def generate(workflow_path,prompt,kind,base_url="http://127.0.0.1:8188",
             raise ComfyError("No PNG SaveImage output found. Export a workflow ending in SaveImage.")
         time.sleep(poll_seconds)
     raise ComfyError("ComfyUI timeout; inspect its queue and history at http://127.0.0.1:8188")
+

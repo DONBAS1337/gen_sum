@@ -35,7 +35,7 @@ def act(state,who,kind):
     consent=not routine and not dg_visits.busy(state,who) and goal.get('energy',80)>=20
     system=state.setdefault('affection',{'history':[],'cooldowns':{}})
     system['cooldowns'][who+':'+kind]=state['day']
-    system['history'].append({'who':who,'kind':kind,'consent':consent,'day':state['day']})
+    system['history'].append({'who':who,'kind':kind,'consent':consent,'day':state['day'],'witnesses':[p for p,n in dg_rpg.at_place(state)]})
     system['history']=system['history'][-64:]
     state['energy']-=3
     if consent:

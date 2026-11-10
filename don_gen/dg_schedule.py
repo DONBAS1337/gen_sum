@@ -13,6 +13,12 @@ def events(state):
     day=weekday(state);rain=dg_world.weather(state)[0]=='rain';rows=[]
     def add(key,title,place,who,start,end,cost,story):
         rows.append(dict(key='event:'+key,title=title,place=place,who=who,start=start,end=end,minutes=cost,story=story))
+    if day==0 and state['day']>1:
+        add('science',u'Открытая мастерская Электроника','clubs','el',960,1080,40,u'Электроник показывает простой опыт. Герой может наблюдать и задавать вопросы; участие не завершает проект радио.')
+    if day==3:
+        add('sports',u'Товарищеские спортивные игры','gym' if rain else 'sports','sl',960,1080,40,u'Командные игры без обязательной победы. При дожде занятие перенесено в зал.')
+    if day==6:
+        add('campfire',u'Отрядный вечер: истории и песни','clubhouse' if rain else 'campfire','mt',1200,1290,45,u'Отряд собирается на истории и песни у костра; при дожде — без огня в помещении. Рассказанный героем эпизод не становится историческим фактом без подтверждения.')
     if day==1 and state['day']>=2:
         add('cards',u'Карточный турнир Электроника','canteen','el',960,1080,50,u'Электроник проводит товарищеский карточный турнир без денежных ставок. Результат определяют правила движка; знакомства не становятся дружбой автоматически.')
     if day==4:

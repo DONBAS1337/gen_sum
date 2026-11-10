@@ -61,7 +61,7 @@ def distance(text):
             return name
     return "normal"
 
-def sprite_names(who, emotion="normal", distance_name="normal", known=()):
+def sprite_names(who, emotion="normal", distance_name="normal", known=(), clothes="pioneer"):
     """Rank actual Ren'Py original sprite names; don't invent unregistered poses."""
     desired=EMOTION_FALLBACK.get(emotion,EMOTION_FALLBACK["normal"])
     names=[x for x in known if x.split(" ")[0] == who]
@@ -78,15 +78,15 @@ def sprite_names(who, emotion="normal", distance_name="normal", known=()):
         # First favor requested distance over requested face for correct size.
         distance_rank=0 if actual_distance==distance_name else (
              1 if actual_distance=="normal" else 2)
-        costume_rank=0 if "pioneer" in parts else 1
+        costume_rank=0 if clothes in parts else 1 if "pioneer" in parts else 2
         return distance_rank,costume_rank,face_rank,name
     return sorted(names,key=rank)
 
-def sprite_queries(who, emotion="normal", distance_name="normal"):
+def sprite_queries(who, emotion="normal", distance_name="normal", clothes="pioneer"):
     """Known physical layers can provide a sprite even without a registered image."""
     tones=EMOTION_FALLBACK.get(emotion,EMOTION_FALLBACK["normal"])
     distance_suffix=(" "+distance_name) if distance_name!="normal" else ""
-    return [(who+" "+face+" pioneer"+distance_suffix) for face in tones]+[
+    return [(who+" "+face+" "+clothes+distance_suffix) for face in tones]+[
             who+" normal pioneer",who+" smile pioneer"]
 
 def background_names(base, slot):
@@ -131,3 +131,15 @@ def narrated_moods(text,present):
             if emotion!='normal':
                 result[named[0]]=emotion
     return result
+
+
+def clothing(state,who,scene=None):
+    if scene is not None:
+        state=dict(state,**scene)
+        if "camp_life" in state:
+            state["camp_life"]=dict(state["camp_life"],minute=scene.get("minute") if scene.get("minute") is not None else state["camp_life"]["minute"])
+    if who not in ('mi','dv','sl','un','mz','mt','cs'):return 'pioneer'
+    if 'camp_life' in state and __import__('dg_schedule').disco(state):
+        venue='clubhouse' if __import__('dg_world').weather(state)[0]=='rain' else 'square'
+        if state['place']==venue:return 'dress'
+    return 'pioneer'
