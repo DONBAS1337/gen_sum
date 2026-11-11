@@ -288,6 +288,10 @@ init 1001 python:
             renpy.notify(u'Операция не завершилась. Проверь доступ к папке сохранений и повтори её.')
             return False
 
+    def dg_random_housing():
+        store.dg_create_cabin = renpy.random.choice(dg_housing.AVAILABLE_CABINS)
+        store.dg_create_roommate = renpy.random.choice((None,) + dg_housing.ROOMMATES)
+
     def dg_rpg_start(name, age, days, history, source, pronouns, adult=False, cabin="cabin_01", roommate="mt"):
         state = dg_rpg.new_game(name, age, days, history, source, pronouns, cabin, roommate, camp_life=True)
         if adult:
@@ -732,6 +736,15 @@ init 1001 python:
         # Only exact 12 canonical locations block manual BG generation.
         visual = visual or dg_rpg_visual_state()
         lighting_slot=dg_visual.light_slot(dg_rpg_state,visual)
+        if place in dg_housing.CABINS:
+            bases = ["bg ext_houses_day"]
+            if place == "cabin_13":
+                bases.insert(0, "bg ext_house_of_un_day")
+            for base in bases:
+                for name in dg_visual.background_names(base, lighting_slot):
+                    if name in dg_runtime.original_images:
+                        return name
+            return None
         if place=='music' and visual.get('music_inside',False):
             for room_name in dg_visual.background_names('bg int_musclub_day',lighting_slot):
                 if room_name in dg_runtime.original_images:return room_name
@@ -766,7 +779,7 @@ init 1001 python:
         native = dg_rpg_bg_native(place)
         return dg_art.resolve(dg_rpg_root(), dg_rpg_state["id"],
                               "background", dg_visual.background_key(place,dg_rpg_visual_state()["slot"]), native,
-                              getattr(persistent,"dg_prefer_generated",True))
+                              place not in dg_housing.CABINS and getattr(persistent,"dg_prefer_generated",True))
 
     def dg_rpg_bg():
         place = dg_rpg_visual_state()["place"]
@@ -3502,12 +3515,12 @@ screen dg_rpg_housing_picker:
         vbox:
             spacing 20
             text u"Твой домик и сосед" style "dg_note_heading"
-            text u"Выбери номер на классической карте. Сосед будет возвращаться сюда ночью, если не занят сюжетной встречей." style "dg_note_body" size 26 xmaximum 1500
+            text u"Домик №13 занят Леной и Мику. Если выберешь Мику соседкой, вы будете жить в другом домике." style "dg_note_body" size 26 xmaximum 1500
             text u"ДОМИК" style "dg_note_hint"
             grid 8 4:
                 spacing 10
                 for cabin in dg_housing.CABINS:
-                    textbutton (u"№%d" % int(cabin.split("_")[1])) style "dg_camp_nav" xsize 160 ysize 48 selected dg_create_cabin==cabin action SetVariable("dg_create_cabin",cabin)
+                    textbutton (u"№%d" % int(cabin.split("_")[1])) style "dg_camp_nav" xsize 160 ysize 48 selected dg_create_cabin==cabin sensitive cabin in dg_housing.AVAILABLE_CABINS action SetVariable("dg_create_cabin",cabin)
                 null
             text u"СОСЕД" style "dg_note_hint"
             grid 3 4:
@@ -3515,7 +3528,10 @@ screen dg_rpg_housing_picker:
                 for roommate in (None,)+dg_housing.ROOMMATES:
                     textbutton dg_rpg.NPC_NAMES.get(roommate,u"Жить одному") style "dg_camp_nav" xsize 460 ysize 48 selected dg_create_roommate==roommate action SetVariable("dg_create_roommate",roommate)
                 null
-            textbutton u"Готово" style "dg_camp_action" action Return(False)
+            hbox:
+                spacing 20
+                textbutton u"Случайное заселение" style "dg_camp_nav" action Function(dg_random_housing)
+                textbutton u"Готово" style "dg_camp_action" action Return(False)
     key "K_ESCAPE" action Return(False)
 
 

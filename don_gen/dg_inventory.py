@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 import copy
 CATALOG={
- 'shirt':{'title':u'Личная рубашка с контрастным швом','source':None,'count':0,'loanable':True},
+ 'shirt':{'title':u'Личная рубашка','source':None,'count':0,'loanable':True},
  'notes':{'title':u'Ноты общего номера','source':'library','count':1},
  'parts':{'title':u'Детали радиооборудования','source':'warehouse','count':1},
  'paper':{'title':u'Бумага','source':'storage','count':4},

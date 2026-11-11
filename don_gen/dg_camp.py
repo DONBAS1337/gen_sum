@@ -51,10 +51,7 @@ def record_contact(state,who,trust=True):
             relation['trust']=min(20,relation['trust']+1)
     person['count']+=1
     __import__('dg_inventory').ensure(state)
-    if state.get('projects',{}).get('inventory',{}).get('shirt',0)>0:
-        subject='shirt:'+state['id']
-        if not __import__('dg_epistemic').knows(state,who,'recognition',subject):
-            __import__('dg_epistemic').record(state,'recognition',subject,{'item':'shirt','marker':u'контрастный шов','owner':'hero'},[who,'hero'])
+
 
 def stage(state,who):
     if who not in state['met']:return 'stranger'
@@ -121,6 +118,14 @@ def cards(state):
     if c['arrival']<4:
         place,who,title,story=ARRIVAL[c['arrival']]
         if c['arrival']==0 and who in state['met']:story=u'Славя продолжает знакомство с лагерем и объясняет дорогу к вожатой; повторно представляться не нужно.'
+        if place == 'home':
+            housing = __import__('dg_housing')
+            roommate = state['housing']['roommate']
+            if roommate in housing.FEMALE_ROOMMATES:
+                name = __import__('dg_rpg').NPC_NAMES[roommate]
+                story += (u' Ольга Дмитриевна сообщает, что соседка героя — %s. '
+                          u'Она говорит: «Ситуация такая: больше некуда. Поэтому терпим, товарищ пионер». '
+                          u'Это вынужденное размещение, а не признак знакомства или отношений.' % name)
         add('arrival',title,state['housing']['cabin'] if place=='home' else place,who,15,story)
     if state['day']>=2 and c['arrival']==4 and not c['tour_issued']:
         add('tour_issue',u'Получить обходной лист',state['housing']['cabin'],'mt',10,u'Вожатая выдаёт обходной лист: медпункт, библиотека, технический и музыкальный кружки, спортплощадка. Кружок выбирает сам игрок после знакомства с местами.')

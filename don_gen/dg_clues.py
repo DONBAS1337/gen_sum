@@ -54,7 +54,7 @@ def refresh(state):
             if not __import__('dg_epistemic').knows(state,observer,'recognition',subject):continue
             if any(r.get('loan')==loan['id'] for r in c['history']):continue
             c['active']={'who':observer,'cause':'garment','holder':loan['holder'],'loan':loan['id'],'day':state['day'],
-                         'observation':u'У банных раздевалок ты увидел неразличимую пару близко друг к другу и узнал рубашку героя по контрастному шву. Личность владельца одежды в этот момент не установлена. О передаче рубашки тебе неизвестно. Это повод спросить, а не доказательство измены или секса.'}
+                         'observation':u'У банных раздевалок ты увидел неразличимую пару близко друг к другу и узнал знакомую рубашку героя. Личность владельца одежды в этот момент не установлена. О передаче рубашки тебе неизвестно. Это повод спросить, а не доказательство измены или секса.'}
             c['last_day']=state['day'];ensure(state)
             __import__('dg_epistemic').record(state,'meeting','bath:%d:%s'%(state['day'],loan['holder']),{'pair':[loan['holder'],close[0]],'place':'showers','kind':'private_meeting'},[loan['holder'],close[0]])
             __import__('dg_epistemic').believe(state,observer,'case:%d'%state['day'],u'Возможно, герой был участником неоднозначной встречи',40)

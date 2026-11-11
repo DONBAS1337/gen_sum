@@ -28,15 +28,38 @@ class HousingTests(unittest.TestCase):
     def test_alone_old_saves_and_bad_choices(self):
         state=dg_rpg.new_game('Герой',23,30,roommate=None)
         state['slot']=3
-        self.assertIsNone(dg_housing.location(state,'mi'))
+        self.assertEqual(dg_housing.location(state,'mi'),'cabin_13')
+        self.assertEqual(dg_housing.location(state,'un'),'cabin_13')
         state.pop('housing')
         before=copy.deepcopy(state)
         dg_rpg.validate(state)
         self.assertNotIn('housing',state)
-        for cabin,who in [('cabin_32','mi'),('cabin_01','uv'),('../bad','mt')]:
+        for cabin,who in [('cabin_13','mi'),('cabin_32','mi'),('cabin_01','uv'),('../bad','mt')]:
             with self.assertRaises(ValueError): dg_housing.assign(state,cabin,who)
         state['housing']={'cabin':'bad','roommate':'mi'}
         with self.assertRaises(ValueError): dg_rpg.validate(state)
+
+    def test_miku_arrival_explains_room_shortage_without_inventing_familiarity(self):
+        import dg_camp, dg_epistemic, dg_consistency
+        state = dg_rpg.new_game('Герой', 23, 30, cabin='cabin_23', roommate='mi', camp_life=True)
+        dg_camp.act(state, 'arrival')
+        dg_rpg.move(state, 'cabin_23')
+        result = dg_camp.act(state, 'arrival')
+        self.assertIn('больше некуда', result['text'])
+        self.assertIn('Мику', result['text'])
+        self.assertNotIn('mi', state['met'])
+        self.assertFalse(dg_epistemic.knows(state, 'mt', 'recognition', 'shirt:'+state['id']))
+        subject = 'shirt:'+state['id']
+        dg_epistemic.record(state, 'recognition', subject, {'marker':'контрастный шов'}, ['mt'])
+        prompt = dg_consistency.narrator_context({'knowledge': dg_epistemic.recall(state, 'mt')})
+        self.assertNotIn('контрастный шов', json.dumps(prompt, ensure_ascii=False))
+
+    def test_old_save_can_still_load_reserved_cabin(self):
+        state = dg_rpg.new_game('Герой', 23, 30)
+        state['housing']['cabin'] = 'cabin_13'
+        with tempfile.TemporaryDirectory() as root:
+            dg_rpg.save(root, state)
+            self.assertEqual(dg_rpg.load(root, state['id'])['housing']['cabin'], 'cabin_13')
 
 class VisualTimeTests(unittest.TestCase):
     def test_day_evening_night_have_separate_generated_files(self):

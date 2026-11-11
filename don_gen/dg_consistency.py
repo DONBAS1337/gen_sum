@@ -49,6 +49,11 @@ def narrator_context(context):
         for key,child in list(value.items()):
             if key=='inventory' and isinstance(child,dict) and 'world' in child:
                 child['world']={};child['people']=dict((k,v) for k,v in child.get('people',{}).items() if k in codes)
+            elif key == 'identities' and isinstance(child, dict):
+                value[key] = dict((k, v) for k, v in child.items() if not k.startswith('shirt:'))
+            elif key == 'facts' and isinstance(child, list):
+                value[key] = [row for row in child if not (isinstance(row, dict)
+                    and row.get('kind') == 'recognition' and row.get('subject', '').startswith('shirt:'))]
             elif key=='npc_inventory' and isinstance(child,dict):value[key]=dict((k,v) for k,v in child.items() if k in codes)
             elif key=='npc_agendas' and isinstance(child,dict):
                 child['people']=dict((k,v) for k,v in child.get('people',{}).items() if k in codes)
@@ -64,6 +69,8 @@ def narrator_context(context):
 def generate(client,instructions,prompt,present,model=None,effort=None,fast_mode=False):
     import dg_stage
     context=json.loads(prompt)
+    instructions += (u' Не используй рубашку героя или её шов как примету, повод для знакомства или повторяющийся образ. '
+                     u'Упоминай одежду только когда она непосредственно важна для действия игрока или подтверждённой сцены с вещью.')
     repair=u''
     working_prompt=json.dumps(narrator_context(context),ensure_ascii=False,sort_keys=True)
     for attempt in range(2):

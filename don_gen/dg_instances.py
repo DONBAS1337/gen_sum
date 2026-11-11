@@ -12,7 +12,7 @@ def ensure(state):
             number=0
             for actor,bag in sorted(bags.items()):
                 for n in range(bag.get(item,0)):
-                    number+=1;rows.append({'id':('%s:%s'%(item,state['id'])) if item=='shirt' else '%s:%d'%(item,number),'item':item,'owner':actor,'holder':actor,'marker':u'контрастный шов' if item=='shirt' else spec['title']+u' №%d'%number,'custody':[]})
+                    number+=1;rows.append({'id':('%s:%s'%(item,state['id'])) if item=='shirt' else '%s:%d'%(item,number),'item':item,'owner':actor,'holder':actor,'marker':spec['title']+u' №%d'%number,'custody':[]})
             for place,stock in sorted(world['stock'].items()):
                 for n in range(stock.get(item,0)):
                     number+=1;rows.append({'id':'%s:%d'%(item,number),'item':item,'owner':'camp','holder':'stock:'+place,'marker':spec['title']+u' №%d'%number,'custody':[]})

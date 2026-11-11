@@ -808,6 +808,20 @@ init 1100 python:
                 renpy.display.render.invalidate(displayable)
                 scroll_render=renpy.display.render.render(displayable,1920,1080,.6,.6)
                 pygame.image.save(renpy.display.draw.render_to_texture(scroll_render,True),os.path.join(config.basedir,'pacing-scrolled.png'))
+            if filename == "housing":
+                for _ in range(30):
+                    dg_random_housing()
+                    if store.dg_create_cabin not in dg_housing.AVAILABLE_CABINS:
+                        raise ValueError("Random housing chose an occupied cabin")
+                    if store.dg_create_roommate not in (None,) + dg_housing.ROOMMATES:
+                        raise ValueError("Random housing chose an invalid roommate")
+                print("NATIVE_RANDOM_HOUSING_OK")
+            if filename == "hub" and vanilla_root and store.dg_rpg_state["place"] == "cabin_13":
+                for slot in range(4):
+                    backdrop = dg_rpg_bg_native("cabin_13", dict(store.dg_rpg_state, slot=slot))
+                    if not backdrop or not backdrop.startswith("bg ext_house_of_un_"):
+                        raise ValueError("Cabin 13 did not resolve to Lena's cabin exterior")
+                print("NATIVE_CABIN_13_BG_OK all time slots")
             if filename == "hub" and not dg_rpg.at_place(store.dg_rpg_state):
                 buttons = []
                 displayable.visit_all(lambda d: buttons.append(d) if isinstance(d, renpy.display.behavior.Button) else None)
