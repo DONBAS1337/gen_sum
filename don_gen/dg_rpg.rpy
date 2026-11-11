@@ -160,9 +160,15 @@ init 1001 python:
             screen.scope["wait_state"]=state
             renpy.restart_interaction()
 
-    def dg_rpg_run(mode,task,*args):
+    def dg_rpg_run(mode, task, *args):
+        if dg_runtime.app.busy:
+            dg_rpg_wait_screen(mode)
+        if dg_runtime.app.start(task, *args) is None:
+            raise RuntimeError("The requested RPG background task did not start")
+        return dg_rpg_wait_screen(mode)
+
+    def dg_rpg_wait_screen(mode):
         import time
-        dg_runtime.app.start(task,*args)
         renpy.suspend_rollback(True)
         try:
             store.dg_wait_started=time.time()

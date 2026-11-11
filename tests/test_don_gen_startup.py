@@ -33,16 +33,40 @@ class StartupRegressions(unittest.TestCase):
             self.assertFalse(dg_core.valid_runtime_chapter(bad))
 
     def test_busy_request_waits_then_starts_its_own_task(self):
-        src=(ROOT/'don_gen'/'don_gen.rpy').read_text(encoding='utf-8')
-        block=textwrap.dedent(src[src.index('    def dg_run('):src.index('    def dg_valid_chapter(')])
-        class App:
-            busy=True
-            def start(self,task,*args):
-                self.calls.append((task,args));return object()
-        class Runtime:app=App()
-        calls=[];Runtime.app.calls=calls
-        def wait(mode):calls.append(('wait',mode));Runtime.app.busy=False
-        ns={'dg_runtime':Runtime,'dg_wait_screen':wait}
-        exec(compile(block,'dg_run','exec'),ns)
-        ns['dg_run']('chapter','new-task',1)
-        self.assertEqual(calls,[('wait','chapter'),('new-task',(1,)),('wait','chapter')])
+        cases = (
+            ('don_gen.rpy', 'dg_run', 'dg_wait_screen', 'dg_valid_chapter'),
+            ('dg_rpg.rpy', 'dg_rpg_run', 'dg_rpg_wait_screen', 'dg_rpg_wait_screen'),
+        )
+        for filename, runner, waiter, next_definition in cases:
+            with self.subTest(filename=filename):
+                src = (ROOT / 'don_gen' / filename).read_text(encoding='utf-8')
+                start = src.index('    def ' + runner + '(')
+                end = src.index('    def ' + next_definition + '(', start + 1)
+                block = textwrap.dedent(src[start:end])
+                calls = []
+
+                class App:
+                    busy = True
+
+                    def start(self, task, *args):
+                        if self.busy:
+                            return None
+                        calls.append((task, args))
+                        self.busy = True
+                        return object()
+
+                app = App()
+
+                class Runtime:
+                    pass
+
+                Runtime.app = app
+
+                def wait(mode):
+                    calls.append(('wait', mode))
+                    app.busy = False
+
+                namespace = {'dg_runtime': Runtime, waiter: wait}
+                exec(compile(block, runner, 'exec'), namespace)
+                namespace[runner]('chapter', 'new-task', 1)
+                self.assertEqual(calls, [('wait', 'chapter'), ('new-task', (1,)), ('wait', 'chapter')])

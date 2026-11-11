@@ -31,8 +31,10 @@ class SayIsolation(unittest.TestCase):
 
     def test_generation_restores_rollback_guard_after_failure(self):
         api=SimpleNamespace(suspend_rollback=Mock(),call_screen=Mock(side_effect=RuntimeError('test')))
-        app=SimpleNamespace(start=Mock());store=SimpleNamespace()
-        run=function('dg_rpg_run',dict(renpy=api,store=store,dg_runtime=SimpleNamespace(app=app)))
+        app=SimpleNamespace(busy=False, start=Mock())
+        namespace=dict(renpy=api,store=SimpleNamespace(),dg_runtime=SimpleNamespace(app=app))
+        function('dg_rpg_wait_screen',namespace)
+        run=function('dg_rpg_run',namespace)
         task=object()
         with self.assertRaises(RuntimeError):run('chapter',task,'first','second')
         app.start.assert_called_once_with(task,'first','second')
