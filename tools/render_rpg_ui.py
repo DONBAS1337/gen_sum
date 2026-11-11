@@ -808,6 +808,13 @@ init 1100 python:
                 renpy.display.render.invalidate(displayable)
                 scroll_render=renpy.display.render.render(displayable,1920,1080,.6,.6)
                 pygame.image.save(renpy.display.draw.render_to_texture(scroll_render,True),os.path.join(config.basedir,'pacing-scrolled.png'))
+            if filename == "hub" and not dg_rpg.at_place(store.dg_rpg_state):
+                buttons = []
+                displayable.visit_all(lambda d: buttons.append(d) if isinstance(d, renpy.display.behavior.Button) else None)
+                commands = [renpy.display.behavior.run(d.clicked) for d in buttons if isinstance(d.clicked, Return)]
+                if ("hybrid", None) not in commands:
+                    raise ValueError("Empty location does not open standalone action input")
+                print("NATIVE_SOLO_ACTION_OK empty location returns free action with no NPC")
             if filename == "inventory":
                 import dg_inventory
                 buttons = []

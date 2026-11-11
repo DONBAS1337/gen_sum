@@ -1813,8 +1813,10 @@ screen dg_rpg_hub(initial_show=True):
                     textbutton u"Темы" style "dg_camp_nav" action Return(("talk",selected_who))
                 if dg_rpg_state["energy"]>=6:
                     textbutton u"Своя реплика" style "dg_camp_nav" action Return(("hybrid_npc",selected_who))
+            if shift_open:
+                textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid",None))
             if shift_open and dg_rpg_state["energy"]>=4:
-                textbutton u"Действия" style "dg_camp_action" action Return(("context",selected_who))
+                textbutton u"Действия" style "dg_camp_nav" action Return(("context",selected_who))
             if shift_open and dg_camp.enabled(dg_rpg_state):
                 textbutton u"Распорядок" style "dg_camp_nav" action Return(("camp",None))
             if shift_open and any(row["ready"] for row in dg_projects.available(dg_rpg_state)):
@@ -2015,7 +2017,10 @@ screen dg_rpg_hybrid_input(mode, who=None):
                 text (u"Что ты скажешь?" if mode == "npc" else u"Как ты поступишь?") style "dg_note_heading"
                 if who is not None:
                     text (u"Собеседник: " + dg_rpg.NPC_NAMES[who]) style "dg_note_body"
-                text u"Опиши один поступок или реплику. Затем можно проверить ход и продолжить сцену с ИИ." style "dg_note_body"
+                if mode == "free":
+                    text u"Опиши, что ты делаешь сейчас. Можно описать несколько связанных шагов. Перед подтверждением игра покажет ближайший шаг и его последствия." style "dg_note_body"
+                else:
+                    text u"Опиши один поступок или реплику. Затем можно проверить ход и продолжить сцену с ИИ." style "dg_note_body"
                 frame:
                     background Solid("#071c17d9") padding (24, 20) xsize 1380 ysize 430
                     viewport:
@@ -2034,7 +2039,7 @@ screen dg_rpg_hybrid_input(mode, who=None):
                             xmaximum 1280
                             default_focus True
                 text (u"%d / 4000 символов" % len(action_text)) style "dg_note_hint"
-                text u"Один поступок или одна реплика. Текст сохранится, если вернуться назад." style "dg_note_hint"
+                text u"Текст сохранится, если вернуться назад." style "dg_note_hint"
             hbox:
                 ypos 756 spacing 18
                 textbutton u"Продолжить" style "dg_note_main" xsize 430 sensitive bool(action_text.strip()) action [SetVariable("dg_rpg_action_draft", action_text), Return(("submit", action_text.strip()))]
