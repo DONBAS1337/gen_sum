@@ -412,6 +412,8 @@ init 1001 python:
         elif action == "hybrid":
             hybrid_context=dg_hybrid.scene_context(state,arg[0])
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
+            if arg[0]["mode"] == "free":
+                store.dg_rpg_action_draft = u". ".join(store.dg_rpg_hybrid_entry.get("deferred", []))
             if arg[0]["result"].get("kind") in ("risk", "door") or arg[0]["result"].get("private"):store.dg_rpg_scene_context=hybrid_context
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
@@ -3419,7 +3421,7 @@ label dg_rpg_hybrid_entry:
     $ logging.getLogger("don_gen").info("Hybrid input submitted mode=%s chars=%d",dg_rpg_hybrid_mode,len(dg_rpg_hybrid_action_text))
     $ dg_rpg_interpretation = None
     $ dg_known_cabin_door = dg_rpg_hybrid_mode == "free" and dg_housing.door_intent(dg_rpg_state, dg_rpg_hybrid_action_text) is not None
-    if not dg_known_cabin_door and dg_intent.needs_ai(dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode):
+    if not dg_known_cabin_door and not (dg_rpg_hybrid_mode == "free" and dg_inventory.parse(dg_rpg_state, dg_rpg_hybrid_action_text)) and dg_intent.needs_ai(dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode):
         if not dg_runtime.app.client.authenticated():
             call dg_connect from dg_return_dg_connect_5
             if not dg_runtime.app.client.authenticated():
@@ -3460,8 +3462,8 @@ label dg_rpg_hybrid_review_label:
             jump dg_rpg_hybrid_review_label
         $ dg_rpg_hybrid_scene = dg_runtime.app.result
         $ dg_rpg_apply("hybrid", (dg_rpg_hybrid_plan, dg_rpg_hybrid_scene))
-        $ dg_rpg_action_draft = u""
         if dg_rpg_hybrid_plan.get("mode")=="npc":
+            $ dg_rpg_action_draft = u""
             call dg_rpg_vn_text(dg_rpg_hybrid_entry["scene"] or dg_rpg_hybrid_entry["result"],dg_rpg_hybrid_plan.get("who")) from dg_return_hybrid_conversation_text
             if _return=="__interrupted__":
                 jump dg_rpg_loop

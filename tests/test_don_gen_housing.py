@@ -75,6 +75,29 @@ class HousingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             dg_housing.door(state, True)
 
+    def test_cabin_stash_keeps_item_identity_across_save_and_reload(self):
+        import dg_inventory
+        state = dg_rpg.new_game('Герой', 23, 30, cabin='cabin_23', roommate=None, camp_life=True)
+        dg_rpg.move(state, 'cabin_23')
+        before = copy.deepcopy(state)
+        with self.assertRaises(ValueError):
+            dg_inventory.act(state, 'stash', 'shirt')
+        self.assertEqual(state, before)
+        dg_housing.door(state, True)
+        item_id = next(row['id'] for row in dg_inventory.ensure(state)['instances'] if row['item'] == 'shirt')
+        plan = dg_hybrid.preview(state, 'Спрятать: Личная рубашка')
+        self.assertEqual(plan['status'], 'ready')
+        dg_hybrid.commit(state, plan)
+        self.assertEqual(dg_inventory.bag(state, 'hero')['shirt'], 0)
+        self.assertEqual(state['inventory_world']['cabin_stash']['shirt'], 1)
+        with tempfile.TemporaryDirectory() as root:
+            dg_rpg.save(root, state)
+            state = dg_rpg.load(root, state['id'])
+        dg_inventory.act(state, 'retrieve', 'shirt')
+        item = next(row for row in dg_inventory.ensure(state)['instances'] if row['item'] == 'shirt')
+        self.assertEqual((item['id'], item['owner'], item['holder']), (item_id, 'hero', 'hero'))
+        self.assertEqual(item['custody'][-1]['witnesses'], ['hero'])
+
 class VisualTimeTests(unittest.TestCase):
     def test_day_evening_night_have_separate_generated_files(self):
         state=dg_rpg.new_game('Герой',23,30)

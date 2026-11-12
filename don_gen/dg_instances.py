@@ -24,10 +24,16 @@ def ensure(state):
 
 def moved(state,operation,item,origin,target):
     import dg_inventory,dg_rpg,dg_clock,dg_epistemic
-    if not dg_inventory.CATALOG[item].get('loanable') or operation not in ('take','transfer'):return None
+    if not dg_inventory.CATALOG[item].get('loanable') or operation not in ('take','transfer','stash','retrieve'):return None
     rows=ensure(state);source='stock:'+origin if operation=='take' else origin
     instance=next((r for r in rows if r['item']==item and r['holder']==source),None)
     if not instance:raise ValueError('Physical item instance is missing')
+    if operation in ('stash', 'retrieve'):
+        instance['holder'] = target
+        instance['custody'].append({'at': dg_clock.absolute(state), 'origin': origin,
+                                    'target': target, 'witnesses': ['hero']})
+        instance['custody'] = instance['custody'][-32:]
+        return instance['id']
     place=origin if origin in dg_rpg.PLACE_NAMES else state['place'] if origin=='hero' else dg_rpg.where_is(state,origin)
     witnesses=[w for w,n in dg_rpg.at_place(state,place)]
     if state['place']==place:witnesses.append('hero')
@@ -48,4 +54,4 @@ def validate(state):
         if not isinstance(r,dict) or r.get('item') not in dg_inventory.CATALOG or not isinstance(r.get('id'),(str,type(u''))) or len(r['id'])>100 or r['id'] in keys or not isinstance(r.get('marker'),(str,type(u''))) or len(r['marker'])>200 or not isinstance(r.get('custody'),list) or len(r['custody'])>32:raise ValueError('Invalid physical item')
         keys.append(r['id'])
         for who in (r.get('owner'),r.get('holder')):
-            if who not in ('camp','hero')+tuple(dg_rpg.NPC_NAMES) and who not in ['stock:'+p for p in dg_rpg.PLACE_NAMES]:raise ValueError('Invalid custody actor')
+            if who not in ('camp','hero','cabin_stash')+tuple(dg_rpg.NPC_NAMES) and who not in ['stock:'+p for p in dg_rpg.PLACE_NAMES]:raise ValueError('Invalid custody actor')

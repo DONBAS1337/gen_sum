@@ -26,7 +26,7 @@ def command(value):
     if not isinstance(value, (tuple, list)) or len(value) != 3:
         return None
     operation, item, who = value
-    if operation not in ('take','give','lend','return','use','craft'):
+    if operation not in ('take','give','lend','return','use','craft','stash','retrieve'):
         return None
     if not isinstance(item, (str, type(u''))) or item not in CATALOG:
         return None
@@ -103,14 +103,34 @@ def report(state):
 
 def act(state,operation,item,who=None):
     import dg_rpg,dg_projects
-    if item not in CATALOG or operation not in ('take','give','lend','return','use','craft'):raise ValueError(u'Неизвестная операция с предметом.')
+    if item not in CATALOG or operation not in ('take','give','lend','return','use','craft','stash','retrieve'):raise ValueError(u'Неизвестная операция с предметом.')
     if state['finished']:raise ValueError(u'Смена завершена.')
     if who is not None and (who not in dg_rpg.NPC_NAMES or dg_rpg.where_is(state,who)!=state['place']):raise ValueError(u'Собеседника нет рядом.')
     # All mutation is prepared on a copy; failure leaves even a raw caller unchanged.
     shadow=copy.deepcopy(state);world=ensure(shadow);pocket=bag(shadow,'hero')
     cost=6 if operation=='craft' else 3
     if shadow['energy']<cost:raise ValueError(u'Недостаточно сил.')
-    if operation=='take':
+    if operation in ('stash', 'retrieve'):
+        import dg_housing
+        if who is not None or not dg_housing.at_own_cabin(shadow) or not shadow.get('cabin_inside'):
+            raise ValueError(u'Тайник доступен внутри своего домика.')
+        stash = world.setdefault('cabin_stash', {})
+        if operation == 'stash':
+            if free_count(shadow, 'hero', item) < 1 or stash.get(item, 0) >= 3:
+                raise ValueError(u'Нет свободного предмета или места в тайнике.')
+            pocket[item] -= 1
+            stash[item] = stash.get(item, 0) + 1
+            log(shadow, 'stash', item, 'hero', 'cabin_stash')
+            text = u'Ты убрал в тайник: '
+        else:
+            if stash.get(item, 0) < 1 or pocket.get(item, 0) >= 3:
+                raise ValueError(u'Предмета нет в тайнике или сумка полна.')
+            stash[item] -= 1
+            pocket[item] = pocket.get(item, 0) + 1
+            log(shadow, 'retrieve', item, 'cabin_stash', 'hero')
+            text = u'Ты забрал из тайника: '
+        text += CATALOG[item]['title'] + u'.'
+    elif operation=='take':
         take(shadow,'hero',item,shadow['place'])
         dg_projects.claim_resource(shadow,'hero',item,shadow['place'])
         text=u'Ты взял предмет из доступного запаса: '+CATALOG[item]['title']+u'.'
@@ -171,6 +191,10 @@ def validate(state):
     if world is None:return
     import dg_rpg
     if not isinstance(world,dict) or not isinstance(world.get('stock'),dict) or len(world['stock'])>70 or not isinstance(world.get('loans'),list) or len(world['loans'])>48 or not isinstance(world.get('ledger'),list) or len(world['ledger'])>96 or not isinstance(world.get('sequence'),int) or not 0<=world['sequence']<=1000000:raise ValueError('Invalid inventory world')
+    stash = world.get('cabin_stash', {})
+    if not isinstance(stash, dict) or any(item not in CATALOG or type(count) is not int
+                                          or not 0 <= count <= 3 for item, count in stash.items()):
+        raise ValueError('Invalid cabin stash')
     for place,items in world['stock'].items():
         if place not in dg_rpg.PLACE_NAMES or not isinstance(items,dict) or any(item not in CATALOG or not isinstance(n,int) or isinstance(n,bool) or not 0<=n<=20 for item,n in items.items()):raise ValueError('Invalid stock')
     for loan in world['loans']:
@@ -178,7 +202,7 @@ def validate(state):
         if not isinstance(loan.get('witnesses',[]),list) or len(loan.get('witnesses',[]))>11 or any(w not in dg_rpg.NPC_NAMES for w in loan.get('witnesses',[])):raise ValueError('Invalid loan witnesses')
         if not isinstance(loan,dict) or loan.get('item') not in CATALOG or not CATALOG[loan['item']].get('loanable') or loan.get('owner')!='hero' or loan.get('holder') not in dg_rpg.NPC_NAMES or loan.get('status') not in ('open','returned') or not isinstance(loan.get('deadline'),int) or not 1<=loan['deadline']<=50000:raise ValueError('Invalid loan')
     for row in world['ledger']:
-        if not isinstance(row,dict) or row.get('item') not in CATALOG or row.get('operation') not in ('take','transfer','use','craft','commit','restock') or not isinstance(row.get('id'),int) or not isinstance(row.get('day'),int) or row.get('slot') not in (0,1,2,3):raise ValueError('Invalid inventory ledger')
+        if not isinstance(row,dict) or row.get('item') not in CATALOG or row.get('operation') not in ('take','transfer','use','craft','commit','restock','stash','retrieve') or not isinstance(row.get('id'),int) or not isinstance(row.get('day'),int) or row.get('slot') not in (0,1,2,3):raise ValueError('Invalid inventory ledger')
 
 
 def actions(state):
@@ -186,6 +210,14 @@ def actions(state):
     rows=[];pocket=state.get('projects',{}).get('inventory',{});place=state['place'];people=dg_rpg.at_place(state)
     if state['finished']:return rows
     if state['energy']>=3:
+        import dg_housing
+        if dg_housing.at_own_cabin(state) and state.get('cabin_inside'):
+            stash = state.get('inventory_world', {}).get('cabin_stash', {})
+            for item in sorted(CATALOG):
+                if free_count(state, 'hero', item) and stash.get(item, 0) < 3:
+                    rows.append(('stash', item, None, u'Спрятать: ' + CATALOG[item]['title']))
+                if stash.get(item, 0) and pocket.get(item, 0) < 3:
+                    rows.append(('retrieve', item, None, u'Забрать из тайника: ' + CATALOG[item]['title']))
         for item,n in sorted(stock_at(state,place).items()):
             if n and pocket.get(item,0)<3:rows.append(('take',item,None,u'Взять: '+CATALOG[item]['title']))
         for item,n in sorted(pocket.items()):

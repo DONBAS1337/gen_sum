@@ -691,7 +691,15 @@ init 1100 python:
         if os.environ.get("DG_UI_SCREEN") == "hidden":
             cases=[("hidden","dg_rpg_hub",{"initial_show":False})]
         if os.environ.get("DG_UI_SCREEN") == "inventory":
-            store.dg_rpg_state["place"]="library"
+            state = store.dg_rpg_state
+            if os.environ.get("DG_UI_PLACE") == state["housing"]["cabin"]:
+                import dg_inventory
+                state["place"] = state["housing"]["cabin"]
+                dg_housing.door(state, True)
+                dg_inventory.bag(state, "hero")["paper"] = 2
+                dg_inventory.act(state, "stash", "paper")
+            else:
+                state["place"] = "library"
             cases=[("inventory","dg_rpg_inventory",{})]
         if os.environ.get("DG_UI_SCREEN") == "project-review":
             value={'title':u'Лагерная стенгазета','item':'paper','recipient':'sl','work_place':'clubs','final_place':'square','theme':'council','participants':['sl','un']}
@@ -858,6 +866,11 @@ init 1100 python:
                 if False not in results or any(result is True for result in results):
                     raise ValueError("Inventory cancellation did not return False")
                 commands = [dg_inventory.command(result) for result in results if result is not False]
+                if store.dg_rpg_state.get("cabin_inside"):
+                    for operation in ("stash", "retrieve"):
+                        if (operation, "paper", None) not in commands:
+                            raise ValueError("Cabin inventory is missing " + operation)
+                    print("NATIVE_STASH_ACTIONS_OK")
                 if not commands or any(command is None for command in commands):
                     raise ValueError("Inventory buttons did not return valid commands")
                 escape = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=u'', repeat=False)

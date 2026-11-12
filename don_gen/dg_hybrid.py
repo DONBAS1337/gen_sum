@@ -151,6 +151,11 @@ def _simulate(state, action, mode, who, interpretation=None):
     if door is not None:
         return shadow,__import__('dg_visual').music_door(shadow,door)
     if interpretation is None and mode=='free':
+        inventory = __import__('dg_inventory')
+        row = inventory.parse(shadow, action)
+        if row is not None:
+            return shadow, inventory.act(shadow, *row[:3])
+
         object_action=__import__('dg_actions').parse(shadow,action)
         if object_action:
             try:return shadow,__import__('dg_actions').act(shadow,object_action['key'])
