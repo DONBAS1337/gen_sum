@@ -20,7 +20,9 @@ def needs_ai(text, mode):
 def request(state, text, mode, who):
     import dg_rpg
     context = {'meeting_calendar':{'day':state['day'],'minute':__import__('dg_clock').minute(state),'last_day':min(state['duration'],state['day']+7),'places':dict((p,dg_rpg.PLACE_NAMES[p]) for p in __import__('dg_commitments').MEETING_PLACES)},'object_actions':[{'caption':r['title'],'target':None} for r in __import__('dg_actions').available(state)],'commitment_actions':[{'caption':r['title'],'target':r['who']} for r in __import__('dg_commitments').options(state) if r['ready']], 'physical_state':__import__('dg_risk').report(state),'hero_profile':__import__('dg_hero').profile(state),'camp_actions':[{'caption':r['title'],'target':r['who']} for r in __import__('dg_camp').cards(state) if r['ready']], 'player_text':text, 'mode':mode, 'focus':who,
-               'place':state['place'], 'present':[code for code,name in dg_rpg.at_place(state)],
+               'place':state['place'],
+               'own_cabin':__import__('dg_housing').at_own_cabin(state),
+               'present':[code for code,name in dg_rpg.at_place(state)],
                'energy':state['energy'], 'weather':dg_world.weather(state)[0],
                'npc_goals':__import__('dg_agents').report(state),
                'project_steps':__import__('dg_projects').available(state),
@@ -35,6 +37,7 @@ def request(state, text, mode, who):
              u'affordance — конкретное действие с существующим объектом: выбери точный caption из object_actions. commitment — только явная договорённость о встрече или обещание конкретного дела, отмена или отчёт: точный caption из commitment_actions. Не превращай обещание в выполненную работу; не создавай приглашение из обычного приветствия. camp — выбери точный caption из camp_actions и его target: это позволяет выполнить доступное лагерное дело или шаг личной истории. risk — непосредственный физический поступок с крышей, деревом, плаванием или бегом; canonical сохраняет реальное намерение и опьянение, без объявления успеха. Не подменяй риск обычной тренировкой. '
              u'Выдели ровно ОДИН немедленный поступок; остальные части сохрани в deferred, максимум три. '
              u'В режиме free герой может действовать один. Для самостоятельного бытового жеста, осмотра или наблюдения без отдельной механики выбери observe с target=null. Отсутствие людей не требует уточнения, если действие обращено к месту или предмету. Если игрок описал последовательность, сохрани его ближайший осуществимый шаг, а остальные шаги в deferred. Не объявляй неподдерживаемое перемещение или изменение инвентаря выполненным. '
+             u'Когда own_cabin=true, для входа или выхода используй observe с canonical «Войти в свой домик» или «Выйти из домика» и target=null. Вещи и действия после входа остаются в deferred. '
              u'Обещать сделать — это talk/observe, а не уже выполнить обещание. '
              u'Условия проверь по контексту; не подменяй отрицание согласием. '
              u'Если несколько равноправных действий/неясная цель или действие не поддерживается, '

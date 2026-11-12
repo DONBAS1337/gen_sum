@@ -61,6 +61,20 @@ class HousingTests(unittest.TestCase):
             dg_rpg.save(root, state)
             self.assertEqual(dg_rpg.load(root, state['id'])['housing']['cabin'], 'cabin_13')
 
+    def test_enter_own_cabin_without_npc_and_exit_on_travel(self):
+        state = dg_rpg.new_game('Герой', 23, 30, cabin='cabin_23', roommate=None, camp_life=True)
+        dg_rpg.move(state, 'cabin_23')
+        plan = dg_hybrid.preview(state, 'Войти в свой домик')
+        self.assertEqual(plan['status'], 'ready')
+        self.assertTrue(dg_hybrid.scene_context(state, plan)['cabin_inside'])
+        self.assertFalse(state.get('cabin_inside', False))
+        dg_hybrid.commit(state, plan)
+        self.assertTrue(state['cabin_inside'])
+        dg_rpg.move(state, 'square')
+        self.assertNotIn('cabin_inside', state)
+        with self.assertRaises(ValueError):
+            dg_housing.door(state, True)
+
 class VisualTimeTests(unittest.TestCase):
     def test_day_evening_night_have_separate_generated_files(self):
         state=dg_rpg.new_game('Герой',23,30)

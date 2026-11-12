@@ -149,6 +149,8 @@ def set_source(state, source):
 
 
 def validate(state):
+    if type(state.get("cabin_inside", False)) is not bool:
+        raise ValueError("Invalid cabin room view")
     if type(state.get("music_inside",False)) is not bool:raise ValueError("Invalid music room view")
     if not isinstance(state, dict) or state.get("version") != 1:
         raise ValueError("Unsupported save format")
@@ -395,7 +397,9 @@ def move(state, place):
     if state["place"] != place and __import__('dg_clock').enabled(state):
         _tick(state,5)
         if state['finished']:return state
-    if state["place"]!=place:state.pop("music_inside",None)
+    if state["place"] != place:
+        state.pop("music_inside", None)
+        state.pop("cabin_inside", None)
     state["place"] = place
     state["visits"][place] = state["visits"].get(place, 0) + 1
     _check_quests(state)

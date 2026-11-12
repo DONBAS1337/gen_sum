@@ -515,6 +515,13 @@ init 1100 python:
                     elif counts['cache']!=3 or counts['say']!=9 or len(saved['dialogue_history'])!=1 or store.dg_rpg_pending_turn is not None:
                         raise ValueError('Three-page dialogue failed to complete: '+repr(counts))
                     print('SCRIPT_FLOW_OK modern='+str(modern)+' interrupted='+str(interrupted)+' counts='+repr(counts)+' returned_to_hub=True')
+                    if modern and not interrupted:
+                        store.dg_rpg_state = saved
+                        counts = {'hub':0,'say':0,'menu':0,'cache':0}
+                        api.call_in_new_context('dg_rpg_loop')
+                        if counts['cache'] != 2 or counts['say'] != 6 or counts['menu'] != 2:
+                            raise ValueError('Continuing a conversation repeated the opening: ' + repr(counts))
+                        print('SCRIPT_DIALOGUE_CONTINUATION_OK topics open without replaying introduction')
                 # The first scene of a fresh UI-created shift must happen before
                 # ordinary hub interaction, and commit only after narration.
                 interrupted=False
@@ -822,6 +829,20 @@ init 1100 python:
                     if not backdrop or not backdrop.startswith("bg ext_house_of_un_"):
                         raise ValueError("Cabin 13 did not resolve to Lena's cabin exterior")
                 print("NATIVE_CABIN_13_BG_OK all time slots")
+            if filename == "hub" and vanilla_root and store.dg_rpg_state["place"] == "cabin_01":
+                state = store.dg_rpg_state
+                for place, expected in (("cabin_01", "ext_house_of_mt"), ("cabin_13", "ext_house_of_un"), ("cabin_14", "ext_houses")):
+                    for slot in range(4):
+                        backdrop = dg_rpg_bg_native(place, dict(state, slot=slot))
+                        if not backdrop or not backdrop.startswith("bg " + expected + "_"):
+                            raise ValueError("Wrong cabin exterior: " + repr((place, slot, backdrop)))
+                state["housing"]["roommate"] = "mi"
+                dg_housing.door(state, True)
+                backdrop = dg_rpg_bg_native("cabin_01", state)
+                if not backdrop or not backdrop.startswith("bg int_house_of_un_"):
+                    raise ValueError("Miku cabin did not show an interior")
+                dg_housing.door(state, False)
+                print("NATIVE_CABINS_OK exteriors 01/13/14 and Miku interior")
             if filename == "hub" and not dg_rpg.at_place(store.dg_rpg_state):
                 buttons = []
                 displayable.visit_all(lambda d: buttons.append(d) if isinstance(d, renpy.display.behavior.Button) else None)

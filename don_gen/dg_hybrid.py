@@ -143,6 +143,10 @@ def _simulate(state, action, mode, who, interpretation=None):
     dg_rpg.validate(shadow)
     if shadow.get("finished"):
         return shadow, {"status":"unknown","text":u"Смена завершена; действия недоступны."}
+    housing = __import__('dg_housing')
+    cabin_door = housing.door_intent(shadow, action) if mode == 'free' else None
+    if cabin_door is not None:
+        return shadow, housing.door(shadow, cabin_door)
     door=__import__('dg_visual').door_intent(shadow,action)
     if door is not None:
         return shadow,__import__('dg_visual').music_door(shadow,door)
@@ -198,7 +202,9 @@ def _simulate(state, action, mode, who, interpretation=None):
         elif proposal['intent'] == 'talk':
             result = _neutral_talk(shadow, proposal['canonical'], proposal['target'])
         elif proposal['intent'] == 'observe':
-            result = _neutral_free_action(shadow, proposal['canonical'], mode)
+            cabin_door = housing.door_intent(shadow, proposal['canonical']) if mode == 'free' else None
+            result = (_neutral_free_action(shadow, proposal['canonical'], mode)
+                      if cabin_door is None else housing.door(shadow, cabin_door))
         else:
             shadow, result = _simulate(shadow, proposal['canonical'], 'world' if mode == 'world' else 'free', None)
         result['interpreted_as'] = proposal['canonical']
@@ -333,9 +339,10 @@ def preview(state, action, mode="free", who=None, topic=None, interpretation=Non
             "day":source["day"],"slot":source["slot"],"place":source["place"]}
 
 def scene_state(state,plan):
-    if plan.get('result',{}).get('kind')=='risk':
+    if plan.get('result',{}).get('kind') in ('risk', 'door'):
         after,result=_simulate(state,plan['action'],plan['mode'],plan.get('who'),plan.get('interpretation'))
-        if after['place']!=state['place']:return after
+        if plan['result']['kind'] == 'door' or after['place'] != state['place']:
+            return after
     return state
 
 
@@ -428,7 +435,7 @@ INSTRUCTIONS = (
     u"Не изменяй характер NPC, отношения и факты прошлых решений. Соблюдай character_contracts и knowledge каждого участника; чужие частные разговоры и примеры источника не являются его личными знаниями. "
     u"Оживи сцену через narrative_variation: уникальную цель, конфликт и детали "
     u"данного персонажа; для Мику учитывай отдельные профили 7ДЛ, DJ и классики. "
-    u"Продолжай с последней произнесённой реплики. Не начинай знакомство заново, если персонаж есть в met или уже разговаривал с героем. Не роняй повторно поднятые вещи и не возвращай обсуждение к уже полученному ответу. "
+    u"Продолжай с последней произнесённой реплики. При продолжении беседы начинай с новой реплики или реакции, без повторного описания места и подхода героя. Не начинай знакомство заново, если персонаж есть в met или уже разговаривал с героем. Не роняй повторно поднятые вещи и не возвращай обсуждение к уже полученному ответу. "
     u"Не повторяй сюжет предыдущей сцены, не превращай всех NPC в одинаковых собеседников. "
     u"При свободной реплике NPC покажи конкретный ответ собеседника, оставь инициативу игроку. "
     u"Дай живой диалог, реакции, обстановку, 160–350 слов на русском. "

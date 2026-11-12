@@ -318,9 +318,12 @@ init 1001 python:
         renpy.block_rollback()
 
     def dg_rpg_apply(action, arg=None):
-        if action == "music_door":
+        if action in ("music_door", "cabin_door"):
             state=dg_rpg.load(dg_rpg_root(),dg_rpg_state['id'])
-            dg_visual.music_door(state,arg)
+            if action == "cabin_door":
+                dg_housing.door(state, arg)
+            else:
+                dg_visual.music_door(state, arg)
             dg_rpg.save(dg_rpg_root(),state)
             store.dg_rpg_state=state
             store.dg_rpg_scene_context=dg_stage.freeze(state)
@@ -409,7 +412,7 @@ init 1001 python:
         elif action == "hybrid":
             hybrid_context=dg_hybrid.scene_context(state,arg[0])
             store.dg_rpg_hybrid_entry = dg_hybrid.commit(state, arg[0], arg[1])
-            if arg[0]["result"].get("kind")=="risk" or arg[0]["result"].get("private"):store.dg_rpg_scene_context=hybrid_context
+            if arg[0]["result"].get("kind") in ("risk", "door") or arg[0]["result"].get("private"):store.dg_rpg_scene_context=hybrid_context
         elif action == "adult_mode":
             dg_adult.set_enabled(state, arg, confirmed=bool(arg))
         elif action == "profile":
@@ -744,8 +747,17 @@ init 1001 python:
         lighting_slot=dg_visual.light_slot(dg_rpg_state,visual)
         if place in dg_housing.CABINS:
             bases = ["bg ext_houses_day"]
-            if place == "cabin_13":
+            if visual.get("cabin_inside") and place == dg_rpg_state.get("housing", {}).get("cabin"):
+                roommate = dg_rpg_state["housing"].get("roommate")
+                bases = ["bg int_house_of_un_day"]
+                if roommate in ("mi", "un", "sl", "dv", "us"):
+                    bases.insert(0, "bg int_house_of_%s_day" % ("un" if roommate == "mi" else roommate))
+                if roommate == "mt":
+                    bases.insert(0, "bg int_house_of_mt_day")
+            elif place == "cabin_13":
                 bases.insert(0, "bg ext_house_of_un_day")
+            elif place == "cabin_01":
+                bases.insert(0, "bg ext_house_of_mt_day")
             for base in bases:
                 for name in dg_visual.background_names(base, lighting_slot):
                     if name in dg_runtime.original_images:
@@ -1823,6 +1835,8 @@ screen dg_rpg_hub(initial_show=True):
             xalign .5 ypos 838 spacing 14
             if dg_conversation.rounds(dg_rpg_state) and shift_open:
                 textbutton (u"Завершить беседу" if dg_camp.enabled(dg_rpg_state) else u"Завершить беседу · %d/%d" % (dg_conversation.rounds(dg_rpg_state),dg_conversation.EXCHANGES)) style "dg_camp_nav" action Return(("end_conversation",None))
+            if shift_open and dg_housing.at_own_cabin(dg_rpg_state):
+                textbutton (u"Выйти на крыльцо" if dg_rpg_state.get("cabin_inside",False) else u"Войти в свой домик") style "dg_camp_nav" action Return(("cabin_door", not dg_rpg_state.get("cabin_inside",False)))
             if shift_open and dg_rpg_state['place']=='music':
                 textbutton (u"Выйти на крыльцо" if dg_rpg_state.get('music_inside',False) else u"Войти в музклуб") style "dg_camp_nav" action Return(("music_door",not dg_rpg_state.get('music_inside',False)))
             if intro_here and shift_open:
@@ -2943,13 +2957,14 @@ label dg_rpg_vn_dialogue(who, phase, topic_index=0, stance="support"):
         $ dg_rpg_vn_dlg = dg_dialogue.outcome(dg_rpg_state, who, topic_index, stance)
     $ dg_rpg_vn_dlg = dg_narrative.decorate_dialogue(dg_rpg_state,who,phase,dg_rpg_vn_dlg,topic_index,stance)
     $ dg_npc_situation_id = "%s:%d:%s:%d" % (who,topic_index,phase,dg_rpg_state["dialogue_counts"].get("%d:%s" % (dg_rpg_state["day"],who),0))
-    call dg_rpg_narrate("npc_"+phase,who,dg_npc_situation_id,dg_rpg_vn_dlg["text"],dg_rpg_vn_dlg.get("options")) from dg_return_dg_rpg_narrate_3
-    $ dg_rpg_vn_narrated = _return
-    if dg_rpg_vn_narrated is None:
-        return None
-    call dg_rpg_vn_text(dg_rpg_vn_narrated, who) from dg_return_dg_rpg_vn_text_3
-    if _return == "__interrupted__":
-        return None
+    if phase != "topics" or dg_rpg_state.get("dialogue_clock", {}).get("who") != who:
+        call dg_rpg_narrate("npc_"+phase,who,dg_npc_situation_id,dg_rpg_vn_dlg["text"],dg_rpg_vn_dlg.get("options")) from dg_return_dg_rpg_narrate_3
+        $ dg_rpg_vn_narrated = _return
+        if dg_rpg_vn_narrated is None:
+            return None
+        call dg_rpg_vn_text(dg_rpg_vn_narrated, who) from dg_return_dg_rpg_vn_text_3
+        if _return == "__interrupted__":
+            return None
     if phase == "result":
         return
     $ dg_rpg_vn_options = [(dg_literal(caption), key) for key, caption in dg_rpg_vn_dlg["options"]]
@@ -3083,8 +3098,8 @@ label dg_rpg_loop:
         call screen dg_rpg_controls(dg_initial_tab)
         $ dg_rpg_cmd, dg_rpg_value = dg_presentation.command(_return,"noop")
 label dg_rpg_dispatch:
-    if dg_rpg_cmd == "music_door":
-        $ dg_rpg_apply("music_door",dg_rpg_value)
+    if dg_rpg_cmd in ("music_door", "cabin_door"):
+        $ dg_rpg_apply(dg_rpg_cmd,dg_rpg_value)
         jump dg_rpg_loop
     if dg_rpg_cmd == "pacing":
         $ dg_rpg_state.setdefault('pacing',{})[dg_rpg_value[0]]=dg_rpg_value[1]
@@ -3403,7 +3418,8 @@ label dg_rpg_hybrid_entry:
     $ dg_rpg_hybrid_action_text = dg_rpg_hybrid_submission[1]
     $ logging.getLogger("don_gen").info("Hybrid input submitted mode=%s chars=%d",dg_rpg_hybrid_mode,len(dg_rpg_hybrid_action_text))
     $ dg_rpg_interpretation = None
-    if dg_intent.needs_ai(dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode):
+    $ dg_known_cabin_door = dg_rpg_hybrid_mode == "free" and dg_housing.door_intent(dg_rpg_state, dg_rpg_hybrid_action_text) is not None
+    if not dg_known_cabin_door and dg_intent.needs_ai(dg_rpg_hybrid_action_text, dg_rpg_hybrid_mode):
         if not dg_runtime.app.client.authenticated():
             call dg_connect from dg_return_dg_connect_5
             if not dg_runtime.app.client.authenticated():
