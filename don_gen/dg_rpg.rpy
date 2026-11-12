@@ -298,8 +298,8 @@ init 1001 python:
         store.dg_create_cabin = renpy.random.choice(dg_housing.AVAILABLE_CABINS)
         store.dg_create_roommate = renpy.random.choice((None,) + dg_housing.ROOMMATES)
 
-    def dg_rpg_start(name, age, days, history, source, pronouns, adult=False, cabin="cabin_01", roommate="mt"):
-        state = dg_rpg.new_game(name, age, days, history, source, pronouns, cabin, roommate, camp_life=True)
+    def dg_rpg_start(name, age, days, history, source, pronouns, adult=False, cabin="cabin_01", roommate="mt", luggage=None):
+        state = dg_rpg.new_game(name, age, days, history, source, pronouns, cabin, roommate, camp_life=True, luggage=luggage)
         if adult:
             dg_adult.set_enabled(state, True, confirmed=True)
         dg_rpg.save(dg_rpg_root(), state)
@@ -3070,7 +3070,10 @@ label dg_rpg_create_loop:
                 $ dg_create_history = dg_edit_result[1]
         jump dg_rpg_create_loop
     if dg_create_cmd[0] == "start":
-        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns, dg_create_adult, dg_create_cabin, dg_create_roommate)
+        call screen dg_rpg_luggage(dg_inventory.suggest_luggage(dg_create_history))
+        if not isinstance(_return, (tuple, list)):
+            jump dg_rpg_create_loop
+        $ dg_rpg_start(dg_create_name.strip(), dg_create_age, dg_create_days, dg_create_history.strip(), dg_create_source, dg_create_pronouns, dg_create_adult, dg_create_cabin, dg_create_roommate, _return)
         jump dg_rpg_loop
     jump dg_rpg_create_loop
 
@@ -3532,6 +3535,24 @@ label dg_rpg_cg_label:
     jump dg_rpg_loop
 
 
+
+screen dg_rpg_luggage(suggestions):
+    modal True
+    default packed = tuple(suggestions)
+    add Solid("#102831f5")
+    frame:
+        align (.5,.5) xsize 950 padding (36,30)
+        vbox:
+            spacing 18
+            text u"Что взять в лагерь?" style "dg_note_heading"
+            text u"Вещи из предыстории отмечены как подсказка. Подтверди список и забери багаж внутри своего домика." style "dg_note_body" xmaximum 850
+            for item in dg_inventory.PACKABLE:
+                textbutton (u"✓  " if item in packed else u"□  ") + dg_inventory.CATALOG[item]["title"] style "dg_camp_nav" selected item in packed action SetScreenVariable("packed", dg_inventory.toggle_luggage(packed, item))
+            hbox:
+                spacing 18
+                textbutton u"Подтвердить и начать" style "dg_camp_action" action Return(packed)
+                textbutton u"Назад" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
 
 screen dg_rpg_housing_picker:
     modal True

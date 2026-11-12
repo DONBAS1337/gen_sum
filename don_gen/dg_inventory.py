@@ -5,6 +5,8 @@ import copy
 CATALOG={
  'cigarettes':{'title':u'Пачка сигарет','source':None,'count':0,'restricted':True},
  'beer':{'title':u'Бутылка пива','source':None,'count':0,'restricted':True},
+ 'guitar':{'title':u'Гитара','source':None,'count':0},
+ 'jacket':{'title':u'Куртка','source':None,'count':0},
  'shirt':{'title':u'Личная рубашка','source':None,'count':0,'loanable':True},
  'notes':{'title':u'Ноты общего номера','source':'library','count':1},
  'parts':{'title':u'Детали радиооборудования','source':'warehouse','count':1},
@@ -23,12 +25,36 @@ CATALOG={
 RECIPES={'poster':{'title':u'Нарисовать плакат','place':'clubs','inputs':{'paper':1,'paint':1},'tools':('pencil',)},
          'patch':{'title':u'Сделать ремонтную заплату','place':'clubs','inputs':{'tape':1,'cloth':1},'tools':('toolkit',)}}
 
+PACKABLE = ('guitar', 'jacket', 'cigarettes', 'beer')
+LEGACY_LUGGAGE = ('cigarettes', 'beer')
+
+
+def suggest_luggage(background):
+    import re
+    patterns = (u'гитар', u'куртк', u'сигарет', u'пиво|пива')
+    return tuple(item for item, pattern in zip(PACKABLE, patterns)
+                 if re.search(pattern, background.lower()))
+
+
+def toggle_luggage(packed, item):
+    if item in packed:
+        return tuple(key for key in packed if key != item)
+    return packed + (item,)
+
+
+def luggage(state):
+    world = state.get('inventory_world', {})
+    packed = world.get('packed_luggage', LEGACY_LUGGAGE)
+    unpacked = world.get('unpacked_restricted', [])
+    return tuple(item for item in packed if item not in unpacked)
+
+
 def command(value):
     """Decode a screen result; RenPy Return(None) actually produces True."""
     if not isinstance(value, (tuple, list)) or len(value) != 3:
         return None
     operation, item, who = value
-    if operation not in ('take','give','lend','return','use','craft','stash','retrieve','unpack','show'):
+    if operation not in ('take','give','lend','return','use','craft','stash','retrieve','unpack','show','play'):
         return None
     if not isinstance(item, (str, type(u''))) or item not in CATALOG:
         return None
@@ -105,7 +131,7 @@ def report(state):
 
 def act(state,operation,item,who=None):
     import dg_rpg,dg_projects
-    if item not in CATALOG or operation not in ('take','give','lend','return','use','craft','stash','retrieve','unpack','show'):raise ValueError(u'Неизвестная операция с предметом.')
+    if item not in CATALOG or operation not in ('take','give','lend','return','use','craft','stash','retrieve','unpack','show','play'):raise ValueError(u'Неизвестная операция с предметом.')
     if state['finished']:raise ValueError(u'Смена завершена.')
     if who is not None and (who not in dg_rpg.NPC_NAMES or dg_rpg.where_is(state,who)!=state['place']):raise ValueError(u'Собеседника нет рядом.')
     # All mutation is prepared on a copy; failure leaves even a raw caller unchanged.
@@ -115,7 +141,7 @@ def act(state,operation,item,who=None):
     if operation == 'unpack':
         import dg_housing
         unpacked = world.setdefault('unpacked_restricted', [])
-        if (who is not None or not CATALOG[item].get('restricted') or item in unpacked
+        if (who is not None or item not in luggage(shadow)
                 or not dg_housing.at_own_cabin(shadow) or not shadow.get('cabin_inside')):
             raise ValueError(u'Эту вещь нельзя достать из багажа.')
         if pocket.get(item, 0) >= 3:
@@ -124,6 +150,15 @@ def act(state,operation,item,who=None):
         pocket[item] = pocket.get(item, 0) + 1
         log(shadow, 'unpack', item, 'luggage', 'hero')
         text = u'Ты достал из своего багажа: ' + CATALOG[item]['title'] + u'.'
+    elif operation == 'play':
+        if who is not None or item != 'guitar' or not pocket.get('guitar', 0):
+            raise ValueError(u'Для игры нужна гитара в сумке.')
+        present = dict(dg_rpg.at_place(shadow))
+        text = u'Ты играешь на своей гитаре.'
+        if 'mi' in present:
+            text += u' Мику прислушивается к мелодии.'
+        elif present:
+            text += u' Музыку слышат: ' + u', '.join(present[key] for key in sorted(present)) + u'.'
     elif operation == 'show':
         if not who or not CATALOG[item].get('restricted') or not pocket.get(item, 0):
             raise ValueError(u'Нужен собеседник рядом и предмет в сумке.')
@@ -217,7 +252,7 @@ def act(state,operation,item,who=None):
             pocket[key]-=n;log(shadow,'use',key,'hero','craft')
         pocket[item]=pocket.get(item,0)+1;log(shadow,'craft',item,'recipe','hero')
         text=u'По известному рецепту изготовлено: '+CATALOG[item]['title']+u'. Инструмент не израсходован.'
-    shadow['energy']-=cost;dg_rpg._journal(shadow,text);dg_rpg._tick(shadow,30 if operation=="craft" else 5);dg_rpg.validate(shadow)
+    shadow['energy']-=cost;dg_rpg._journal(shadow,text);dg_rpg._tick(shadow,30 if operation=="craft" else 10 if operation=="play" else 5);dg_rpg.validate(shadow)
     state.clear();state.update(shadow)
     return {'status':'done','title':u'Действие с предметом','text':text,'who':who,'kind':'inventory','private':operation in ('show','unpack','stash','retrieve')}
 
@@ -227,8 +262,11 @@ def validate(state):
     if world is None:return
     import dg_rpg
     if not isinstance(world,dict) or not isinstance(world.get('stock'),dict) or len(world['stock'])>70 or not isinstance(world.get('loans'),list) or len(world['loans'])>48 or not isinstance(world.get('ledger'),list) or len(world['ledger'])>96 or not isinstance(world.get('sequence'),int) or not 0<=world['sequence']<=1000000:raise ValueError('Invalid inventory world')
+    packed = world.get('packed_luggage', list(LEGACY_LUGGAGE))
+    if not isinstance(packed, list) or any(item not in PACKABLE for item in packed) or len(set(packed)) != len(packed):
+        raise ValueError('Invalid packed luggage')
     unpacked = world.get('unpacked_restricted', [])
-    if (not isinstance(unpacked, list) or any(item not in ('cigarettes', 'beer') for item in unpacked)
+    if (not isinstance(unpacked, list) or any(item not in packed for item in unpacked)
             or len(unpacked) != len(set(unpacked))):
         raise ValueError('Invalid unpacked items')
     stash = world.get('cabin_stash', {})
@@ -253,15 +291,16 @@ def actions(state):
         import dg_housing
         if dg_housing.at_own_cabin(state) and state.get('cabin_inside'):
             stash = state.get('inventory_world', {}).get('cabin_stash', {})
-            unpacked = state.get('inventory_world', {}).get('unpacked_restricted', [])
-            for item in ('cigarettes', 'beer'):
-                if item not in unpacked and pocket.get(item, 0) < 3:
+            for item in luggage(state):
+                if pocket.get(item, 0) < 3:
                     rows.append(('unpack', item, None, u'Достать из багажа: ' + CATALOG[item]['title']))
             for item in sorted(CATALOG):
                 if free_count(state, 'hero', item) and stash.get(item, 0) < 3:
                     rows.append(('stash', item, None, u'Спрятать: ' + CATALOG[item]['title']))
                 if stash.get(item, 0) and pocket.get(item, 0) < 3:
                     rows.append(('retrieve', item, None, u'Забрать из тайника: ' + CATALOG[item]['title']))
+        if pocket.get('guitar', 0):
+            rows.append(('play', 'guitar', None, u'Сыграть на гитаре'))
         for item,n in sorted(stock_at(state,place).items()):
             if n and pocket.get(item,0)<3:rows.append(('take',item,None,u'Взять: '+CATALOG[item]['title']))
         for item,n in sorted(pocket.items()):

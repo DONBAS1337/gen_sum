@@ -119,6 +119,34 @@ class HousingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             dg_inventory.act(state, 'show', 'beer', 'mi')
 
+    def test_confirmed_luggage_and_reusable_guitar(self):
+        import dg_inventory
+        description = 'Взял гитару, куртку, пиво и сигареты.'
+        self.assertEqual(dg_inventory.suggest_luggage(description), dg_inventory.PACKABLE)
+        state = dg_rpg.new_game('Герой', 23, 30, background=description, cabin='cabin_23',
+                                roommate=None, camp_life=True, luggage=('guitar', 'jacket'))
+        dg_rpg.move(state, 'cabin_23')
+        dg_housing.door(state, True)
+        self.assertEqual(dg_inventory.luggage(state), ('guitar', 'jacket'))
+        with self.assertRaises(ValueError):
+            dg_inventory.act(state, 'unpack', 'beer')
+        with self.assertRaises(ValueError):
+            dg_inventory.act(state, 'play', 'guitar')
+        dg_inventory.act(state, 'unpack', 'guitar')
+        dg_inventory.act(state, 'play', 'guitar')
+        self.assertEqual(dg_inventory.bag(state, 'hero')['guitar'], 1)
+        dg_inventory.act(state, 'stash', 'guitar')
+        with self.assertRaises(ValueError):
+            dg_inventory.act(state, 'play', 'guitar')
+        with tempfile.TemporaryDirectory() as root:
+            dg_rpg.save(root, state)
+            state = dg_rpg.load(root, state['id'])
+        self.assertEqual(dg_inventory.luggage(state), ('jacket',))
+        dg_inventory.act(state, 'retrieve', 'guitar')
+        dg_rpg.move(state, dg_rpg.where_is(state, 'mi'))
+        self.assertIn('Мику прислушивается', dg_inventory.act(state, 'play', 'guitar')['text'])
+        self.assertEqual(dg_inventory.bag(state, 'hero')['guitar'], 1)
+
 class VisualTimeTests(unittest.TestCase):
     def test_day_evening_night_have_separate_generated_files(self):
         state=dg_rpg.new_game('Герой',23,30)

@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--assets", type=Path, help="Private gen_assets root or maps directory")
     parser.add_argument("--workshop", type=Path, help="Installed 7DL Complete Edition Workshop root")
     parser.add_argument("--vanilla", type=Path, help="Vanilla game directory containing archive.rpa, for the scene preview")
-    parser.add_argument("--screen", choices=("hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
+    parser.add_argument("--screen", choices=("luggage", "hub", "controls", "setup", "input", "review", "map", "places", "cabins", "journal", "picker", "scene", "staging", "cg", "agendas", "cg-check", "intent-review", "housing", "emotions", "visit", "projects", "relationship", "history", "hidden", "inventory", "project-review", "editor", "party", "error", "dialogue", "dialogue-choice", "waiting", "arrival", "camp-day", "context", "flow", "calendar", "injury", "disco", "native-save", "card-table", "investigation", "branches"))
     # Additional production screens are accepted below by extending the existing action.
     parser._option_string_actions['--screen'].choices += ('deeds','commitments','stock-catalog','crew','pacing','shift-trash','shift-confirm','shift-purge','shift-flow','menu-audio','hybrid-flow','music-entry')
     parser.add_argument("--place", default="cabins", help="Actual RPG location for the preview")
@@ -690,6 +690,8 @@ init 1100 python:
             cases = [("visit","dg_rpg_hub",{})]
         if os.environ.get("DG_UI_SCREEN") == "hidden":
             cases=[("hidden","dg_rpg_hub",{"initial_show":False})]
+        if os.environ.get("DG_UI_SCREEN") == "luggage":
+            cases = [("luggage", "dg_rpg_luggage", {"suggestions": ("guitar", "jacket")})]
         if os.environ.get("DG_UI_SCREEN") == "inventory":
             state = store.dg_rpg_state
             if os.environ.get("DG_UI_PLACE") == state["housing"]["cabin"]:
@@ -858,6 +860,13 @@ init 1100 python:
                 if ("hybrid", None) not in commands:
                     raise ValueError("Empty location does not open standalone action input")
                 print("NATIVE_SOLO_ACTION_OK empty location returns free action with no NPC")
+            if filename == "luggage":
+                buttons = []
+                displayable.visit_all(lambda d: buttons.append(d) if isinstance(d, renpy.display.behavior.Button) else None)
+                results = [renpy.display.behavior.run(d.clicked) for d in buttons if isinstance(d.clicked, Return)]
+                if ("guitar", "jacket") not in results or False not in results:
+                    raise ValueError("Luggage confirmation did not return the selected items")
+                print("NATIVE_LUGGAGE_CONFIRM_OK")
             if filename == "inventory":
                 import dg_inventory
                 buttons = []

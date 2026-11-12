@@ -109,7 +109,7 @@ def _clean(value, maximum):
     return value
 
 
-def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его", cabin="cabin_01", roommate="mt", camp_life=False):
+def new_game(name, age, days, background=u"Обычный пионер", source="vanilla", pronouns=u"он/его", cabin="cabin_01", roommate="mt", camp_life=False, luggage=None):
     name = _clean(name, 100)
     background = _clean(background, 8000)
     age, days = int(age), int(days)
@@ -138,6 +138,10 @@ def new_game(name, age, days, background=u"Обычный пионер", source=
     dg_world.prepare(state)
     dg_social.ensure(state)
     dg_social.prepare_incident(state)
+    if luggage is not None:
+        import dg_inventory
+        dg_inventory.ensure(state)['packed_luggage'] = list(luggage)
+        dg_inventory.validate(state)
     return state
 
 
