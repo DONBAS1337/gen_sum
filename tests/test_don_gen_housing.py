@@ -98,6 +98,27 @@ class HousingTests(unittest.TestCase):
         self.assertEqual((item['id'], item['owner'], item['holder']), (item_id, 'hero', 'hero'))
         self.assertEqual(item['custody'][-1]['witnesses'], ['hero'])
 
+    def test_restricted_items_are_optional_and_discovery_is_private(self):
+        import dg_inventory, dg_epistemic
+        state = dg_rpg.new_game('Герой', 23, 30, cabin='cabin_23', roommate=None, camp_life=True)
+        dg_rpg.move(state, 'cabin_23')
+        dg_housing.door(state, True)
+        for item in ('beer', 'cigarettes'):
+            self.assertFalse(dg_inventory.bag(state, 'hero').get(item))
+            dg_inventory.act(state, 'unpack', item)
+            with self.assertRaises(ValueError):
+                dg_inventory.act(state, 'unpack', item)
+            dg_inventory.act(state, 'stash', item)
+            self.assertEqual(dg_inventory.bag(state, 'hero')[item], 0)
+            dg_inventory.act(state, 'retrieve', item)
+        dg_rpg.move(state, dg_rpg.where_is(state, 'mi'))
+        result = dg_inventory.act(state, 'show', 'beer', 'mi')
+        self.assertIn('Мику', result['text'])
+        self.assertTrue(dg_epistemic.knows(state, 'mi', 'observation', 'restricted:beer'))
+        self.assertFalse(dg_epistemic.knows(state, 'mt', 'observation', 'restricted:beer'))
+        with self.assertRaises(ValueError):
+            dg_inventory.act(state, 'show', 'beer', 'mi')
+
 class VisualTimeTests(unittest.TestCase):
     def test_day_evening_night_have_separate_generated_files(self):
         state=dg_rpg.new_game('Герой',23,30)

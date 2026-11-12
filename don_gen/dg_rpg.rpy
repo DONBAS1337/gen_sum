@@ -385,6 +385,9 @@ init 1001 python:
             dg_rpg._journal(state,dg_projects.cancel(state,arg))
         elif action == "inventory":
             store.dg_rpg_last_inventory=dg_inventory.act(state,arg[0],arg[1],arg[2])
+            if store.dg_rpg_last_inventory.get('private'):
+                pending['private'] = True
+                store.dg_rpg_scene_context['present'] = [arg[2]] if arg[2] else []
             pending.update(who=store.dg_rpg_last_inventory['who'],intention=store.dg_rpg_last_inventory['title'],result=store.dg_rpg_last_inventory['text'])
         elif action == "project":
             store.dg_rpg_last_project=dg_projects.act(state,arg)

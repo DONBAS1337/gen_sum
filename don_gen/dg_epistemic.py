@@ -8,7 +8,7 @@ def ensure(state):
 
 def record(state,kind,subject,data,witnesses):
     import dg_clock,dg_rpg
-    if kind not in ('recognition','transfer','meeting','testimony','account','resolution'):raise ValueError('Unknown fact type')
+    if kind not in ('recognition','transfer','meeting','testimony','account','resolution','observation'):raise ValueError('Unknown fact type')
     people=sorted(set(w for w in witnesses if w in dg_rpg.NPC_NAMES or w=='hero'))
     value={'kind':kind,'subject':subject,'data':copy.deepcopy(data),'at':dg_clock.absolute(state),'witnesses':people}
     key=hashlib.sha1(json.dumps(value,ensure_ascii=True,sort_keys=True).encode('ascii')).hexdigest()
@@ -45,7 +45,7 @@ def validate(state):
     if not isinstance(v,dict) or not isinstance(v.get('facts'),list) or len(v['facts'])>256 or not isinstance(v.get('beliefs'),dict) or len(v['beliefs'])>12:raise ValueError('Invalid knowledge state')
     if not isinstance(v.get('identities',{}),dict) or len(v.get('identities',{}))>128:raise ValueError('Invalid durable recognition')
     for f in v['facts']:
-        if not isinstance(f,dict) or f.get('kind') not in ('recognition','transfer','meeting','testimony','account','resolution') or not isinstance(f.get('id'),(str,type(u''))) or len(f['id'])!=40 or type(f.get('at')) is not int or not isinstance(f.get('data'),dict) or not isinstance(f.get('subject'),(str,type(u''))) or len(f['subject'])>120 or not isinstance(f.get('witnesses'),list) or len(f['witnesses'])>12 or any(w not in tuple(dg_rpg.NPC_NAMES)+('hero',) for w in f['witnesses']):raise ValueError('Invalid confirmed fact')
+        if not isinstance(f,dict) or f.get('kind') not in ('recognition','transfer','meeting','testimony','account','resolution','observation') or not isinstance(f.get('id'),(str,type(u''))) or len(f['id'])!=40 or type(f.get('at')) is not int or not isinstance(f.get('data'),dict) or not isinstance(f.get('subject'),(str,type(u''))) or len(f['subject'])>120 or not isinstance(f.get('witnesses'),list) or len(f['witnesses'])>12 or any(w not in tuple(dg_rpg.NPC_NAMES)+('hero',) for w in f['witnesses']):raise ValueError('Invalid confirmed fact')
     for who,rows in v['beliefs'].items():
         if who not in tuple(dg_rpg.NPC_NAMES)+('hero',) or not isinstance(rows,list) or len(rows)>16:raise ValueError('Invalid belief owner')
         for r in rows:

@@ -3,6 +3,8 @@
 from __future__ import unicode_literals
 import copy
 CATALOG={
+ 'cigarettes':{'title':u'Пачка сигарет','source':None,'count':0,'restricted':True},
+ 'beer':{'title':u'Бутылка пива','source':None,'count':0,'restricted':True},
  'shirt':{'title':u'Личная рубашка','source':None,'count':0,'loanable':True},
  'notes':{'title':u'Ноты общего номера','source':'library','count':1},
  'parts':{'title':u'Детали радиооборудования','source':'warehouse','count':1},
@@ -26,7 +28,7 @@ def command(value):
     if not isinstance(value, (tuple, list)) or len(value) != 3:
         return None
     operation, item, who = value
-    if operation not in ('take','give','lend','return','use','craft','stash','retrieve'):
+    if operation not in ('take','give','lend','return','use','craft','stash','retrieve','unpack','show'):
         return None
     if not isinstance(item, (str, type(u''))) or item not in CATALOG:
         return None
@@ -103,14 +105,46 @@ def report(state):
 
 def act(state,operation,item,who=None):
     import dg_rpg,dg_projects
-    if item not in CATALOG or operation not in ('take','give','lend','return','use','craft','stash','retrieve'):raise ValueError(u'Неизвестная операция с предметом.')
+    if item not in CATALOG or operation not in ('take','give','lend','return','use','craft','stash','retrieve','unpack','show'):raise ValueError(u'Неизвестная операция с предметом.')
     if state['finished']:raise ValueError(u'Смена завершена.')
     if who is not None and (who not in dg_rpg.NPC_NAMES or dg_rpg.where_is(state,who)!=state['place']):raise ValueError(u'Собеседника нет рядом.')
     # All mutation is prepared on a copy; failure leaves even a raw caller unchanged.
     shadow=copy.deepcopy(state);world=ensure(shadow);pocket=bag(shadow,'hero')
     cost=6 if operation=='craft' else 3
     if shadow['energy']<cost:raise ValueError(u'Недостаточно сил.')
-    if operation in ('stash', 'retrieve'):
+    if operation == 'unpack':
+        import dg_housing
+        unpacked = world.setdefault('unpacked_restricted', [])
+        if (who is not None or not CATALOG[item].get('restricted') or item in unpacked
+                or not dg_housing.at_own_cabin(shadow) or not shadow.get('cabin_inside')):
+            raise ValueError(u'Эту вещь нельзя достать из багажа.')
+        if pocket.get(item, 0) >= 3:
+            raise ValueError(u'В сумке нет места.')
+        unpacked.append(item)
+        pocket[item] = pocket.get(item, 0) + 1
+        log(shadow, 'unpack', item, 'luggage', 'hero')
+        text = u'Ты достал из своего багажа: ' + CATALOG[item]['title'] + u'.'
+    elif operation == 'show':
+        if not who or not CATALOG[item].get('restricted') or not pocket.get(item, 0):
+            raise ValueError(u'Нужен собеседник рядом и предмет в сумке.')
+        import dg_epistemic
+        subject = 'restricted:' + item
+        if dg_epistemic.knows(shadow, who, 'observation', subject):
+            raise ValueError(u'Этот персонаж уже видел у тебя эту вещь.')
+        dg_epistemic.record(shadow, 'observation', subject, {'item': item, 'holder': 'hero'}, [who, 'hero'])
+        reactions = {
+            'mt': u'Ольга Дмитриевна делает замечание: на смене таким вещам не место.',
+            'cs': u'Виола серьёзнеет и напоминает о правилах лагеря.',
+            'mi': u'Мику смущается и просит убрать вещь, пока её не увидела вожатая.',
+            'dv': u'Алиса хмыкает и предупреждает, что вожатая такое заметит.',
+        }
+        text = u'Ты показываешь предмет: ' + CATALOG[item]['title'] + u'. ' + reactions.get(
+            who, dg_rpg.NPC_NAMES[who] + u' реагирует настороженно и просит убрать вещь.')
+        relationships = __import__('dg_relationships')
+        if who in relationships.LIKES:
+            person = relationships.person(shadow, who)
+            person['tension'] = min(20, person['tension'] + 1)
+    elif operation in ('stash', 'retrieve'):
         import dg_housing
         if who is not None or not dg_housing.at_own_cabin(shadow) or not shadow.get('cabin_inside'):
             raise ValueError(u'Тайник доступен внутри своего домика.')
@@ -135,6 +169,8 @@ def act(state,operation,item,who=None):
         dg_projects.claim_resource(shadow,'hero',item,shadow['place'])
         text=u'Ты взял предмет из доступного запаса: '+CATALOG[item]['title']+u'.'
     elif operation in ('give','lend'):
+        if CATALOG[item].get('restricted'):
+            raise ValueError(u'Этот предмет нельзя передать другому персонажу.')
         if not who:raise ValueError(u'Нужен получатель.')
         if shadow.get('relationships',{}).get('people',{}).get(who,{}).get('tension',0)>=8:raise ValueError(u'Собеседник сейчас не хочет принимать вещи. Сначала стоит разобраться в конфликте.')
         if pocket.get(item,0)<=reservation_count(shadow,'hero',item):raise ValueError(u'Предмет подготовлен для общего дела. Передай его на этапе проекта или сначала отмени проект.')
@@ -183,7 +219,7 @@ def act(state,operation,item,who=None):
         text=u'По известному рецепту изготовлено: '+CATALOG[item]['title']+u'. Инструмент не израсходован.'
     shadow['energy']-=cost;dg_rpg._journal(shadow,text);dg_rpg._tick(shadow,30 if operation=="craft" else 5);dg_rpg.validate(shadow)
     state.clear();state.update(shadow)
-    return {'status':'done','title':u'Действие с предметом','text':text,'who':who,'kind':'inventory'}
+    return {'status':'done','title':u'Действие с предметом','text':text,'who':who,'kind':'inventory','private':operation in ('show','unpack','stash','retrieve')}
 
 def validate(state):
     __import__('dg_instances').validate(state)
@@ -191,6 +227,10 @@ def validate(state):
     if world is None:return
     import dg_rpg
     if not isinstance(world,dict) or not isinstance(world.get('stock'),dict) or len(world['stock'])>70 or not isinstance(world.get('loans'),list) or len(world['loans'])>48 or not isinstance(world.get('ledger'),list) or len(world['ledger'])>96 or not isinstance(world.get('sequence'),int) or not 0<=world['sequence']<=1000000:raise ValueError('Invalid inventory world')
+    unpacked = world.get('unpacked_restricted', [])
+    if (not isinstance(unpacked, list) or any(item not in ('cigarettes', 'beer') for item in unpacked)
+            or len(unpacked) != len(set(unpacked))):
+        raise ValueError('Invalid unpacked items')
     stash = world.get('cabin_stash', {})
     if not isinstance(stash, dict) or any(item not in CATALOG or type(count) is not int
                                           or not 0 <= count <= 3 for item, count in stash.items()):
@@ -202,7 +242,7 @@ def validate(state):
         if not isinstance(loan.get('witnesses',[]),list) or len(loan.get('witnesses',[]))>11 or any(w not in dg_rpg.NPC_NAMES for w in loan.get('witnesses',[])):raise ValueError('Invalid loan witnesses')
         if not isinstance(loan,dict) or loan.get('item') not in CATALOG or not CATALOG[loan['item']].get('loanable') or loan.get('owner')!='hero' or loan.get('holder') not in dg_rpg.NPC_NAMES or loan.get('status') not in ('open','returned') or not isinstance(loan.get('deadline'),int) or not 1<=loan['deadline']<=50000:raise ValueError('Invalid loan')
     for row in world['ledger']:
-        if not isinstance(row,dict) or row.get('item') not in CATALOG or row.get('operation') not in ('take','transfer','use','craft','commit','restock','stash','retrieve') or not isinstance(row.get('id'),int) or not isinstance(row.get('day'),int) or row.get('slot') not in (0,1,2,3):raise ValueError('Invalid inventory ledger')
+        if not isinstance(row,dict) or row.get('item') not in CATALOG or row.get('operation') not in ('take','transfer','use','craft','commit','restock','stash','retrieve','unpack') or not isinstance(row.get('id'),int) or not isinstance(row.get('day'),int) or row.get('slot') not in (0,1,2,3):raise ValueError('Invalid inventory ledger')
 
 
 def actions(state):
@@ -213,6 +253,10 @@ def actions(state):
         import dg_housing
         if dg_housing.at_own_cabin(state) and state.get('cabin_inside'):
             stash = state.get('inventory_world', {}).get('cabin_stash', {})
+            unpacked = state.get('inventory_world', {}).get('unpacked_restricted', [])
+            for item in ('cigarettes', 'beer'):
+                if item not in unpacked and pocket.get(item, 0) < 3:
+                    rows.append(('unpack', item, None, u'Достать из багажа: ' + CATALOG[item]['title']))
             for item in sorted(CATALOG):
                 if free_count(state, 'hero', item) and stash.get(item, 0) < 3:
                     rows.append(('stash', item, None, u'Спрятать: ' + CATALOG[item]['title']))
@@ -226,6 +270,10 @@ def actions(state):
             if usable and free_count(state,'hero',item)>0:rows.append(('use',item,None,(u'Разместить: ' if item=='poster' else u'Применить: ' if item=='patch' else u'Использовать: ')+CATALOG[item]['title']))
             if free_count(state,'hero',item)<1:continue
             for who,name in people:
+                if (CATALOG[item].get('restricted') and not __import__('dg_epistemic').knows(
+                        state, who, 'observation', 'restricted:' + item)):
+                    rows.append(('show', item, who, u'Показать ' + name + u': ' + CATALOG[item]['title']))
+                if CATALOG[item].get('restricted'):continue
                 if state.get('relationships',{}).get('people',{}).get(who,{}).get('tension',0)>=8:continue
                 if state.get('projects',{}).get('npc_inventory',{}).get(who,{}).get(item,0)>=3:continue
                 rows.append(('give',item,who,u'Передать '+name+u': '+CATALOG[item]['title']))
