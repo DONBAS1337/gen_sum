@@ -1,31 +1,29 @@
-# gen-7dl-vanilla
+# DON-GEN (standalone)
 
-Экспериментальная ветка Generative Summer с выбором источника истории.
+This branch is now a **standalone game mod**, NOT a replacement patch for the Workshop Generative Summer mod.
 
-Сейчас работает:
+Install ONLY the `don_gen/` folder to `Everlasting Summer/game/mods/don_gen/`. This folder contains independent Ren'Py labels and Python module names prefixed `dg_`.
 
-- обычный vanilla-режим и старые истории;
-- профили `7dl:mi_7dl`, `7dl:mi_dj`, `7dl:mi_cl`;
-- автоматический поиск 7DL Complete Edition (`3266357374`) в той же Steam Workshop-библиотеке;
-- безопасный текстовый индексатор `.rpy`: код 7DL не исполняется;
-- релевантные сцены 7DL подмешиваются в prompt как справочный контекст;
-- прямые фоны 7DL из `Pics/bg` и `Pics/CE/bg`;
-- CG из `Pics/cg` и `Pics/CE/cg` (доступны как `scene cg ...`);
-- составные спрайты, реально используемые выбранным Miku-route: GS независимо собирает body + clothes + emotion + accessory из 7DL и vanilla-слоёв, не исполняя `7dl_sprites.rpy`;
-- музыка, ambience и sfx 7DL из активных `Sound` / `Sound/CE` каталогов;
-- существующая генерация новых фонов остаётся fallback-механизмом.
+Installation details: [README.md](README.md). RPG features: [RPG.md](RPG.md).
 
-Аудио 7DL получает отдельные ключи `sdl_music_*`, `sdl_ambience_*`, `sdl_sfx_*`, чтобы не конфликтовать с vanilla.
+- No `ready_replace/` or legacy `patches/` package remains in this branch.
+- Windows installer `install.ps1` copies the standalone folder, never overwrites other mods.
+- Unmodified vanilla `archive.rpa` provides base sprites/backgrounds; 7DL is optional.
+- RPG and AI generation data are isolated under `config.savedir/don_gen/`.
+- Logs: `don_gen.log`, `don_gen_worker.log`, optional `traces/*.json`.
+- Automatic Python checks run in GitHub Actions; in-game Ren'Py smoke testing is still necessary.
 
-Первый запуск 7DL-профиля строит локальный сюжетный индекс в `saves/generative_summer/_source_cache/7dl_index.json`.
+Base branch `gen-7dl-vanilla` is unchanged.
 
-Также добавлены режимы source timeline:
-- `anchored` — generated-ветка ещё совместима с хронологией route, retrieval ограничивается соседними днями;
-- `divergent` — route уже изменён решениями игрока, исходные сцены используются как reference для речи/характеров/мира;
-- `post_source` — после 7-го дня исходная хронология больше не рассматривается как будущий сюжет.
+2026-11-08: Added direct installed 7DL CE resource support. -WorkshopDir writes a local resource_sources.json for cross-library installs; same-library and environment discovery remain supported. Workshop maps and numbered character icons take precedence, donor backgrounds cover additional RPG locations, and runtime manifest paths are absolute with forward slashes. The donor directory is not added to Ren'Py's script search path. Added fixture tests and a native four-actor preview using read-only vanilla/Workshop assets.
 
-Состояние сохраняется в каждой generated-ноде как `source_state` (день + режим); старые 7DL-ноды мигрируют автоматически из текста memory.
+2026-11-08: Online-first RPG UI pass: bounded hub panels, persistent action drafts, scrollable setup, searchable travel, correct map back navigation, and hybrid scene history in the journal. Fixed free actions at extended locations, negated commands, NPC-name prefix collisions, same-day skill unlocks, and final-day quest expiration. See UI_CHANGES_RU.md for validation and remaining limitations.
 
-Следующий этап — smoke-test полного набора ресурсов в Ren'Py и точечные фиксы несовместимых/экзотических sprite/ATL случаев. Основные классы ресурсов (bg, CG, composite sprites, music, ambience, sfx) уже подключены.
+2026-11-08: Native named Character dialogue and four-actor staging replace anonymous paragraphs and two fixed portraits. AI labels are parsed as text only; scene time/place are frozen before a turn. Map selection uses one art/hotspot transform and a separate destination panel. Fixed invalid focus_mask False and made viewport scrollbar sizing explicit. Added a Windows Ren'Py 7 headless render runner with placeholder vanilla resources; it exercises nine actual RPG screens without login or game saves.
 
-Sprite resolver теперь строит точную физическую карту слоёв отдельно для `normal`, `far` и `close` как `distance -> character -> pose -> token -> path`. Это не zoom одного спрайта: каждая дистанция использует собственные файлы. Для каждого конкретного слоя приоритет такой: точный слой 7DL на той же дистанции/позе -> точный vanilla-слой из приватного `gs_original` -> комбинация считается недоступной. Готовые vanilla image names по-прежнему имеют приоритет и не переопределяются 7DL.
+2026-11-08: Replaced the map sidebar/atlas layout with the fullscreen classic gen_assets/maps/map_bg.jpg and its matching JPG hover layers. Corrected cabin hotspots, including cabin 12, and retained list access for unlabelled rooms. Installer now imports the classic map variants; private binaries remain outside the public repository and can be supplied with -AssetsDir. Render runner accepts --assets and --screen for checking the actual private map locally.
+
+2026-11-01: Added `dg_world.py` nonlinear camp director and `tests/test_don_gen_world.py`; see README v0.3 for new UI and daily events. Character setup now uses its own contrast popup screen.
+
+DON-GEN v0.4: Added `dg_social.py`: typed offline actions, 33 personal NPC chapters, 4 three-step timed quests, daily social rumours and interactive two-NPC encounters. Ren'Py screens include free-action modal, personal scenes, contracts, shared-map encounter markers and social journal tab. Existing JSON sessions migrate automatically.
+
