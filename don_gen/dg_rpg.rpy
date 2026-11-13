@@ -2517,6 +2517,24 @@ screen dg_rpg_dialogue(who, phase, topic_index=0, stance="support"):
             else:
                 textbutton u"Закончить встречу" style "dg_primary" text_size 33 action Return("done")
 
+screen dg_rpg_miku_epilogue():
+    modal True
+    $ root = dg_bkrr.find_root(config.gamedir, dg_rpg_workshop_root())
+    $ backdrop = dg_resources.asset(root, "bkrr/images/cg/ep_mi_background.jpg")
+    $ portrait = dg_resources.asset(root, "bkrr/images/cg/ep_mi.png")
+    add Solid("#101923")
+    if backdrop and portrait:
+        add im.Scale(backdrop, 1920, 1080)
+        add Transform(Image(portrait), zoom=1.3, align=(.5,.5))
+    frame:
+        xalign .5 yalign .94 xsize 1500 padding (30,20)
+        background Solid("#101923ee")
+        vbox:
+            spacing 16
+            text u"Много позже ты услышал за дверью знакомую мелодию. Мику сидела за роялем. Когда музыка стихла, она обернулась и улыбнулась." style "dg_camp_narration"
+            textbutton u"К итогам смены" style "dg_camp_nav" action Return(False)
+    key "K_ESCAPE" action Return(False)
+
 screen dg_rpg_finale:
     modal True
     add Solid("#0e252f")
@@ -2539,7 +2557,11 @@ screen dg_rpg_finale:
                 scrollbars "vertical"
                 ysize 570
                 text dg_literal(dg_world.finale(dg_rpg_state)) style "dg_ink_small" size 30 xmaximum 1260
-            textbutton u"Вернуться в лагерь" style "dg_ink_act" action Return(False)
+            hbox:
+                spacing 18
+                if dg_rpg_state["finished"] and "mi" in dg_rpg_state.get("npc_visits", {}).get("romance", []) and dg_rpg_state["affinity"]["mi"] >= 70:
+                    textbutton u"Эпилог Мику" style "dg_ink_act" action Return("miku_epilogue")
+                textbutton u"Вернуться в лагерь" style "dg_ink_act" action Return(False)
 
 screen dg_rpg_world_event:
     modal True
@@ -3218,6 +3240,9 @@ label dg_rpg_dispatch:
         jump dg_rpg_loop
     if dg_rpg_cmd == "finale":
         call screen dg_rpg_finale
+        while _return == "miku_epilogue":
+            call screen dg_rpg_miku_epilogue
+            call screen dg_rpg_finale
         jump dg_rpg_loop
     if dg_rpg_cmd == "connect":
         call dg_connect from dg_return_dg_connect_2
@@ -3890,7 +3915,10 @@ screen dg_rpg_context(who=None):
                     if dg_rpg_state.get('card_table',{}).get('phase') in ('playing','round_done') and dg_rpg_state['card_table']['day']==dg_rpg_state['day']:
                         textbutton u"Вернуться к карточному столу" style "dg_camp_action" action Return(("card_table",None))
                     textbutton u"Своё действие" style "dg_camp_action" action Return(("hybrid",None))
-                    if who:
+                    if who and dg_rpg.where_is(dg_rpg_state, who) == dg_rpg_state["place"]:
+                        textbutton (u"Поболтать" if who in dg_rpg_state["met"] else u"Представиться") style "dg_camp_nav" sensitive dg_rpg_state["energy"] >= 8 action Return(("talk",who))
+                        if dg_camp.enabled(dg_rpg_state) and dg_camp.stage(dg_rpg_state, who) in ("friend", "close", "romance"):
+                            textbutton u"Предложить встречу" style "dg_camp_nav" action Return(("deeds",("commitments",who)))
                         if dg_rpg_state['place']=='music' and dg_rpg_state.get('camp_life',{}).get('club') is None:
                             text u"Вход в здание свободный. Запись в кружок — отдельное действие после обходного листа второго дня: пять отметок, затем «Выбрать: Музыкальный кружок» в распорядке." size 22 color "#A9B9C6" xmaximum 1000
                         for row in dg_camp.cards(dg_rpg_state):
