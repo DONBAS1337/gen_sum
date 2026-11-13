@@ -522,6 +522,14 @@ init 1100 python:
                         if counts['cache'] != 2 or counts['say'] != 6 or counts['menu'] != 2:
                             raise ValueError('Continuing a conversation repeated the opening: ' + repr(counts))
                         print('SCRIPT_DIALOGUE_CONTINUATION_OK topics open without replaying introduction')
+                if workshop_root and vanilla_root:
+                    art = dg_resources.asset(workshop_root, "scenario_alt/Pics/cg/d4_lineup_with_mi_7dl.jpg")
+                    if not art or not api.loadable(art):
+                        raise ValueError("Lineup illustration is not loadable")
+                    for mood in ("normal", "smile"):
+                        if dg_7dl_sprite_displayable("mt " + mood + " pioneer panama") is None:
+                            raise ValueError("Missing Panama sprite for " + mood)
+                    print("NATIVE_LINEUP_ASSETS_OK illustration and normal/smile Panama sprites")
                 # The first scene of a fresh UI-created shift must happen before
                 # ordinary hub interaction, and commit only after narration.
                 interrupted=False

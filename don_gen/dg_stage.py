@@ -177,12 +177,18 @@ def readable(text):
     return re.sub(r"\[(narrator|hero|" + "|".join(sorted(NAMES)) + r")\]\s*", replace, STAGING.sub('', _text(text)))
 
 
-def positions(cast_ids, speaker=None):
+def positions(cast_ids, speaker=None, host=None):
+    if host in cast_ids:
+        visible = [host]
+        if speaker in cast_ids and speaker != host:
+            visible.append(speaker)
+        return list(zip(visible, (.5,) if len(visible) == 1 else (.28, .72)))
+
     # Keep the active speaker in frame even in a crowded scene.
-    visible = list(cast_ids[:4])
+    visible = list(cast_ids[:5])
     if speaker in cast_ids and speaker not in visible:
         visible[-1] = speaker
     places = {0: (), 1: (.5,), 2: (.28, .72), 3: (.17, .5, .83),
-              4: (.13, .37, .63, .87)}[len(visible)]
+              4: (.13, .37, .63, .87), 5: (.10, .30, .50, .70, .90)}[len(visible)]
     return list(zip(visible, places))
 

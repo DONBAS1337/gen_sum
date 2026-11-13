@@ -342,7 +342,10 @@ init 1001 python:
         if action == "camp_enable":
             dg_camp.enable(state,arrival=False)
         elif action == "camp":
+            lineup = arg == "assembly" or (arg == "arrival" and state["camp_life"]["arrival"] == 2)
             store.dg_rpg_last_camp=dg_camp.act(state,arg)
+            if lineup:
+                store.dg_rpg_scene_context["lineup"] = True
             if state['place']!=store.dg_rpg_scene_context['place']:
                 store.dg_rpg_scene_context=dg_stage.freeze(state,store.dg_rpg_last_camp['who'])
             if store.dg_rpg_last_camp.get('private'):
@@ -827,6 +830,17 @@ init 1001 python:
         if who not in dg_rpg.NPC_NAMES:
             return None
         clothes=dg_visual.clothing(dg_rpg_state,who,dg_rpg_visual_state())
+        if who == "mt" and dg_rpg_visual_state().get("lineup"):
+            for query in dg_visual.sprite_queries(who, emotion, distance, clothes):
+                parts = query.split()
+                parts.insert(3, "panama")
+                name = " ".join(parts)
+                native_name = " ".join(parts[:2] + [parts[3], parts[2]] + parts[4:])
+                sprite = dg_runtime.original_images.get(native_name)
+                if sprite is None:
+                    sprite = dg_7dl_sprite_displayable(name, pose_hint=pose)
+                if sprite is not None:
+                    return sprite
         if pose is not None:
             for name in dg_visual.sprite_queries(who, emotion, distance,clothes):
                 sprite = dg_7dl_sprite_displayable(name, pose_hint=pose)
@@ -893,7 +907,8 @@ init 1001 python:
                 inferred = dg_visual.mood(turn["text"])
                 if inferred != 'normal':
                     store.dg_rpg_actor_moods[turn["who"]] = inferred
-        visible = dg_stage.positions(cast_ids, turn["who"])
+        host = "mt" if (dg_rpg_scene_context or {}).get("lineup") else None
+        visible = dg_stage.positions(cast_ids, turn["who"], host)
         visible_ids = [who for who, x in visible]
         for who in dg_stage.NAMES:
             if who not in visible_ids:
@@ -2877,6 +2892,12 @@ label dg_rpg_vn_text(scene_text, who=None):
     $ dg_rpg_stage_active = True
     $ dg_rpg_audio_sync(who)
     scene expression dg_rpg_bg()
+    if dg_rpg_scene_context.get("lineup"):
+        $ dg_lineup_art = dg_resources.asset(dg_rpg_workshop_root(), "scenario_alt/Pics/cg/d4_lineup_with_mi_7dl.jpg")
+        if dg_lineup_art:
+            scene expression im.Scale(dg_lineup_art, 1920, 1080)
+            $ renpy.say(dg_rpg_say_character(None), u"Отряд собирается на площади.")
+            scene expression dg_rpg_bg()
     $ dg_rpg_actor_moods = {}
     $ dg_rpg_visual_cast = None
     $ dg_stage_present = list(dg_rpg_scene_context["present"])

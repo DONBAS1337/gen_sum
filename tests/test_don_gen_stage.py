@@ -48,12 +48,15 @@ class NativeSceneTests(unittest.TestCase):
         self.assertEqual((context["day"], context["slot"]), (1, 3))
 
     def test_active_speaker_stays_in_crowded_frame(self):
-        cast = ["un", "mi", "sl", "dv", "mt"]
+        cast = ["un", "mi", "sl", "dv", "us", "mt"]
         placements = dg_stage.positions(cast, "mt")
-        self.assertEqual(len(placements), 4)
+        self.assertEqual(len(placements), 5)
         self.assertIn("mt", [who for who, x in placements])
-        self.assertEqual(len(set(x for who, x in placements)), 4)
+        self.assertEqual(len(set(x for who, x in placements)), 5)
         self.assertEqual(dg_stage.positions([]), [])
+        for speaker in cast:
+            visible = [who for who, x in dg_stage.positions(cast, speaker, "mt")]
+            self.assertEqual(visible, ["mt"] if speaker == "mt" else ["mt", speaker])
 
     def test_classic_map_has_integer_native_coordinates(self):
         import dg_map

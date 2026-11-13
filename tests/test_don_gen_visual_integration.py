@@ -21,7 +21,7 @@ class VisualRegressionTests(unittest.TestCase):
         self.assertNotIn('    $ dg_place("gate")',SCRIPT)
         self.assertIn('scene expression dg_rpg_bg()',SCRIPT)
         self.assertIn('renpy.show("dg_actor_" + who',SCRIPT)
-        self.assertIn('dg_stage.positions(cast_ids, turn["who"])',SCRIPT)
+        self.assertIn('dg_stage.positions(cast_ids, turn["who"], host)',SCRIPT)
         self.assertNotIn('focus_mask False',SCRIPT)
     def test_cg_frozen_payload_per_thread_and_validated(self):
         plan=dg_art.scene_plan(self.state,"ai",u"Неоконченная песня",
