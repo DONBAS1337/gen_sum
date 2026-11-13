@@ -518,7 +518,8 @@ def asset_manifest(root):
     for group, directories in sound_dirs.items():
         for directory in directories:
             for path in _direct_files(directory, (".ogg", ".mp3", ".wav", ".opus")):
-                assets[group][_audio_key(group, path)] = _rel(root, path)
+                if os.path.getsize(path) > 0:
+                    assets[group][_audio_key(group, path)] = _rel(root, path)
     return assets
 
 
